@@ -4,7 +4,8 @@ A gentle green valley ringed by low wooded hills. A brook winds in from the
 north edge, fills a millpond in the middle and leaves by the south edge; it
 can be waded only at two shallow gravel fords. Around the pond lies a little
 hamlet: cottages and a barn on both banks, gardens, haystacks, carts and an
-orchard, with hedges and flowers along the lanes.
+orchard, with hedges and flowers along the lanes. Below the gardens on each
+bank a lower lane leaves the start lane, lined with more cottages.
 
 The playable layout is point-symmetric about the map centre: the second half
 of the brook, the hamlet's far bank, the hills and both starts are the first
@@ -48,9 +49,10 @@ UPSTREAM = [(1300, 5500), (1360, 4960), (1500, 4540), (1360, 4150), (1420, 3780)
 PALETTE = ['GrassShire01', 'GrassShire02', 'GrassShire03', 'GrassShire13', 'GrassShire10',
            'GrassOldForest04', 'CliffShire03', 'DirtShire06', 'LothlorienDirt07', 'DirtShire12',
            'StoneShire03', 'GrassShire08', 'GrassShire12', 'GrassShire15', 'DirtShire04',
-           'DirtShire07', 'DirtShire10']
+           'DirtShire07', 'DirtShire10', 'CropsType1', 'CropsType3', 'DirtShire08', 'DirtShire11']
 (MEADOW, MEADOW_MOTTLED, MEADOW_DRY, MEADOW_LUSH, HILL_GRASS, WOOD_FLOOR, MOSSY_ROCK, SILT, MUD,
- BANK, FORD_GRAVEL, FLOWERS_WHITE, FLOWERS_YELLOW, LANE_EDGE, LANE, GARDEN, GARDEN_SPROUTS) = range(len(PALETTE))
+ BANK, FORD_GRAVEL, FLOWERS_WHITE, FLOWERS_YELLOW, LANE_EDGE, LANE, GARDEN, GARDEN_SPROUTS,
+ CROPS, CROPS_DENSE, SEEDLINGS, STUBBLE) = range(len(PALETTE))
 
 # --- The hamlet, one bank in (u, v); the other bank is (-u, -v). ----------
 # Lanes: the bank lane arcs round the pond from bridge to bridge, curving
@@ -103,8 +105,50 @@ BUILDINGS = [('CBHobbitBldg01', -600, -520, 90, 95, 70), ('ShireGeneric03', -270
 MARKED_HOUSES = [('ShireGeneric01', 2036.5, 3563.4, 105, 85), ('CBHobbitBldg02', 1565.2, 2776.5, 95, 70),
                  ('ShireGeneric03', 1442.2, 3051.5, 80, 50), ('CBHobbitBldg01', 2808.8, 1532.9, 95, 70),
                  ('ShireGeneric01', 3121.8, 1453.3, 105, 85), ('ShireGeneric03', 3509.8, 2051.4, 80, 50)]
+# A lower hamlet below the gardens, at the viewer's marks 1 and 3 (one on
+# each bank, so it is laid out in (u, v) and turned like the hamlet): a lane
+# leaves the start lane and runs east to a dead end, with a link north to
+# the bank lane between the cottages there, and cottages either side of it.
+LOWER_LANE = [(-15, -930), (200, -935), (420, -950), (640, -985), (860, -990), (1040, -930), (1110, -840)]
+LOWER_LINK = [(445, -950), (440, -800), (455, -640), (450, -480), (440, -355)]
+# Template, u, v, pad radius, solid radius. Each turns its door to the
+# nearest lower lane, with a footpath to it.
+LOWER_HOUSES = [('ShireGeneric02', 150, -830, 75, 50), ('CBHobbitBldg01', 620, -840, 95, 70),
+                ('ShireGeneric03', 990, -800, 80, 50), ('ShireGeneric01', 200, -1050, 105, 85),
+                ('CBHobbitBldg02', 400, -1090, 95, 70), ('ShireGeneric03', 600, -1130, 80, 50),
+                ('ShireGeneric01', 840, -1130, 105, 85), ('ShireGeneric02', 1060, -1030, 75, 50)]
+# The side each cottage's door is on, as the angle of that side's outward
+# direction from the model's local +x (`mw items ... --views`): the round
+# door or steps of the hobbit houses and ShireGeneric03 on +x, the door and
+# porch of ShireGeneric01 and 02 on -y.
+DOOR_SIDES = {'CBHobbitBldg01': 0, 'CBHobbitBldg02': 0, 'ShireGeneric03': 0,
+              'ShireGeneric01': -math.pi/2, 'ShireGeneric02': -math.pi/2}
 GARDENS = [(-600, -690), (-270, -650), (290, -715)]     # fenced vegetable plots behind the cottages
 ORCHARD = dict(u=(-900, -560), v=(-150, -270), step=62)
+
+# A big farm north of player 1's base, at the viewer's mark 1: a farmhouse
+# and barn round a yard, a paddock beside them, and a patchwork of fields
+# either side of a track from the start lane up to the yard. Placed as
+# marked, so not turned onto the other bank. The crop rows in the field
+# textures run east-west, so the fields are axis-aligned: x0, y0, x1, y1,
+# texture, and what grows on them ('corn' stalks, 'hay' stacks).
+FARM_TRACK = [(1095, 2180), (1100, 1950), (1108, 1720), (1160, 1560), (1290, 1450), (1469, 1386)]
+FARM_FIELDS = [(680, 1890, 850, 2110, CROPS, 'corn'), (870, 1890, 1040, 2110, CROPS_DENSE, None),
+               (680, 1670, 1040, 1870, STUBBLE, 'hay'), (720, 1500, 1040, 1650, GARDEN, None),
+               (1170, 1910, 1560, 2120, SEEDLINGS, None), (1170, 1670, 1380, 1890, CROPS_DENSE, None),
+               (1400, 1670, 1560, 1890, GARDEN_SPROUTS, None)]
+# Template, x, y, angle, pad radius, solid radius. Both face the yard: the
+# farmhouse's door (with its well) is on its local -y side, the barn's
+# gabled front on its local +x side (`mw items ... --views`).
+FARMHOUSE = ('ShireMaggotsFarm', 960, 2300, 1.17, 80, 55)
+BARN = ('ShireMill', 1240, 2310, math.pi, 95, 70)
+FARM_YARD = dict(x=1100, y=2240, rx=230, ry=105)
+PADDOCK = (690, 2180, 870, 2370)
+# A lake at the viewer's mark 2, in the wooded hills by the east edge: a
+# long oval along the edge with a bay at each end (x, y, radius east, radius
+# north), merged into one wobbling shore. The hills give way close round it.
+# Placed as marked, so not turned.
+LAKE = [(4420, 2480, 300, 560), (4590, 2930, 210, 170), (4250, 2110, 230, 160)]
 
 
 def smooth(a, b, v):
@@ -218,6 +262,20 @@ def ridge(x, y, notch):
     return RIDGE_HEIGHT*rise*flank*knolls*notch
 
 
+def lake(x, y):
+    """The lake's signed distance in map units (negative in the water): its
+    ovals, each measured across its shore, merged with rounded fillets, the
+    shore wobbling in coves and points."""
+    d = None
+    for cx, cy, rx, ry in LAKE:
+        dx, dy = (x-cx)/rx, (y-cy)/ry
+        r = np.hypot(dx, dy)
+        grad = np.hypot(dx/rx, dy/ry)/np.maximum(r, 1e-6)
+        oval = (r-1)/np.maximum(grad, 1e-9)
+        d = oval if d is None else smooth_min(d, oval, 120)
+    return d+55*fbm(x, y, scale=240, seed=SEED+40, octaves=3)
+
+
 def terrain():
     rows, cols = HEIGHT+2*BORDER, WIDTH+2*BORDER
     y, x = (np.mgrid[0:rows, 0:cols]-BORDER)*10.0
@@ -237,6 +295,7 @@ def terrain():
     oval = (np.sqrt((pu/POND['along'])**2+(pv/POND['across'])**2)-1)*POND['across']
     oval -= 14*np.sin(2*theta+.7)+9*np.sin(4*theta+1.9)
     water = smooth_min(brook_d-half_width, oval, 110)
+    lake_sd = lake(x, y)
     # A low island in the middle (positive: land).
     island = POND['island']+7*np.sin(2*theta+1.3)-r
     # The creek: narrower than the brook, joining it in a rounded mouth. The
@@ -244,8 +303,8 @@ def terrain():
     # own level through a deep, steep-sided gorge.
     creek_d, creek_along = polyline_distance(creek_line(), x, y)
     creek_sd = creek_d-(20+5*fbm(creek_along, np.zeros_like(creek_along), scale=400, seed=SEED+7, octaves=2))
-    notch = smooth(90, 420, np.maximum(water, island))*smooth(30, 200, creek_sd)
-    sd = np.maximum(smooth_min(water, creek_sd, 50), island)
+    notch = smooth(90, 420, np.maximum(water, island))*smooth(30, 200, creek_sd)*smooth(60, 340, lake_sd)
+    sd = np.minimum(np.maximum(smooth_min(water, creek_sd, 50), island), lake_sd)
 
     # Low wooded hills along the edge: a rising band and separate hilltops,
     # combined with their turned copy so both halves of the map match.
@@ -331,10 +390,40 @@ def footpaths(lane_lines):
             middle = (door+lane)/2+np.array(xy(sign*14, 0))-np.array((C, C))
             paths.append(chaikin([tuple(door), tuple(middle), tuple(lane)], 3))
     for _, door, lane in marked_house_fronts(lane_lines):
-        ax, ay = (lane-door)/np.hypot(*(lane-door))
-        middle = (door+lane)/2+np.array((-ay, ax))*14
-        paths.append(chaikin([tuple(door), tuple(middle), tuple(lane)], 3))
+        paths.append(door_path(door, lane))
     return paths
+
+
+def door_path(door, lane):
+    """A footpath from a door to a lane point, bent slightly to one side."""
+    ax, ay = (lane-door)/np.hypot(*(lane-door))
+    middle = (door+lane)/2+np.array((-ay, ax))*14
+    return chaikin([tuple(door), tuple(middle), tuple(lane)], 3)
+
+
+def lower_lanes():
+    """The lower lane and its link to the bank lane, smoothed, both banks."""
+    out = []
+    for points in (LOWER_LANE, LOWER_LINK):
+        line = [xy(u, v) for u, v in points]
+        out += [chaikin(line, 3), chaikin(turned(line), 3)]
+    return out
+
+
+def lower_house_fronts():
+    """Each lower cottage on both banks: position, angle, the direction its
+    door faces, the door and the lane point it faces."""
+    points = np.concatenate([np.array(line) for line in lower_lanes()])
+    houses = []
+    for template, u, v, pad, solid in LOWER_HOUSES:
+        banks = []
+        for sign in (1, -1):
+            x, y = xy(sign*u, sign*v)
+            lane = points[np.argmin(np.hypot(*(points-(x, y)).T))]
+            out = (lane-(x, y))/np.hypot(*(lane-(x, y)))
+            banks.append((x, y, math.atan2(out[1], out[0])-DOOR_SIDES[template], out, (x, y)+out*.62*pad, lane))
+        houses.append((template, pad, solid, banks))
+    return houses
 
 
 def marked_house_fronts(lane_lines):
@@ -344,12 +433,67 @@ def marked_house_fronts(lane_lines):
     for _, x, y, pad, _ in MARKED_HOUSES:
         lane = points[np.argmin(np.hypot(*(points-(x, y)).T))]
         dx, dy = (lane-(x, y))/np.hypot(*(lane-(x, y)))
-        # Buildings face +y at angle 0.
+        # Turns the model's local +y side towards the lane. That is not every
+        # cottage's door side: ShireGeneric03's +y side has only windows.
         fronts.append((math.atan2(dy, dx)-math.pi/2, np.array((x+dx*.62*pad, y+dy*.62*pad)), lane))
     return fronts
 
 
-def materials(t, gardens, orchard_area):
+def cottages(lane_lines, lower_houses):
+    """Every cottage's centre, pad radius, door, and whether it gets a
+    kitchen garden (the hamlet's have their fenced plots already)."""
+    out = []
+    for _, u, v, facing, pad, _ in BUILDINGS:
+        front = 1 if facing == 90 else -1
+        for sign in (1, -1):
+            out.append((*xy(sign*u, sign*v), pad, np.array(xy(sign*u, sign*(v+front*.62*pad))), False))
+    out += [(x, y, pad, door, True) for (_, x, y, pad, _), (_, door, _)
+            in zip(MARKED_HOUSES, marked_house_fronts(lane_lines))]
+    out += [(x, y, pad, door, True) for _, pad, _, banks in lower_houses for x, y, _, _, door, _ in banks]
+    return out
+
+
+def yards(t, houses):
+    """Worn ground round each cottage, so none stands on untouched grass: a
+    trodden yard reaching out further on the door side, bare earth along the
+    walls and at the doorstep, drier grass in patches beyond, and behind most
+    a third of the cottages that have no fenced plot a small kitchen garden
+    against the back wall. Noise breaks every edge. Returns the texture masks, lowest
+    first, the whole area (for keeping meadow tufts and trees off it) and
+    the kitchen gardens (x, y, half width, half height)."""
+    x, y = t['x'], t['y']
+    wobble = .7*fbm(x+700, y-1300, scale=70, seed=SEED+24, octaves=3)+.5*fbm(x-200, y+300, scale=180, seed=SEED+26, octaves=2)
+    patchy = fbm(x-400, y+900, scale=30, seed=SEED+25, octaves=2)
+    rng = random.Random(SEED+180)
+    halo, worn, bare, area = (np.zeros(x.shape, bool) for _ in range(4))
+    plots, gardens = [], []
+    for cx, cy, pad, door, garden in houses:
+        # Only the samples near this cottage.
+        near = (np.abs(x-cx) < 3*pad+120) & (np.abs(y-cy) < 3*pad+120)
+        dx, dy = (door-(cx, cy))/np.hypot(*(door-(cx, cy)))
+        along, across = ((x-cx)*dx+(y-cy)*dy)/pad, ((y-cy)*dx-(x-cx)*dy)/pad
+        oval = np.hypot((along-.3)/1.45, across/1.2)+.3*wobble     # pushed out towards the door
+        walls = np.hypot(x-cx, y-cy)/pad+.25*wobble
+        step = np.hypot(x-door[0], y-door[1])/pad+.3*wobble
+        halo |= near & (oval < 1.6) & (patchy > .05)
+        worn |= near & ((oval < .8) | ((oval < 1.1) & (patchy > -.4)))
+        bare |= near & (((walls < .68) & (patchy > -.1)) | (step < .35) | ((step < .6) & (patchy > .25)))
+        area |= near & (oval < 1.7)
+        if garden and rng.random() < .35:
+            # Axis-aligned, since the garden textures' rows run east-west,
+            # and just clear of the back wall.
+            w, h = rng.uniform(38, 52), rng.uniform(24, 34)
+            back = .55*pad+abs(dx)*w+abs(dy)*h+12
+            gx, gy = cx-dx*back, cy-dy*back
+            gardens.append((gx, gy, w, h))
+            box = np.maximum(np.abs(x-gx)/w, np.abs(y-gy)/h)+.04*wobble
+            plots += [((box < 1) & (x < gx), GARDEN), ((box < 1) & (x >= gx), GARDEN_SPROUTS)]
+            worn |= (box < 1.35) & (patchy > -.2)
+            area |= box < 1.5
+    return [(halo, MEADOW_DRY), (worn, LANE_EDGE), (bare, LANE)]+plots, area, gardens
+
+
+def materials(t, gardens, orchard_area, yard_masks=()):
     x, y, z, sd = t['x'], t['y'], t['z'], t['sd']
     gy, gx = np.gradient(z, 10); slope = np.hypot(gx, gy)
     broad = fbm(x, y, scale=1000, seed=SEED+20, octaves=3)
@@ -381,6 +525,9 @@ def materials(t, gardens, orchard_area):
     labels[(sd < 10+6*edge) & (sd > -2)] = MUD
     labels[z < WATER-1.5] = SILT
     labels[(t['shelf'] > .25) & (z < WATER+1.5)] = FORD_GRAVEL
+    # Yards and kitchen gardens round the cottages, under the lanes and paths.
+    for mask, label in yard_masks:
+        labels[mask & (sd > 20) & (z > WATER+.5)] = label
     # Lanes: packed earth with a trampled grassy fringe, fading out in the bases.
     worn = t['lanes'] < 30+8*fine
     core = t['lanes'] < 15+5*fine
@@ -396,6 +543,7 @@ def materials(t, gardens, orchard_area):
     for plot, crop in gardens:
         labels[plot & dry] = crop
     return labels
+
 
 
 class Scenery:
@@ -470,7 +618,8 @@ class Scenery:
             x, y = xy(sign*u, sign*v)
             angle = None
             if facing is not None:
-                # Buildings face +y at angle 0; turn them to face the given direction.
+                # Turn the model's local +y side to the given direction. Which
+                # side is a model's front differs by template (AGENTS.md).
                 angle = math.radians(facing)-math.pi/4-math.pi/2+(0 if sign > 0 else math.pi)
             placed += self.put(template, x, y, angle=angle, **kw)
         return placed
@@ -550,6 +699,158 @@ def marked_houses(s, lane_lines):
                     break
 
 
+def lower_hamlet(s):
+    """The lower hamlet's cottages on both banks, each with flowers by its
+    door, a shade tree beside it and a few stores against its wall."""
+    rng = random.Random(SEED+170)
+    houses = lower_house_fronts()
+    for template, pad, solid, banks in houses:
+        for x, y, angle, *_ in banks:
+            if not s.put(template, x, y, angle=angle, layer='LowerHamlet', gap=pad, lane=75, solid=solid, paths=False):
+                raise ValueError(f'Could not place {template} at ({x:.0f}, {y:.0f})')
+
+    for template, pad, solid, banks in houses:
+        def both(name, out, across, **kw):
+            """At `out` along the door's direction and `across` to its left, on both banks."""
+            return sum(s.put(name, x+dx*out-dy*across, y+dy*out+dx*across, layer='LowerHamlet', **kw)
+                       for x, y, _, (dx, dy), _, _ in banks)
+        for _ in range(7):
+            for _try in range(10):
+                if both(rng.choice(['PTFlower05', 'PTFlower09', 'ElvenWoodFlowerGrassOpt', 'PTFlower01']),
+                        rng.uniform(.55*pad, .9*pad), rng.uniform(-pad, pad), gap=12, lane=30):
+                    break
+        side = rng.choice([-1, 1])
+        both(rng.choice(['TreeShire02', 'TreeShire03']), -.3*pad, side*(pad+20), gap=40, lane=50,
+             scale=rng.uniform(.85, 1.05))
+        for k in range(rng.randint(1, 3)):
+            both(rng.choice(['Barrel', 'Barrel', 'Crate01', 'CropPile', 'TimberPile01']), .1*pad-k*22,
+                 -side*(.75*pad+12), gap=18, lane=30)
+
+
+def kitchen_gardens(s, t):
+    """A rail fence round each cottage's kitchen garden, a gap or two in it,
+    and a crop pile or bundle on the beds."""
+    rng = random.Random(SEED+190)
+    for gx, gy, w, h in t['kitchen_gardens']:
+        w, h = w+6, h+6
+        corners = [(gx-w, gy-h), (gx+w, gy-h), (gx+w, gy+h), (gx-w, gy+h)]
+        for a, b in zip(corners, corners[1:]+corners[:1]):
+            farm_row(s, rng, ['ShireFence01'], a, b, 36.7, 10, .15, layer='KitchenGardens')
+        s.put(rng.choice(['CropBundle3', 'CropBundle2', 'CropPile']), gx+rng.uniform(-.5, .5)*w,
+              gy+rng.uniform(-.4, .4)*h, layer='KitchenGardens', gap=20, lane=30)
+
+
+def farm_distance(t):
+    """Distance from every sample to the farm's fields, yard and paddock."""
+    x, y = t['x'], t['y']
+    yard = FARM_YARD
+    boxes = [f[:4] for f in FARM_FIELDS]+[PADDOCK, (yard['x']-yard['rx'], yard['y']-yard['ry'],
+                                                    yard['x']+yard['rx'], yard['y']+yard['ry'])]
+    d = np.full(x.shape, np.inf)
+    for x0, y0, x1, y1 in boxes:
+        d = np.minimum(d, np.hypot(np.maximum(np.maximum(x0-x, x-x1), 0), np.maximum(np.maximum(y0-y, y-y1), 0)))
+    return d
+
+
+def farm_plots(t):
+    """The farm's ground textures: each field, the trodden yard and paddock."""
+    x, y = t['x'], t['y']
+    fine = fbm(x, y+2000, scale=90, seed=SEED+22, octaves=2)
+    plots = [((x >= x0) & (x <= x1) & (y >= y0) & (y <= y1), crop) for x0, y0, x1, y1, crop, _ in FARM_FIELDS]
+    yard = np.hypot((x-FARM_YARD['x'])/FARM_YARD['rx'], (y-FARM_YARD['y'])/FARM_YARD['ry'])+.15*fine
+    x0, y0, x1, y1 = PADDOCK
+    paddock = (x > x0) & (x < x1) & (y > y0) & (y < y1)
+    return plots+[(yard < 1, LANE_EDGE), (yard < .6, LANE), (paddock & (fine > -.2), LANE_EDGE)]
+
+
+def farm_row(s, rng, templates, a, b, step, gap, skip=.08, layer='Farm'):
+    """Hedges or fence bays along a field edge from a to b, with a few gaps."""
+    length = math.dist(a, b); angle = math.atan2(b[1]-a[1], b[0]-a[0])
+    for k in range(int(length//step)+1):
+        if rng.random() < skip:
+            continue
+        f = (k*step+step/2)/length
+        if f <= 1:
+            s.put(rng.choice(templates), a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f,
+                  angle=angle+rng.uniform(-.06, .06), layer=layer, gap=gap, lane=36)
+
+
+def farm(s, t):
+    """The farm at the viewer's mark 1: farmhouse and barn facing the yard,
+    stores and carts in it, a fenced paddock with livestock, corn and
+    haystacks in the fields, and hedges and rail fences round them."""
+    rng = random.Random(SEED+800)
+    for template, x, y, angle, pad, solid in (FARMHOUSE, BARN):
+        if not s.put(template, x, y, angle=angle, layer='Farm', gap=pad, lane=60, solid=solid):
+            raise ValueError(f'Could not place {template} at ({x}, {y})')
+    for template, n, spread, (px, py) in [('Haystack', 4, 30, (1350, 2180)), ('CropBundle3', 3, 25, (1160, 2180)),
+                                          ('CropPile', 2, 20, (880, 2180)), ('Barrel', 4, 18, (1040, 2200)),
+                                          ('Crate01', 3, 18, (1150, 2230)), ('TimberPile01', 1, 10, (1350, 2300))]:
+        for _ in range(n):
+            for _try in range(12):
+                if s.put(template, px+rng.gauss(0, spread), py+rng.gauss(0, spread), layer='Farm', gap=22, lane=30):
+                    break
+    s.put('Cart01', 1010, 2170, angle=.3, layer='Farm', gap=40, lane=30)
+    s.put('Cart02', 1260, 2190, angle=2.2, layer='Farm', gap=40, lane=30)
+    s.put('Shiresign01', 1145, 2120, angle=-.4, layer='Farm', gap=20, lane=28)
+    for template, x, y in [('TreeShire02', 1010, 2430), ('TreeShire03', 1380, 2400), ('TreeShire01', 640, 2300)]:
+        s.put(template, x, y, layer='Farm', gap=50, lane=50, scale=rng.uniform(.95, 1.1))
+    # The paddock: rail fences with a gate towards the yard, a trough and stock.
+    x0, y0, x1, y1 = PADDOCK
+    rails = ['ShireFence06']
+    farm_row(s, rng, rails, (x0, y0), (x1, y0), 40, 8, 0)
+    farm_row(s, rng, rails, (x0, y1), (x1, y1), 40, 8, 0)
+    farm_row(s, rng, rails, (x0, y0), (x0, y1), 40, 8, 0)
+    farm_row(s, rng, rails, (x1, y0), (x1, (y0+y1)/2-25), 40, 8, 0)
+    farm_row(s, rng, rails, (x1, (y0+y1)/2+25), (x1, y1), 40, 8, 0)
+    s.put('FeedingTroughs', x0+60, y1-35, angle=0, layer='Farm', gap=30, lane=30)
+    for template, n in [('Cow', 5), ('Pig', 3), ('Sheep', 3)]:
+        for _ in range(n):
+            for _try in range(12):
+                if s.put(template, rng.uniform(x0+25, x1-25), rng.uniform(y0+25, y1-25), layer='Farm', gap=25, lane=30):
+                    break
+    # The fields: corn in rows, haystacks on the mown field.
+    for fx0, fy0, fx1, fy1, _, grows in FARM_FIELDS:
+        if grows == 'corn':
+            for y in np.arange(fy0+12, fy1-5, 20):
+                for x in np.arange(fx0+12, fx1-5, 15):
+                    s.put('CornStalk', x+rng.uniform(-3, 3), y+rng.uniform(-3, 3), layer='FarmCrops', gap=8, lane=30,
+                          scale=rng.uniform(1.2, 1.45))
+        elif grows == 'hay':
+            for y in np.arange(fy0+30, fy1-20, 55):
+                for x in np.arange(fx0+30, fx1-20, 60):
+                    if rng.random() < .7:
+                        s.put('Haystack', x+rng.uniform(-12, 12), y+rng.uniform(-12, 12), layer='FarmCrops', gap=30,
+                              lane=36, scale=rng.uniform(1.3, 1.6))
+    # Hedges along the farm's west and south sides, rails along the fields' tops.
+    hedges = ['ShrubShireHedge01', 'ShrubShireHedge01', 'ShrubShireHedge02', 'ShrubShireHedge03']
+    farm_row(s, rng, hedges, (655, 1480), (655, 2130), 24, 18)
+    farm_row(s, rng, hedges, (700, 1480), (1060, 1480), 24, 18)
+    farm_row(s, rng, hedges, (1585, 1660), (1585, 2130), 24, 18)
+    farm_row(s, rng, rails, (680, 2132), (1040, 2132), 40, 8, .1)
+    farm_row(s, rng, rails, (1170, 2140), (1560, 2140), 40, 8, .1)
+
+
+def lake_shore(s, t):
+    """A dock with a rowboat on the lake's west shore, facing the meadows, and ducks along its edge."""
+    lx, ly, rx, ry = LAKE[0]
+    for dx in range(0, 700, 4):
+        x, y = lx-dx, ly
+        if s.ground(x, y)[2] >= 0:
+            break
+    cx, cy = x+22, y
+    s.put('SBDock', cx, cy, angle=-math.pi/2, layer='Lake', gap=40, lane=30, base=0, wet=True,
+          z=WATER+2.5-9-s.ground(cx, cy)[0])
+    s.put('Celduin_Boat01', cx+14, cy+42, angle=-math.pi/2+.15, layer='Lake', gap=20, lane=30, base=0, wet=True,
+          z=WATER-s.ground(cx+14, cy+42)[0])
+    for a in (.5, 1.9, 3.4, 4.6):
+        for r in np.arange(0, 1.6, .01):           # out from the middle to just short of the shore
+            x, y = lx+r*rx*math.cos(a), ly+r*ry*math.sin(a)
+            if s.ground(x, y)[2] > -12:
+                break
+        s.put('Duck', x, y, layer='Lake', gap=15, lane=30, wet=True, base=650)
+
+
 def hedgerows(s, t, lane_lines):
     """Hedges along both sides of every lane, broken by gaps and gateways,
     with flowers spilling out between hedge and lane."""
@@ -590,6 +891,7 @@ def woods(s, t):
     # A ragged treeline: the ridge's upper slopes stay open grass and rock.
     density *= 1-smooth(190, 290, t['hills']+60*clump)
     density *= smooth(70, 160, t['lanes'])
+    density *= smooth(60, 180, t['farm'])*~t['yards']
     for p in STARTS:
         density *= smooth(BASE_BLEND-150, BASE_BLEND+100, np.hypot(x-p[0], y-p[1]))
     t['woods'] = density
@@ -754,7 +1056,7 @@ def waterside(s, t):
     seeds = seeds[np.random.default_rng(SEED+501).permutation(len(seeds))]
     clumps = []
     for iy, ix in seeds:
-        if len(clumps) >= 95:
+        if len(clumps) >= 125:                 # brook, pond and lake
             break
         cx, cy = float(x[iy, ix]), float(y[iy, ix])
         if any(math.dist((cx, cy), c) < 130 for c in clumps):
@@ -794,7 +1096,7 @@ def meadows(s, t):
     rng = random.Random(SEED+600)
     x, y = t['x'], t['y']
     drift = fbm(x-1700, y+900, scale=260, seed=SEED+601, octaves=3)
-    open_ground = (t['woods'] < .1) & (t['sd'] > 40) & (t['lanes'] > 60) & (drift > .15)
+    open_ground = (t['woods'] < .1) & (t['sd'] > 40) & (t['lanes'] > 60) & (t['farm'] > 30) & ~t['yards'] & (drift > .15)
     seeds = np.column_stack(np.nonzero(open_ground))
     seeds = seeds[np.random.default_rng(SEED+602).permutation(len(seeds))]
     drifts = []
@@ -815,7 +1117,7 @@ def meadows(s, t):
             break
         px, py = rng.uniform(300, SPAN-300), rng.uniform(300, SPAN-300)
         iy, ix = round(py/10)+BORDER, round(px/10)+BORDER
-        if t['woods'][iy, ix] > .05 or math.dist((px, py), (C, C)) < 1000:
+        if t['woods'][iy, ix] > .05 or t['farm'][iy, ix] < 100 or t['yards'][iy, ix] or math.dist((px, py), (C, C)) < 1000:
             continue
         if s.put(rng.choice(['TreeShire01', 'TreeShire02', 'TreeOldForest02']), px, py, layer='LoneTrees',
                  gap=300, lane=80, base=750):
@@ -862,9 +1164,13 @@ def build(b):
         raise ValueError(f'map.toml has {b.project.players} players, but the valley has {len(STARTS)} starts')
     print('Shaping the valley, brook and fords...', flush=True)
     t = terrain()
-    lane_lines = lanes()
+    lane_lines = lanes()+[chaikin(FARM_TRACK, 3)]+lower_lanes()
+    lower_houses = lower_house_fronts()
     t['lanes'] = lane_field(t, lane_lines)
-    t['paths'] = lane_field(t, footpaths(lane_lines[:2]))
+    t['paths'] = lane_field(t, footpaths(lane_lines[:2])+[door_path(door, lane) for *_, banks in lower_houses
+                                                          for *_, door, lane in banks])
+    t['farm'] = farm_distance(t)
+    yard_masks, t['yards'], t['kitchen_gardens'] = yards(t, cottages(lane_lines[:2], lower_houses))
 
     # Level the building pads before anything stands on them.
     pads = []
@@ -872,6 +1178,8 @@ def build(b):
         for sign in (1, -1):
             pads.append((*xy(sign*u, sign*v), pad))
     pads += [(x, y, pad) for _, x, y, pad, _ in MARKED_HOUSES]
+    pads += [(x, y, pad) for _, x, y, _, pad, _ in (FARMHOUSE, BARN)]
+    pads += [(x, y, pad) for _, pad, _, banks in lower_houses for x, y, *_ in banks]
     level_pads(t, pads)
 
     m = create(WIDTH, HEIGHT, BORDER, title=b.project.title, description=b.project.description,
@@ -882,8 +1190,12 @@ def build(b):
     bridges(s, t)
     suspension_bridge(s, t)
     millpond(s, t)
+    lower_hamlet(s)              # before the hamlet's scattered props, so they make room for it
     hamlet(s, t)
     marked_houses(s, lane_lines[:2])
+    kitchen_gardens(s, t)
+    farm(s, t)
+    lake_shore(s, t)
     hedgerows(s, t, lane_lines)
     print('Planting woods, rushes and meadows...', flush=True)
     trees = woods(s, t)
@@ -899,12 +1211,13 @@ def build(b):
             local_u, local_v = sign*(u_-sign*gu), sign*(v_-sign*gv)
             for half, crop in ((local_u < 0, GARDEN), (local_u >= 0, GARDEN_SPROUTS)):
                 gardens.append(((np.abs(local_u) < 62) & (np.abs(local_v) < 32) & half, crop))
+    gardens += farm_plots(t)
     u_, v_ = uv(t['x'], t['y'])
     du, dv = ORCHARD['u'], ORCHARD['v']
     orchard = np.zeros(t['z'].shape, bool)
     for sign in (1, -1):
         orchard |= (sign*u_ > du[0]-50) & (sign*u_ < du[1]+50) & (sign*v_ < dv[0]+50) & (sign*v_ > dv[1]-50)
-    labels = materials(t, gardens, orchard)
+    labels = materials(t, gardens, orchard, yard_masks)
 
     blocked = t['z'] < WATER-5            # deeper than units can wade
     set_heights(m, t['z'])
