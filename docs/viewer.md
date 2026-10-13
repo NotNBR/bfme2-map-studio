@@ -57,10 +57,13 @@ capture. The default CLI and viewer always use the local calculation.
 
 - **Map**: your map projects first, then the game's own maps. **Open project
   folder** opens the current project's source folder; **Browse...** opens any
-  `.map` file.
-- **Build** rebuilds the current project in the background. The status bar shows
-  the build's progress, and the scene reloads when the build is done. A failed
-  build shows its error there and leaves the previous build in place.
+  `.map` file. The menu opens at the current map; a menu taller than the window
+  scrolls with the wheel or its arrow strips.
+- **Build** rebuilds the current project in the background, also while the
+  first load is still running or after it failed. The status bar shows the
+  build's progress, and the scene reloads when the build is done. A failed
+  build shows the start of its error there (the full output goes to the
+  terminal) and leaves the previous build in place.
 - **Play** copies the current project into the game's user maps folder and
   starts BFME2; pick the map under Skirmish.
 - **Detail**: Low, Medium or High, as `--lod`.

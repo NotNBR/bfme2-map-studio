@@ -384,12 +384,25 @@ def main(argv=None):
             state['top'] = None
 
     def toolbar_click(target):
+        """Act on a toolbar click; an error shows in the status bar (and the
+        terminal) instead of closing the viewer."""
+        try:
+            handle_click(target)
+        except Exception as error:
+            import traceback
+            traceback.print_exc()
+            set_status(f'{target[1] if isinstance(target, tuple) else target} failed: {error}', 10)
+
+    def handle_click(target):
         if target == 'menu':
             return
-        if target == 'bar':
+        if target in ('bar', 'panel'):
             toolbar.open_menu = None
             return
         kind = target[0]
+        if kind == 'menu_scroll':
+            toolbar.scroll_menu(target[2]*5)
+            return
         if kind == 'dropdown':
             menu = target[1]
             if toolbar.open_menu and toolbar.open_menu[0] == menu:
@@ -413,8 +426,13 @@ def main(argv=None):
                 return
             if menu == 'map':
                 if value == 'folder':
-                    import os
-                    os.startfile(owners.get(state['source']).folder)
+                    # The menu may have been opened for the map shown before.
+                    owner = owners.get(state['source'])
+                    if owner is None:
+                        set_status('this map is not a project: it has no project folder', 4)
+                    else:
+                        import os
+                        os.startfile(owner.folder)
                     return
                 path = browse_map() if value == 'browse' else Path(value)
                 if path:
@@ -437,9 +455,15 @@ def main(argv=None):
             return
         if kind == 'button':
             action = target[1]
-            if scene['renderer'] is None:
+            # Build and Play need no scene: they work while the first load
+            # is still running or after it failed.
+            if action == 'build':
+                start_build()
+            elif action == 'play':
+                play()
+            elif scene['renderer'] is None:
                 return
-            if action == 'delete':
+            elif action == 'delete':
                 delete_selected()
             elif action == 'clear':
                 scene['marks'].clear()
@@ -449,10 +473,6 @@ def main(argv=None):
                 toggle_top()
             elif action == 'reset':
                 camera.reset()
-            elif action == 'build':
-                start_build()
-            elif action == 'play':
-                play()
             elif action == 'copy':
                 copy_for_agent()
             elif action == 'shot':
@@ -561,8 +581,11 @@ def main(argv=None):
                     f'{n} {t}' for t, n in sorted(entry['vegetation'].items(), key=lambda kv: -kv[1])) + ')', 'muted'))
             if not names and not entry['vegetation']:
                 lines.append(('no objects', 'muted'))
-        lines.append(('Copy for agent puts this on the clipboard.', 'muted'))
-        return lines[-18:]
+        if len(lines) > 17:
+            # Keep the newest marks, which are the ones being worked on.
+            hidden = len(lines)-16
+            lines = [(f'{hidden} earlier lines not shown', 'muted')] + lines[-16:]
+        return lines + [('Copy for agent puts all of it on the clipboard.', 'muted')]
 
     def delete_selected():
         if state['selected'] is None:
@@ -958,7 +981,10 @@ def main(argv=None):
                     camera.cur[key] += float(value)
 
     def on_scroll(win, dx, dy):
-        if toolbar_target(cursor_pos()) is not None:
+        target = toolbar_target(cursor_pos())
+        if target is not None:
+            if target == 'menu' or (isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')):
+                toolbar.scroll_menu(-dy*3)
             return
         factor = 0.82**dy
         old = camera.goal['distance']
@@ -1002,6 +1028,8 @@ def main(argv=None):
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F5:
                 state['reload'] = True
+            elif key == glfw.KEY_B and mods & glfw.MOD_CONTROL:
+                start_build()
             return
         if key == glfw.KEY_ESCAPE:
             # Esc steps back: close a menu, cancel a drawing, drop the
@@ -1135,12 +1163,15 @@ def main(argv=None):
                 if scene['renderer'] is None and state['loading']:
                     fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
                     toolbar.draw_loading((fw, fh), scale(), map_title(state['requested']), step, fraction)
+                toolbar.panel_rect = None
                 if state['marking'] and scene['renderer'] is not None:
                     mark_bar.draw((fw, fh), scale(), marks_bar_state())
                     if scene['marks'].items:
                         update_summary()
                         toolbar.draw_panel((fw, fh), scale(), 'Marks', summary_lines(),
                                            toolbar.height + mark_bar.height)
+                # Last, so the mark row, the panel and the loading card never cover it.
+                toolbar.draw_menu((fw, fh), scale())
                 glfw.swap_buffers(window)
             limit = state['fps_limit']
             if limit not in ('vsync', 'unlimited'):

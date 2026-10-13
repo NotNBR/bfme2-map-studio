@@ -4,7 +4,9 @@ Items are laid out left to right in groups: dropdowns (a muted caption and
 the current value, opening a menu whose entries can carry a check mark),
 buttons and toggles (pressed while on), with a status text at the right. The
 bar is drawn with PIL into a texture and only redrawn when its state changes;
-clicks are hit-tested in framebuffer pixels.
+clicks are hit-tested in framebuffer pixels. An open menu is drawn by
+draw_menu(), after everything else, and scrolls when it is taller than the
+window.
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -59,7 +61,8 @@ class Toolbar:
     A dropdown click returns ('dropdown', id); the caller sets open_menu to
     (id, entries), entries being (value, text, checked) with checked None for
     no check column and value None for a separator. A menu click returns
-    ('menu', id, value).
+    ('menu', id, value); a click on the arrow strip of a scrolling menu
+    returns ('menu_scroll', id, -1 or 1), for scroll_menu().
     """
 
     def __init__(self, ctx, items, top=0):
@@ -80,6 +83,11 @@ class Toolbar:
         self.menu_boxes = []
         self.height = 0
         self.menu_rect = None
+        self.menu_key = None
+        self.menu_for = None           # the menu menu_scroll belongs to
+        self.menu_scroll = None        # pixels; None scrolls to the checked entry
+        self.menu_row = 1
+        self.panel_rect = None         # the panel drawn this frame, which takes clicks
 
     def offset(self):
         return self.top() if callable(self.top) else self.top
@@ -119,7 +127,7 @@ class Toolbar:
         right = [item for item in self.items if item.get('align') == 'right']
         controls = tuple((item.get('id'), str(state.get(item.get('id'), '')))
                          for item in self.items if item['kind'] != 'status' and item not in right)
-        base_key = (width, scale, controls, self.hover, self.open_menu and self.open_menu[0])
+        base_key = (width, scale, controls, self._bar_hover(), self.open_menu and self.open_menu[0])
         cached = getattr(self, '_base_bar', None)
         if cached and cached[0] == base_key:
             image, boxes, x = cached[1].copy(), list(cached[2]), cached[3]
@@ -159,28 +167,55 @@ class Toolbar:
             button(edge-w, label, target, pressed=self.open_menu is not None and self.open_menu[0] == item['id'],
                    hovered=self.hover == target, arrow=True)
             edge -= w+round(6*scale)
-        if status_text and edge-text_w(status_text, small) > x+gap:
+        room = edge-(x+gap)
+        if status_text and text_w(status_text, small) > room:
+            # Shorten a status that does not fit rather than dropping it.
+            lo, hi = 0, len(status_text)
+            while lo < hi:
+                mid = (lo+hi+1)//2
+                if text_w(status_text[:mid].rstrip()+'…', small) <= room:
+                    lo = mid
+                else:
+                    hi = mid-1
+            status_text = status_text[:lo].rstrip()+'…' if lo >= 8 else ''
+        if status_text:
             d.text((edge, y0+bh/2), status_text, font=small, fill=MUTED, anchor='rm')
         self.boxes, self.height = boxes, h
         return image
 
-    def _render_menu(self, scale, menu_id, entries, anchor_x):
+    def _render_menu(self, scale, menu_id, entries, room):
+        """The open menu, at most `room` pixels tall: (image, boxes with x
+        from the menu's left edge). A taller menu shows a window of its
+        entries at menu_scroll, with arrow strips where more entries are."""
         font = _font(round(13*scale))
         row, sep = round(26*scale), round(9*scale)
+        self.menu_row = row
         checks = any(e[2] is not None for e in entries)
         indent = round((30 if checks else 12)*scale)
         measure = ImageDraw.Draw(Image.new('RGB', (1, 1)))
         width = max(round(160*scale), round(max(measure.textlength(e[1], font=font) for e in entries)+indent+20*scale))
         heights = [sep if e[0] is None else row for e in entries]
-        image = Image.new('RGBA', (width, sum(heights)+2), MENU+(255,))
+        total = sum(heights)+2
+        visible = min(total, max(room, 4*row))
+        strip = round(16*scale)
+        ys = [1+sum(heights[:k]) for k in range(len(entries))]
+        if self.menu_scroll is None:
+            # Open at the checked entry (the current map in a long Map menu).
+            checked = next((y for y, e in zip(ys, entries) if e[2]), 0)
+            self.menu_scroll = checked-(visible-row)//2
+        scroll = self.menu_scroll = max(0, min(self.menu_scroll, total-visible))
+        image = Image.new('RGBA', (width, visible), MENU+(255,))
         d = ImageDraw.Draw(image)
-        d.rectangle([0, 0, width-1, image.height-1], outline=LINE)
+        top = strip if scroll > 0 else 0
+        bottom = visible-strip if scroll+visible < total else visible
         boxes = []
-        y = 1
-        for (value, text, checked), h in zip(entries, heights):
+        for (value, text, checked), y, h in zip(entries, ys, heights):
+            y -= scroll
+            if y+h <= 0 or y >= visible:
+                continue
             target = ('menu', menu_id, value)
             if value is None:
-                d.line([(8, y+h//2), (width-8, y+h//2)], fill=LINE)
+                d.line([(round(8*scale), y+h//2), (width-round(8*scale), y+h//2)], fill=LINE)
             else:
                 if self.hover == target:
                     d.rectangle([1, y, width-2, y+h-1], fill=HOVER)
@@ -188,12 +223,25 @@ class Toolbar:
                     cx, cy, s = round(15*scale), y+h/2, 4*scale
                     d.line([(cx-s, cy), (cx-s/3, cy+s*0.7), (cx+s, cy-s*0.8)], fill=ON_LINE, width=max(2, round(2*scale)))
                 d.text((indent, y+h/2), text, font=font, fill=TEXT, anchor='lm')
-            base = self.offset()+self.height
-            boxes.append((anchor_x, base+y, anchor_x+width, base+y+h, target if value is not None else None))
-            y += h
-        self.menu_boxes = boxes
-        self.menu_rect = (anchor_x, self.offset()+self.height, anchor_x+width, self.offset()+self.height+image.height)
-        return image
+                if max(y, top) < min(y+h, bottom):
+                    boxes.append((0, max(y, top), width, min(y+h, bottom), target))
+        a = round(4*scale)
+        for show, y0, y1, direction in ((top, 0, top, -1), (bottom < visible, bottom, visible, 1)):
+            if not show:
+                continue
+            target = ('menu_scroll', menu_id, direction)
+            d.rectangle([1, y0, width-2, y1-1], fill=HOVER if self.hover == target else MENU)
+            d.line([(1, y1-1 if direction < 0 else y0), (width-2, y1-1 if direction < 0 else y0)], fill=LINE)
+            cx, cy = width/2, (y0+y1)/2
+            d.polygon([(cx-a, cy+a/2*direction*-1), (cx+a, cy+a/2*direction*-1), (cx, cy+a*direction)], fill=MUTED)
+            boxes.append((0, y0, width, y1, target))
+        d.rectangle([0, 0, width-1, visible-1], outline=LINE)
+        return image, boxes
+
+    def scroll_menu(self, rows):
+        """Scroll an open menu by rows (positive: down); draw_menu() clamps it."""
+        if self.open_menu and self.menu_scroll is not None:
+            self.menu_scroll += round(rows*self.menu_row)
 
     def _upload(self, image, old):
         if old is not None:
@@ -202,21 +250,22 @@ class Toolbar:
         texture.filter = (self.mgl.NEAREST, self.mgl.NEAREST)
         return texture
 
+    @staticmethod
+    def _in_menu(target):
+        return isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')
+
+    def _bar_hover(self):
+        return None if self._in_menu(self.hover) else self.hover
+
     def draw(self, size, scale, state):
-        """Draw the bar (and an open menu) over the top of the framebuffer."""
+        """Draw the bar over the top of the framebuffer. An open menu is
+        drawn by draw_menu(), after everything else."""
         width, height = size
-        key = (width, round(scale, 3), tuple(sorted((k, str(v)) for k, v in state.items())), self.hover,
-               self.open_menu and (self.open_menu[0], tuple(self.open_menu[1])))
+        key = (width, round(scale, 3), tuple(sorted((k, str(v)) for k, v in state.items())), self._bar_hover(),
+               self.open_menu and self.open_menu[0])
         if key != self.key:
             self.key = key
             self.texture = self._upload(self._render(width, scale, state), self.texture)
-            if self.open_menu:
-                box = next((b for b in self.boxes if b[4] == ('dropdown', self.open_menu[0])), None)
-                image = self._render_menu(scale, *self.open_menu, box[0] if box else 0)
-                if box and box[0]+image.width > width:
-                    # Keep a menu inside the window: right-align it with its button.
-                    image = self._render_menu(scale, *self.open_menu, max(0, box[2]-image.width))
-                self.menu_texture = self._upload(image, self.menu_texture)
         ctx = self.ctx
         ctx.viewport = (0, 0, width, height)
         ctx.disable(self.mgl.DEPTH_TEST)
@@ -224,8 +273,37 @@ class Toolbar:
         ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
         top = self.offset()
         self._blit(self.texture, (0, top, width, top+self.height), size)
-        if self.open_menu and self.menu_texture is not None:
-            self._blit(self.menu_texture, self.menu_rect, size)
+        ctx.disable(self.mgl.BLEND)
+
+    def draw_menu(self, size, scale):
+        """Draw the open menu, if any, below its button and over everything
+        else: call it last. It fits the window, scrolling if it must."""
+        if not self.open_menu:
+            self.menu_rect, self.menu_boxes = None, []
+            return
+        width, height = size
+        if self.open_menu[0] != self.menu_for:
+            self.menu_for, self.menu_scroll = self.open_menu[0], None
+        box = next((b for b in self.boxes if b[4] == ('dropdown', self.open_menu[0])), None)
+        hover = self.hover if self._in_menu(self.hover) else None
+        top = self.offset()+self.height
+        key = (width, height, round(scale, 3), self.open_menu[0], tuple(self.open_menu[1]), hover, self.menu_scroll, box)
+        if key != self.menu_key:
+            image, boxes = self._render_menu(scale, *self.open_menu, height-top-round(8*scale))
+            x = box[0] if box else 0
+            if box and x+image.width > width:
+                # Keep a menu inside the window: right-align it with its button.
+                x = max(0, box[2]-image.width)
+            self.menu_boxes = [(x+x0, top+y0, x+x1, top+y1, target) for x0, y0, x1, y1, target in boxes]
+            self.menu_rect = (x, top, x+image.width, top+image.height)
+            self.menu_texture = self._upload(image, self.menu_texture)
+            self.menu_key = key[:6] + (self.menu_scroll, box)
+        ctx = self.ctx
+        ctx.viewport = (0, 0, width, height)
+        ctx.disable(self.mgl.DEPTH_TEST)
+        ctx.enable(self.mgl.BLEND)
+        ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
+        self._blit(self.menu_texture, self.menu_rect, size)
         ctx.disable(self.mgl.BLEND)
 
     def _blit(self, texture, rect, size):
@@ -310,13 +388,14 @@ class Toolbar:
         ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
         w, h = self.panel_size
         margin = round(10*scale)
-        self._blit(self.panel_texture, (width-w-margin, top+margin, width-margin, top+margin+h), size)
+        self.panel_rect = (width-w-margin, top+margin, width-margin, top+margin+h)
+        self._blit(self.panel_texture, self.panel_rect, size)
         ctx.disable(self.mgl.BLEND)
 
     # Input -------------------------------------------------------------------
     def target_at(self, x, y):
         """Toolbar target at framebuffer pixel (x, y), 'bar' for empty bar
-        space, 'menu' inside an open menu, or None outside both."""
+        space, 'menu' inside an open menu, 'panel' on the panel, or None."""
         if self.open_menu and self.menu_rect:
             x0, y0, x1, y1 = self.menu_rect
             if x0 <= x < x1 and y0 <= y < y1:
@@ -326,8 +405,13 @@ class Toolbar:
                 return 'menu'
         top = self.offset()
         if top <= y < top+self.height:
-            for x0, y0, x1, y1, target in self.boxes:
+            # Right-aligned items are drawn last, over anything they overlap.
+            for x0, y0, x1, y1, target in reversed(self.boxes):
                 if x0 <= x < x1 and y0 <= y-top < y1:
                     return target
             return 'bar'
+        if self.panel_rect:
+            x0, y0, x1, y1 = self.panel_rect
+            if x0 <= x < x1 and y0 <= y < y1:
+                return 'panel'
         return None
