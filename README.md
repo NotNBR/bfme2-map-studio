@@ -1,7 +1,7 @@
-# bfme2-map-workshop
+# BFME2 Map Studio
 
-Build **Battle for Middle-earth II** maps from code, see them rendered like the
-game while you work, and point at places on them for an AI agent.
+Create **Battle for Middle-earth II** maps with Python, preview them in a live
+3D viewer, and mark places on the map for an AI coding agent to edit.
 
 ![The viewer on the Greywater Marches, with two marks and their panel](docs/images/viewer.jpg)
 
@@ -16,23 +16,40 @@ game while you work, and point at places on them for an AI agent.
   coordinates and the objects inside them.
 - **Into the game.** `mw play` installs the map into BFME2's maps folder and starts
   the game.
+- **Check your map.** Estimate walkability, inspect changes between builds, and
+  render views for review. Walkability is a local estimate; verify final gameplay
+  in BFME2.
 
 ## Start
 
-You need BFME2 (1.06), [Python 3.11+](https://www.python.org/downloads/) and an
-OpenGL 4.3 graphics card.
+You need **Windows**, your own copy of **BFME2 patched to 1.06**,
+[Python 3.11+](https://www.python.org/downloads/) and a graphics card with
+**OpenGL 4.3** support. The current toolkit targets BFME2; BFME1 support has not
+been tested.
 
-1. Double-click **`Install.cmd`**. It finds the game, sets everything up and adds
+1. [Download the source](https://github.com/NotNBR/bfme2-map-studio/archive/refs/heads/main.zip)
+   and extract it, or clone the repository:
+
+   ```sh
+   git clone https://github.com/NotNBR/bfme2-map-studio.git
+   ```
+
+2. Open the folder and double-click **`Install.cmd`**. It finds the game, sets everything up and adds
    **Map Workshop** to the Start menu.
-2. Double-click **`Map Workshop.cmd`** to open the viewer.
+3. Double-click **`Map Workshop.cmd`** to open the viewer.
 
-```
-mw new "Misty Vale"     start a map
-mw dev misty-vale       build it, open the viewer, rebuild on every save
-mw play misty-vale      play it in BFME2
+The launcher and command-line tool still use the names **Map Workshop** and
+**`mw`**. In PowerShell, from the repository folder:
+
+```powershell
+.\local\venv\Scripts\Activate.ps1
+mw new "Misty Vale"     # Start a map
+mw dev misty-vale       # Build, open the viewer, and rebuild on every save
+mw play misty-vale      # Play it in BFME2
 ```
 
-More in [Getting started](docs/getting-started.md).
+You can also run `.\local\venv\Scripts\mw.exe` directly without activating the
+environment. More in [Getting started](docs/getting-started.md).
 
 ## The maps
 
@@ -43,7 +60,7 @@ More in [Getting started](docs/getting-started.md).
 | [The Crown of Cardolan](maps/crown_of_cardolan/README.md) | 8 | A fallen Arnorian hill-city, barrows and old woodland |
 | [The Ashen March](maps/ashen_march/README.md) | 2 | A ruined Gondorian watch on the edge of Mordor |
 | [Ithilien Frontier](maps/ithilien_frontier/README.md) | 2 | A wooded Gondorian frontier with four river crossings |
-| [Bramble Hollow](maps/bramble_hollow/README.md) | 2 | A cozy Shire valley: a millpond hamlet and two wooden bridges |
+| [Bramble Hollow](maps/bramble_hollow/README.md) | 2 | A Shire valley with a millpond hamlet, wooden footbridges and a creek gorge |
 
 ## Documentation
 
@@ -71,7 +88,7 @@ Agents start with [AGENTS.md](AGENTS.md).
 
 Code is GPL-3.0-only; see [LICENSE.txt](LICENSE.txt) and the
 [third-party notices](docs/reference/licenses/README.md). The game and its assets
-are not included: you supply your own copy of BFME2, and the workshop only reads
+are not included: you supply your own copy of BFME2, and Map Studio only reads
 it. This project is not affiliated with or endorsed by EA or its licensors.
 Built alongside [bfme-workshop](https://github.com/NotNBR/bfme-workshop), with
 help from [openbfme2](https://github.com/Open-BFME/Open-BFME-2).
