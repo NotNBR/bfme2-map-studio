@@ -44,7 +44,7 @@ FOV = 30.0              # narrow: little perspective distortion
 SHADOW = .38            # darkest ground shadow, 0..1
 MARGIN = .06            # free space around the cropped object, of the tile
 OVERSAMPLE = 2.5        # render this much larger than the tile, then crop
-VIEWS = {'3q': (45, 30), 'front': (0, 15), 'back': (180, 15), 'left': (270, 15), 'right': (90, 15),
+VIEWS = {'3q': (45, 25), 'front': (0, 15), 'back': (180, 15), 'left': (270, 15), 'right': (90, 15),
          'side': (90, 15)}
 
 
@@ -332,7 +332,7 @@ def _fit(draw, text, font, width):
 # Command line ---------------------------------------------------------------
 def _common(parser):
     parser.add_argument('--heading', type=float, help='Way the camera faces in degrees: 0 north, 90 east (3q: 45)')
-    parser.add_argument('--elevation', type=float, help='Camera degrees above the horizon (3q: 30)')
+    parser.add_argument('--elevation', type=float, help='Camera degrees above the horizon (3q: 25)')
     parser.add_argument('--rotation', type=float, default=0., help="The object's own angle in degrees (0)")
     parser.add_argument('--distance', type=float, help='Camera distance in map units (default: framed to the model)')
     parser.add_argument('--background', default='white',
