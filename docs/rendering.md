@@ -74,7 +74,14 @@ Patterns are template names or case-insensitive wildcards over the game's
 templates that have a model. Views: `3q` (default), `front`, `back`, `left`,
 `right`, `side`, `top`, or `HEADING/ELEVATION` such as `135/20`; several views
 give one row per object. `--heading` and `--elevation` change the `3q` view,
-`--rotation` turns the object itself. Each image is cropped to the object and
+`--rotation` turns the object itself. The named views are camera positions
+around the object at rotation 0, not the model's own sides: `front` (heading 0)
+shows its local -y side, `back` its +y side, `left` (heading 270) its +x side
+and `right`/`side` its -x side. They look from 15 degrees up, which leaves the
+side away from the sun dark; `0/40,90/40,180/40,270/40` shows all four sides
+more clearly. Models don't agree on which side is their front, so look before
+choosing a building's angle: on a map, angles are counter-clockwise and at
+angle 0 a model's local +y points north. Each image is cropped to the object and
 its shadow and fills its tile, so a scale bar in the corner gives the size
 (map units at the object's centre; exact in top views). Each tile is labelled
 with the template and its size in map units (width x depth x height of the

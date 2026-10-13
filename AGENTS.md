@@ -50,6 +50,12 @@ viewer's **Copy for agent** button copies.
      or `--from-map <map> --layer <layer>`) renders a labelled collage with each
      one's size in map units, and its JSON lists the sizes; `mw item <template>`
      renders one from any angle ([rendering](docs/rendering.md)).
+   - Before setting a building's angle, find its front by looking: models don't
+     agree on which side that is, and many have doors on more than one side.
+     `mw items <template> --views 0/40,90/40,180/40,270/40` shows its local
+     -y, -x, +y and +x sides. Map angles are radians, counter-clockwise; at
+     angle 0 a model's local +y points north. Write in the code which side
+     you chose as its front.
 3. **Build:** `mw build <map>`. A failed build leaves the previous one in place;
    an open viewer reloads a successful one by itself. The build ends with what
    it changed since the previous build; `mw diff <map>` shows it again.
