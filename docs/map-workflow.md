@@ -348,7 +348,7 @@ local/workspaces/<name>/    hand-edit workspaces for a single .map file
 |---|---|---|
 | New native document | `mw new` (a level plane), built on `mapkit.blank` | Preserve the empty build and verify generated records |
 | Shaping the map | `map.py` with `mapkit.earth`, `relief`, `roads`, `vegetation`, `weather` | Broad tools, not a finished design |
-| Texture painting | `set_materials` with corner blends | Full WorldBuilder three-way blending is not implemented |
+| Texture painting | `set_materials` with corner blends | Two blend layers per cell (primary and three-way), as BFME 2 composites them; enclosed cells take the surrounding texture |
 | Asset placement | `blank.add_object` with names from the game's INIs | Check template names and real model footprints |
 | Water, roads, starts, sky | `formats.water`, `mapkit.roads`, `blank.starts`, `weather.add_sky` | Scripts decode, but opcode semantics remain incomplete |
 | Builds and review | `mw build`, `mw dev`, the viewer, `mw render`, `mw graphics` | The viewer is a preview; check gameplay in the game |

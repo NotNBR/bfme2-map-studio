@@ -93,10 +93,29 @@ reports the same terrain details; raw unusual values are retained and flagged.
 
 ## What this changes for our maps
 
-Our material writer currently emits one cardinal blend per cell. Native records
-also support diagonal and third-layer blends. The editor coordinates triangle
-orientation between layers, so adding a third texture needs more than another
-palette index.
+With `corner_blends`, the material writer (`mapkit.blank.set_materials`)
+emits diagonal and long-diagonal blends and uses the three-way layer, following
+the byte-matched BFME 2 code in Open-BFME-2:
+
+- `getPointerToTileData` (0x000AED2E) composites the base tile, the primary
+  blend, then the three-way blend, each through one of the 64x64 alpha tiles
+  of `setupAlphaTiles` (0x000AC6F9). The three-way layer needs
+  `Use3WayTerrainBlends` (on in BFME 2's GameData.ini) and is skipped on cells
+  without a primary blend or on cliff cells.
+- The tile is composited per pixel, so WorldBuilder's coordination of triangle
+  orientation between layers (inherited from Generals) does not matter. Its
+  forced-flip flag bit (2) is harmful: `getRGBAlphaDataForWidth` (0x000AC6A6)
+  tests the whole flag byte, so a flip-only record gets the inverted ramp.
+  The loader keeps the bit while three-way blends are on. Several thousand
+  stock-map cells carry flip-only primary blends.
+- No alpha tile covers all four corners. A cell whose four corners a higher
+  texture touches therefore takes that texture (`fill_enclosed`), as
+  WorldBuilder converts mostly-surrounded cells; otherwise it shows as a
+  sharp square.
+
+The writer puts the highest neighbouring texture in the three-way layer and
+the next one in the primary layer, never writes the flip bit, and writes
+opposite corners of one texture as a single-corner blend in each layer.
 
 Cliff correction also has neighbouring-cell seam matching and tiling logic.
 Do not directly transplant its legacy height/texture scaling into BFME2's

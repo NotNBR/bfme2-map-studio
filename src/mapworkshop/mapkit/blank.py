@@ -94,41 +94,101 @@ def blend_record(tile, direction, flags, long_diagonal=0):
                 custom_edge_class=-1,marker=0x7ada0000)
 
 
-def corner_blend_records(labels, tile_index):
-    """One blend per cell from the corners its higher neighbour touches.
+# The cells touching each corner of a cell, as (dy, dx), in corner bit order.
+CORNER_CELLS = [[(-1,-1),(-1,0),(0,-1)],[(-1,0),(-1,1),(0,1)],[(0,1),(1,1),(1,0)],[(1,0),(1,-1),(0,-1)]]
+# Opposite corners as two single-corner blends, one in each layer.
+OPPOSITE_CORNERS = {0b0101: (0b0001,0b0100), 0b1010: (0b0010,0b1000)}
 
-    Diagonal and three-corner (long diagonal) blends replace the stair-step
-    edges that cardinal-only blending leaves along curved boundaries.
-    """
+
+def corner_masks(labels, texture):
+    """For every cell, the bit mask of its corners touched by a neighbour of
+    `texture` (an array of one texture per cell, -1 for none)."""
     h,w=labels.shape
     padded=np.pad(labels,1,mode='edge').astype(np.int32)
-    def at(dy,dx):
-        return padded[1+dy:1+dy+h,1+dx:1+dx+w]
-    own=labels.astype(np.int32)
-    neighbours=[at(dy,dx) for dy in (-1,0,1) for dx in (-1,0,1) if dy or dx]
-    other=np.max(np.stack([np.where(n>own,n,-1) for n in neighbours]),axis=0)
-    corners=[[(-1,-1),(-1,0),(0,-1)],[(-1,0),(-1,1),(0,1)],
-             [(0,1),(1,1),(1,0)],[(1,0),(1,-1),(0,-1)]]
     mask=np.zeros((h,w),dtype=np.int32)
-    for bit,cells in enumerate(corners):
+    for bit,cells in enumerate(CORNER_CELLS):
         hit=np.zeros((h,w),bool)
         for dy,dx in cells:
-            hit|=at(dy,dx)==other
+            hit|=padded[1+dy:1+dy+h,1+dx:1+dx+w]==texture
         mask|=hit.astype(np.int32)<<bit
-    mask[other<0]=0
-    mask[[0,-1],:]=0; mask[:,[0,-1]]=0
-    blends=np.zeros((h,w),dtype='<u4'); records=[]; lookup={}
-    yy,xx=np.nonzero((mask>0)&(mask!=0b1111))
-    for y,x in zip(yy,xx):
-        direction,flags,long_diagonal=CORNER_BLENDS[int(mask[y,x])]
-        key=(int(tile_index(other[y,x],y,x)),direction,flags,long_diagonal)
+    mask[texture<0]=0
+    return mask
+
+
+def higher_neighbours(labels, below=None):
+    """For every cell, its highest neighbouring texture above its own (and
+    under `below`, when given), or -1."""
+    h,w=labels.shape
+    padded=np.pad(labels,1,mode='edge').astype(np.int32)
+    own=labels.astype(np.int32); best=np.full((h,w),-1,np.int32)
+    for dy in (-1,0,1):
+        for dx in (-1,0,1):
+            if dy or dx:
+                n=padded[1+dy:1+dy+h,1+dx:1+dx+w]
+                ok=n>own if below is None else (n>own)&(n<below)
+                best=np.where(ok&(n>best),n,best)
+    return best
+
+
+def fill_enclosed(labels, rounds=64):
+    """A cell whose four corners a higher texture touches can show no
+    transition, since no blend covers the whole cell: it takes that texture
+    (the highest one, if several), and its neighbours are looked at again.
+    Removes lone cells and one-cell gaps that would show as sharp squares."""
+    labels=labels.astype(np.int32)
+    for _ in range(rounds):
+        fill=np.full(labels.shape,-1,np.int32)
+        for texture in np.unique(labels):
+            full=(corner_masks(labels,np.full(labels.shape,texture,np.int32))==0b1111)&(labels<texture)
+            fill[full]=texture
+        if not (fill>=0).any():
+            break
+        labels=np.where(fill>=0,fill,labels)
+    return labels
+
+
+def corner_blend_records(labels, tile_index):
+    """Up to two blends per cell from the corners its higher neighbours
+    touch, as BFME 2 composites them (WorldHeightMap::getPointerToTileData
+    0x000AED2E): the base tile, then the primary blend, then the three-way
+    blend on top, each through one of the 64x64 alpha tiles (0x000AC6F9).
+
+    The highest neighbouring texture goes on top, in the three-way layer, the
+    next one below it in the primary layer; with a single neighbouring
+    texture it alone is the primary. Opposite corners of one texture become a
+    single-corner blend in each layer. Diagonal and three-corner (long
+    diagonal) blends replace the stair-step edges that cardinal-only blending
+    leaves along curved boundaries.
+
+    The game draws the three-way layer only over a primary blend, and since
+    each tile is composited per pixel its triangle orientation does not
+    matter: no record carries WorldBuilder's forced-flip bit (2), which
+    BFME 2's alpha lookup (0x000AC6A6) would read as inverted. Call
+    `fill_enclosed` first: a fully enclosed cell has no blend.
+    """
+    h,w=labels.shape
+    top=higher_neighbours(labels); top_mask=corner_masks(labels,top)
+    below=higher_neighbours(labels,np.where(top<0,0,top)); below_mask=corner_masks(labels,below)
+    for mask in (top_mask,below_mask):
+        mask[[0,-1],:]=0; mask[:,[0,-1]]=0
+    blends=np.zeros((h,w),dtype='<u4'); extra=np.zeros((h,w),dtype='<u4'); records=[]; lookup={}
+    def record(texture,y,x,mask):
+        direction,flags,long_diagonal=CORNER_BLENDS[mask]
+        key=(int(tile_index(texture,y,x)),direction,flags,long_diagonal)
         if key not in lookup:
             records.append(blend_record(*key))
             lookup[key]=len(records)
-        blends[y,x]=lookup[key]
-    # Cells surrounded on all four corners take the neighbour's texture.
-    full=mask==0b1111
-    return blends,records,full
+        return lookup[key]
+    for y,x in zip(*np.nonzero(top_mask)):
+        t,tm,b,bm=int(top[y,x]),int(top_mask[y,x]),int(below[y,x]),int(below_mask[y,x])
+        if bm:
+            blends[y,x]=record(b,y,x,bm); extra[y,x]=record(t,y,x,tm)
+        elif tm in OPPOSITE_CORNERS:
+            first,second=OPPOSITE_CORNERS[tm]
+            blends[y,x]=record(t,y,x,first); extra[y,x]=record(t,y,x,second)
+        else:
+            blends[y,x]=record(t,y,x,tm)
+    return blends,extra,records
 
 
 def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes=None, corner_blends=False):
@@ -145,12 +205,15 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
     label_phase=np.array([phase_of[size] for size in sizes])
     def tile_index(label,y,x):
         return tile_start[label]+phases[label_phase[label],y,x]
+    if blend_edges and corner_blends:
+        labels=fill_enclosed(labels)
     tiles=tile_index(labels,yy,xx).astype('<u2')
     blends=np.zeros((h,w),dtype='<u4'); records=[]; lookup={}
+    zero=np.zeros((h,w),dtype='u1'); three_way=zero
     # Native directional transitions around material regions. Tile phases match
     # primary terrain and blend descriptors are interned rather than per-cell.
     if blend_edges and corner_blends:
-        blends,records,full=corner_blend_records(labels,tile_index)
+        blends,three_way,records=corner_blend_records(labels,tile_index)
     elif blend_edges:
         for dy,dx,direction,flags in [(0,1,b'\1\0\0\0',0),(0,-1,b'\1\0\0\0',1),
                                       (1,0,b'\0\1\0\0',0),(-1,0,b'\0\1\0\0',1)]:
@@ -163,8 +226,8 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
                     records.append(blend_record(*key))
                     lookup[key]=len(records)
                 blends[y,x]=lookup[key]
-    zero=np.zeros((h,w),dtype='u1'); blocked=zero if blocked is None else blocked.astype('u1')
-    arrays=dict(tiles=tiles,blends=blends,three_way=zero,cliffs=zero,impassable=blocked,impassable_players=zero,
+    blocked=zero if blocked is None else blocked.astype('u1')
+    arrays=dict(tiles=tiles,blends=blends,three_way=three_way,cliffs=zero,impassable=blocked,impassable_players=zero,
                 passage_widths=zero,taintable=zero,extra_passable=zero,flammability=zero,visible=np.ones((h,w),'u1'))
     textures=[dict(cell_start=int(cell_start[i]),cell_count=counts[i],cell_size=sizes[i],name=name)
               for i,name in enumerate(palette)]

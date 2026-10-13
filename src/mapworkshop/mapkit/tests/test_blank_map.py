@@ -6,6 +6,7 @@ from mapworkshop.mapkit.blank import create, starts, set_materials, set_heights,
 from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.mapkit.weather import apply_weather, weather_code
 from mapworkshop.formats.map import Map, Reader, chunks
+from mapworkshop.formats.terrain import terrain_records
 from mapworkshop.mapkit.checks.analyze import analyze
 
 
@@ -41,6 +42,32 @@ class BlankDocumentTests(unittest.TestCase):
         self.assertEqual(list(b['arrays']['tiles'][0,:4]),[0,1,4,5])
         self.assertLess(int(b['arrays']['tiles'].max()),128)
         self.assertTrue(analyze(m.encode())['blend_details']['tail_fully_consumed'])
+
+    def test_corner_blends_fill_enclosed_cells_and_use_the_three_way_layer(self):
+        def blend(labels):
+            m=create(64,64,3)
+            set_materials(m,['A','B','C'],labels,cell_sizes=[1,1,1],corner_blends=True)
+            doc=Map(m.encode()); b=doc.blend(); b['blend_records']=terrain_records(doc,b)['blends']
+            texture=lambda tile:next(i for i,t in enumerate(b['textures']) if t['tile_start']<=tile<t['tile_start']+t['tile_count'])
+            return b,texture
+        # A lone cell has no blend that covers it: it takes its neighbours' texture.
+        labels=np.zeros((70,70),dtype="u2");labels[9:12,9:12]=1;labels[10,10]=0
+        b,texture=blend(labels)
+        self.assertEqual(texture(int(b['arrays']['tiles'][10,10])),1)
+        self.assertEqual(int(b['arrays']['blends'][10,10]),0)
+        # Where two higher textures meet a cell, the lower one is the primary blend, the higher one on top.
+        labels=np.zeros((70,70),dtype="u2");labels[:,12:]=1;labels[12:,:]=2
+        b,texture=blend(labels)
+        records={r['index']:r for r in b['blend_records']}
+        primary,extra=int(b['arrays']['blends'][11,11]),int(b['arrays']['three_way'][11,11])
+        self.assertTrue(primary and extra)
+        self.assertEqual((texture(records[primary]['tile']),texture(records[extra]['tile'])),(1,2))
+        self.assertFalse(any(r['flags']&2 for r in b['blend_records']))
+        self.assertFalse(((b['arrays']['three_way']>0)&(b['arrays']['blends']==0)).any())
+        # One texture on opposite corners: a single-corner blend in each layer.
+        labels=np.zeros((70,70),dtype="u2");labels[9,9]=1;labels[11,11]=1
+        b,_=blend(labels)
+        self.assertTrue(int(b['arrays']['blends'][10,10]) and int(b['arrays']['three_way'][10,10]))
 
     def test_invalid_elevations_are_rejected_before_writing(self):
         m=create(64,64,3)
