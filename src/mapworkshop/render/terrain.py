@@ -76,7 +76,7 @@ def blend_corners(record):
 
 
 class TerrainData:
-    def __init__(self, m):
+    def __init__(self, m, checkpoint=lambda: None):
         hm = m.heightmap()
         self.width, self.height, self.border = hm['width'], hm['height'], hm['border']
         self.heights = hm['elevations'].astype(np.float32) * 0.0390625
@@ -109,20 +109,25 @@ class TerrainData:
 
         base = pack(tiles)
         def layer(indices):
-            words = np.zeros(indices.shape, np.int64)
-            flips = np.zeros(indices.shape, bool)
-            for index in np.unique(indices):
+            # Pack each blend once, then gather by ID. A full-map mask for
+            # each record made stock maps with many blends take minutes.
+            count = max(records, default=0) + 1
+            words = np.zeros(count, np.int64)
+            flips = np.zeros(count, bool)
+            for number, index in enumerate(np.unique(indices)):
+                if number % 128 == 0:
+                    checkpoint()
                 if index == 0 or int(index) not in records:
                     continue
                 record = records[int(index)]
                 mask, flip = blend_corners(record)
                 if not mask:
                     continue
-                cells = indices == index
                 packed = pack(np.full(1, record['tile']))[0]
-                words[cells] = packed | (mask << 20) | (1 << 24)
-                flips[cells] = flip
-            return words, flips
+                words[index] = packed | (mask << 20) | (1 << 24)
+                flips[index] = flip
+            safe = np.where((indices >= 0) & (indices < count), indices, 0)
+            return words[safe], flips[safe]
         primary, flip = layer(arrays['blends'].astype(np.int64))
         extra, _ = layer(arrays['three_way'].astype(np.int64))
         cliff = arrays['cliffs'] != 0

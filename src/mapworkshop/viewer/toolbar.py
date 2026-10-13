@@ -8,6 +8,7 @@ clicks are hit-tested in framebuffer pixels.
 """
 
 from PIL import Image, ImageDraw, ImageFont
+from functools import lru_cache
 
 BAR = (243, 243, 245)
 LINE = (210, 211, 216)
@@ -37,6 +38,7 @@ void main() { frag = texture(tex, vec2(v_uv.x, 1.0 - v_uv.y)); }
 """
 
 
+@lru_cache(maxsize=32)
 def _font(size, bold=False):
     for name in (('segoeuib.ttf' if bold else 'segoeui.ttf'), 'arial.ttf'):
         try:
@@ -112,33 +114,41 @@ class Toolbar:
             boxes.append((x, y0, x+w, y0+bh, target))
             return x+w
 
-        status_text = None
+        status_text = next((str(state.get(item['id'], '')) for item in self.items
+                            if item['kind'] == 'status'), '')
         right = [item for item in self.items if item.get('align') == 'right']
-        for item in self.items:
-            kind = item['kind']
-            if item.get('align') == 'right':
-                continue
-            if kind == 'gap':
-                d.line([(x+gap//2, y0+3), (x+gap//2, y0+bh-3)], fill=LINE)
-                x += gap
-            elif kind == 'button':
-                x = button(x, item['label'], ('button', item['id']), hovered=self.hover == ('button', item['id']))+round(2*scale)
-            elif kind == 'toggle':
-                on = bool(state.get(item['id']))
-                x = button(x, item['label'], ('toggle', item['id']), pressed=on,
-                           hovered=self.hover == ('toggle', item['id']))+round(2*scale)
-            elif kind == 'dropdown':
-                title = item.get('title')
-                if item.get('label') and not title:
-                    d.text((x, y0+bh/2), item['label'], font=small, fill=MUTED, anchor='lm')
-                    x += round(text_w(item['label'], small)+6*scale)
-                label = title or str(state.get(item['id'], ''))
-                if len(label) > 30:
-                    label = label[:29]+'…'
-                x = button(x, label, ('dropdown', item['id']), pressed=self.open_menu is not None and self.open_menu[0] == item['id'],
-                           hovered=self.hover == ('dropdown', item['id']), arrow=True)+round(4*scale)
-            elif kind == 'status':
-                status_text = str(state.get(item['id'], ''))
+        controls = tuple((item.get('id'), str(state.get(item.get('id'), '')))
+                         for item in self.items if item['kind'] != 'status' and item not in right)
+        base_key = (width, scale, controls, self.hover, self.open_menu and self.open_menu[0])
+        cached = getattr(self, '_base_bar', None)
+        if cached and cached[0] == base_key:
+            image, boxes, x = cached[1].copy(), list(cached[2]), cached[3]
+            d = ImageDraw.Draw(image)
+        else:
+            for item in self.items:
+                kind = item['kind']
+                if item.get('align') == 'right':
+                    continue
+                if kind == 'gap':
+                    d.line([(x+gap//2, y0+3), (x+gap//2, y0+bh-3)], fill=LINE)
+                    x += gap
+                elif kind == 'button':
+                    x = button(x, item['label'], ('button', item['id']), hovered=self.hover == ('button', item['id']))+round(2*scale)
+                elif kind == 'toggle':
+                    on = bool(state.get(item['id']))
+                    x = button(x, item['label'], ('toggle', item['id']), pressed=on,
+                               hovered=self.hover == ('toggle', item['id']))+round(2*scale)
+                elif kind == 'dropdown':
+                    title = item.get('title')
+                    if item.get('label') and not title:
+                        d.text((x, y0+bh/2), item['label'], font=small, fill=MUTED, anchor='lm')
+                        x += round(text_w(item['label'], small)+6*scale)
+                    label = title or str(state.get(item['id'], ''))
+                    if len(label) > 30:
+                        label = label[:29]+'…'
+                    x = button(x, label, ('dropdown', item['id']), pressed=self.open_menu is not None and self.open_menu[0] == item['id'],
+                               hovered=self.hover == ('dropdown', item['id']), arrow=True)+round(4*scale)
+            self._base_bar = (base_key, image.copy(), list(boxes), x)
         # Right-aligned dropdowns from the right edge inwards, then the status
         # text to their left when there is room for it.
         edge = width-pad
@@ -230,7 +240,23 @@ class Toolbar:
 
     def draw_loading(self, size, scale, title, step, fraction):
         """Dim the frame and show a centred loading card with a progress bar."""
+        key = (round(scale, 3), title, step, round(fraction*100))
+        if key != getattr(self, 'card_key', None):
+            self.card_key = key
+            self._loading_card(scale, title, step, fraction)
         width, height = size
+        w, h = self.card_texture.size
+        ctx = self.ctx
+        ctx.viewport = (0, 0, width, height)
+        ctx.disable(self.mgl.DEPTH_TEST)
+        ctx.enable(self.mgl.BLEND)
+        ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
+        self._blit(self.dim_texture, (0, self.height, width, height), size)
+        x0, y0 = (width-w)//2, (height-h)//2
+        self._blit(self.card_texture, (x0, y0, x0+w, y0+h), size)
+        ctx.disable(self.mgl.BLEND)
+
+    def _loading_card(self, scale, title, step, fraction):
         w, h = round(420*scale), round(108*scale)
         card = Image.new('RGBA', (w, h), MENU+(255,))
         d = ImageDraw.Draw(card)
@@ -250,15 +276,6 @@ class Toolbar:
         self.card_texture = self._upload(card, getattr(self, 'card_texture', None))
         if getattr(self, 'dim_texture', None) is None:
             self.dim_texture = self._upload(Image.new('RGBA', (1, 1), (12, 14, 18, 150)), None)
-        ctx = self.ctx
-        ctx.viewport = (0, 0, width, height)
-        ctx.disable(self.mgl.DEPTH_TEST)
-        ctx.enable(self.mgl.BLEND)
-        ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
-        self._blit(self.dim_texture, (0, self.height, width, height), size)
-        x0, y0 = (width-w)//2, (height-h)//2
-        self._blit(self.card_texture, (x0, y0, x0+w, y0+h), size)
-        ctx.disable(self.mgl.BLEND)
 
     def draw_panel(self, size, scale, title, lines, top):
         """A card at the top right, `top` pixels down, with a bold title and

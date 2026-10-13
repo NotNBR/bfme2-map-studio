@@ -34,6 +34,8 @@ cells red and striped (cliffs, deep water, buildings), and in orange the
 walkable areas no player start can reach. `mw walkable <map>` prints the same
 as text, with each cut-off area's position, and `mw render ... --walkable`
 draws it into renders. The viewer recomputes it after reloading a changed map.
+The calculation runs in the background; you can keep moving around while the
+status bar says **Computing walkability**.
 
 Terrain flags, water depth, inherited object geometry and the models' walking
 meshes supply the estimate. Bridge edges and connections are approximate;
@@ -81,10 +83,13 @@ capture. The default CLI and viewer always use the local calculation.
 
 The viewer watches the map file and its `map.ini`. When either changes (a
 build from the toolbar, `mw build`, `mw dev`, an editor save), it reloads the
-scene in place and the camera stays where it is. Models and textures are
-cached between reloads, so Greywater Marches reloads in about a second. If the
-new file can't be read, the last good scene stays and the status bar shows the
-error.
+scene in place and the camera stays where it is. Map preparation runs in the
+background and GPU uploads are spread across frames. The current scene and
+controls remain usable while loading, including when switching maps or changing
+detail, weather or sun. Selecting another map replaces the pending request.
+Models and textures are cached between reloads. If the new file can't be read,
+the last good scene stays and the status bar shows the error. Individual GPU
+uploads and first-use shader compilation can still cause short pauses.
 
 `mw dev [MAP]` is the quickest way to work on a map: it builds the project,
 opens the viewer and rebuilds whenever you save a file in the project folder.

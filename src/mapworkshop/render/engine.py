@@ -1,10 +1,10 @@
 """Offscreen renderer for BFME2 maps (moderngl, headless OpenGL 4.3)."""
 
-import copy
 import math
 import re
 import struct
 from pathlib import Path
+from collections import OrderedDict
 
 import numpy as np
 from PIL import Image
@@ -21,6 +21,32 @@ from mapworkshop.render.w3d import ModelCache, chunks, fx_constants
 
 ARRAY_SIZE = 512
 SKIP_TEMPLATES = ('*waypoints', 'amb_', 'animalwanderpoint', 'waterripplespawn')
+
+
+class TextureCache(OrderedDict):
+    """Bound cached texture ownership; live batches retain their own references."""
+    def __init__(self, budget=256*1024*1024):
+        super().__init__()
+        self.budget, self.bytes = budget, 0
+
+    @staticmethod
+    def cost(texture):
+        return int(texture.width*texture.height*texture.components*4/3) if texture is not None else 0
+
+    def __getitem__(self, key):
+        texture = super().__getitem__(key)
+        self.move_to_end(key)
+        return texture
+
+    def __setitem__(self, key, texture):
+        if key in self:
+            self.bytes -= self.cost(super().__getitem__(key))
+        super().__setitem__(key, texture)
+        self.move_to_end(key)
+        self.bytes += self.cost(texture)
+        while len(self) > 1 and (self.bytes > self.budget or len(self) > 1024):
+            _, evicted = self.popitem(last=False)
+            self.bytes -= self.cost(evicted)
 
 
 def triangulate(points):
@@ -89,20 +115,24 @@ class MapRenderer:
     def __init__(self, source, assets=None, ctx=None, objects=True, normal_maps=None,
                  clouds=True, macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
                  progress=None, vegetation_limits=False, sun=None):
-        """`weather` (a mapkit.weather preset name) replaces the map's own weather
-        and adjusts its lighting as the preset would in a build. `sun` (a
-        mapkit.weather.SUNS name) lays a light rig, and its sky and fog, over
-        the weather.
-        `progress(fraction, step)` is called as loading advances (for a UI).
-        `vegetation_limits` keeps the game's tree (1,200) and shrub (2,000)
-        buffer capacities; by default every tree and shrub of the map is drawn.
-        `shared` (a dict) keeps loaded models and object textures across
-        renderers on the same context, so reloading a map is quick."""
+        """Synchronous entry point for CLI rendering; the viewer uses prepare/upload."""
         import moderngl
-        self.moderngl = moderngl
+        self._prepare(source, assets, objects, normal_maps, clouds, macro, samples, lod,
+                      shadows, shared, weather, progress, vegetation_limits, sun)
+        for _ in self.upload(ctx or moderngl.create_standalone_context(require=430), shared):
+            pass
+
+    @classmethod
+    def prepare(cls, source, **options):
+        """CPU-only scene construction, safe to perform in a loader worker."""
+        return cls.__new__(cls)._prepare(source, **options)
+
+    def _prepare(self, source, assets=None, objects=True, normal_maps=None, clouds=True,
+                 macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
+                 progress=None, vegetation_limits=False, sun=None):
         report = progress or (lambda fraction, step: None)
         report(0.0, 'Indexing game assets' if assets is None else 'Reading map')
-        self.assets = assets or GameAssets()
+        base = assets or GameAssets()
         report(0.08, 'Reading map')
         self.source = None if isinstance(source, (bytes, bytearray)) else Path(source)
         data = self.source.read_bytes() if self.source else bytes(source)
@@ -112,13 +142,8 @@ class MapRenderer:
         self.map = Map(data)
         map_ini = self.source.parent/'map.ini' if self.source else None
         self.map_ini = map_ini.read_text(encoding='cp1252', errors='replace') if map_ini and map_ini.is_file() else ''
-        # Keep base templates for pathing's inherited map.ini patches.
-        self.pathing_assets = copy.copy(self.assets)
-        self.pathing_assets._templates = dict(self.assets.__dict__.setdefault(
-            '_pathing_base_templates', dict(self.assets.templates)))
-        if self.map_ini:
-            self.assets.add_map_templates(self.map_ini)
-        self.ctx = ctx or moderngl.create_standalone_context(require=430)
+        self.assets = base.for_map(self.map_ini)
+        self.pathing_assets = getattr(base, '_base', base)
         self.samples = samples
         lod = lod.lower()
         # GameLOD.ini: UseTerrainNormalMap only at High and above,
@@ -134,30 +159,58 @@ class MapRenderer:
                             decals=lod in ('low', 'medium') and shadows,
                             shadows=(('map' if high else 'volume') if lod not in ('verylow', 'low') else 'none')
                                     if shadows else 'none')
-        self.terrain = TerrainData(self.map)
+        self.terrain = TerrainData(self.map, checkpoint=lambda: report(0.10, 'Preparing terrain'))
         shared = {} if shared is None else shared
-        self.textures = shared.setdefault('textures', {})
+        self.model_cache = shared.setdefault('model_cache', ModelCache(self.pathing_assets))
         self.shadow_settings = self._shadow_settings()
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
                             walkable=False)
         self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0)
         self._progress = report
-        report(0.12, 'Lighting')
+        self._effects = {}
         self._lighting()
-        report(0.15, 'Terrain')
-        self._terrain_gpu()
-        report(0.35, 'Water')
-        self._water_gpu()
-        report(0.40, 'Weather')
-        self._weather_gpu()
-        self.model_cache = shared.setdefault('model_cache', ModelCache(self.assets))
+        self._images = {}
+        report(0.18, 'Preparing terrain textures')
+        self._prepare_terrain()
+        report(0.28, 'Preparing water')
+        self._prepare_water()
+        report(0.32, 'Preparing weather')
+        self._prepare_weather()
         self.batches = []
         self.sky_horizon = None
         if objects:
-            report(0.45, 'Objects')
-            self._objects_gpu()
-        report(1.0, 'Done')
+            report(0.36, 'Preparing objects')
+            self._prepared_objects = self._object_groups()
+            self._prepare_models()
+            report(0.65, 'Preparing shadows')
+            self._prepare_volumes(self._prepared_objects[1])
+            self._prepared_volume_triangles = self._volume_triangles()
+        report(0.70, 'Ready to upload')
+        return self
+
+    def upload(self, ctx, shared=None):
+        """Yield between GPU batches. Advance only on the context-owning thread."""
+        import moderngl
+        self.moderngl, self.ctx = moderngl, ctx
+        self.textures = ({} if shared is None else shared).setdefault('textures', TextureCache())
+        yield from self._terrain_steps()
+        self._progress(0.78, 'Uploading water')
+        yield from self._water_steps()
+        self._weather_gpu()
+        yield
+        if self.options['objects']:
+            yield from self._objects_steps()
+        # Prepared pixel arrays are temporary. GameAssets owns the bounded
+        # decoded-image cache; the live renderer needs only its GPU resources.
+        self._images.clear()
+        self.__dict__.pop('_terrain_pixels', None)
+        self.__dict__.pop('_prepared_objects', None)
+        self.__dict__.pop('_prepared_volume_triangles', None)
+        self.__dict__.pop('_prepared_water', None)
+        self._draw_batches = sorted(self.batches, key=lambda b: (not b['vegetation'], b['blend'] is not None and not b['depth_mask']))
+        self._progress(1.0, 'Done')
+        self._progress = lambda fraction, step: None
 
     def set_option(self, name, value):
         """Change a shader option at runtime: normal_maps, clouds or macro."""
@@ -219,7 +272,8 @@ class MapRenderer:
             self.environment = {}
 
     # Terrain ----------------------------------------------------------------
-    def _texture_array(self, images):
+    @staticmethod
+    def _texture_pixels(images):
         layers = []
         for image in images:
             # Resize colour and alpha separately: Pillow premultiplies RGBA,
@@ -227,22 +281,18 @@ class MapRenderer:
             rgb = Image.fromarray(np.ascontiguousarray(image[..., :3])).resize((ARRAY_SIZE, ARRAY_SIZE), Image.Resampling.LANCZOS)
             alpha = Image.fromarray(np.ascontiguousarray(image[..., 3])).resize((ARRAY_SIZE, ARRAY_SIZE), Image.Resampling.LANCZOS)
             layers.append(np.dstack([np.asarray(rgb), np.asarray(alpha)]))
-        data = np.stack(layers).astype(np.uint8)
-        texture = self.ctx.texture_array((ARRAY_SIZE, ARRAY_SIZE, len(layers)), 4, data.tobytes())
+        return np.stack(layers).astype(np.uint8)
+
+    def _texture_array(self, data):
+        texture = self.ctx.texture_array((ARRAY_SIZE, ARRAY_SIZE, len(data)), 4, data.tobytes())
         texture.build_mipmaps()
         texture.filter = (self.moderngl.LINEAR_MIPMAP_LINEAR, self.moderngl.LINEAR)
         texture.repeat_x = texture.repeat_y = True
         texture.anisotropy = 16.0
         return texture
 
-    def _terrain_gpu(self):
+    def _prepare_terrain(self):
         t = self.terrain
-        ctx = self.ctx
-        self.heights = ctx.texture((t.width, t.height), 1, t.heights.astype('f4').tobytes(), dtype='f4')
-        self.heights.filter = (self.moderngl.LINEAR, self.moderngl.LINEAR)
-        self.heights.repeat_x = self.heights.repeat_y = False
-        self.cells = ctx.texture((t.width, t.height), 4, t.cells.astype('u4').tobytes(), dtype='u4')
-        self.cells.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
         albedo, normals, has_normal, skipped = [], [], [], []
         for texture in t.textures:
             file = self.assets.terrain_textures.get(texture['name'].lower())
@@ -263,9 +313,32 @@ class MapRenderer:
             has_normal.append(int(normal is not None))
             # A flat normal (the High PS rebuilds z from RG and reads B as gloss).
             normals.append(normal if normal is not None else np.full((4, 4, 4), (128, 128, 255, 255), np.uint8))
-        self.albedo = self._texture_array(albedo)
-        self.normal_array = self._texture_array(normals)
+        self._terrain_pixels = (self._texture_pixels(albedo), self._texture_pixels(normals))
         self.report['terrain_normal_maps'] = sum(has_normal)
+        from mapworkshop.render.water import depth_tint
+        try:
+            areas = records(self.map, 'StandingWaterAreas')
+        except ValueError:
+            areas = []
+        self._depth_tint = depth_tint(t.heights, t.border, areas, self.assets.read)
+        for name in (self.environment.get('macro_texture', 'TSNoiseUrb.tga'),
+                     self.environment.get('cloud_texture', 'TSCloudMed.tga')):
+            self._prepare_image(name)
+
+    def _terrain_steps(self):
+        self._progress(0.72, 'Uploading terrain')
+        t = self.terrain
+        ctx = self.ctx
+        self.heights = ctx.texture((t.width, t.height), 1, t.heights.astype('f4').tobytes(), dtype='f4')
+        self.heights.filter = (self.moderngl.LINEAR, self.moderngl.LINEAR)
+        self.heights.repeat_x = self.heights.repeat_y = False
+        self.cells = ctx.texture((t.width, t.height), 4, t.cells.astype('u4').tobytes(), dtype='u4')
+        self.cells.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        yield
+        self.albedo = self._texture_array(self._terrain_pixels[0])
+        yield
+        self.normal_array = self._texture_array(self._terrain_pixels[1])
+        yield
         self.terrain_program = ctx.program(vertex_shader=shaders.TERRAIN_VS, fragment_shader=shaders.TERRAIN_FS)
         p = self.terrain_program
         subtiles = [float(v) for v in t.subtiles] + [1.0]*(256-len(t.subtiles))
@@ -281,12 +354,7 @@ class MapRenderer:
         self.tile_z.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
         p['tile_z'].value = 9
         p['grid_lines'].value = 0
-        from mapworkshop.render.water import depth_tint
-        try:
-            areas = records(self.map, 'StandingWaterAreas')
-        except ValueError:
-            areas = []
-        tint = depth_tint(t.heights, t.border, areas, self.assets.read)
+        tint = self._depth_tint
         self.depth_tint = ctx.texture((t.width, t.height), 3, tint.astype('f4').tobytes(), dtype='f4')
         self.depth_tint.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
         self.report['depth_tinted_samples'] = int(np.count_nonzero((tint < .999).any(-1)))
@@ -307,9 +375,8 @@ class MapRenderer:
             p['macro_xform'].value = (1/660, -1/660, 0, 0)
         # Cloud.ScaleUV_OffsetPerSecondUV (0x000E2BEE): 1 / weather.ini CloudTextureSize.
         from mapworkshop.render.terrain import cloud_texture_size
-        map_ini = self.source.parent/'map.ini' if self.source else None
         size = cloud_texture_size(self.assets.ini_text('weather.ini'),
-                                  map_ini.read_text(encoding='cp1252', errors='replace') if map_ini and map_ini.is_file() else '')
+                                  self.map_ini)
         self.cloud_scale = (1/size[0], 1/size[1])
         p['cloud_xform'].value = (*self.cloud_scale, 0, 0)
         p['use_macro'].value = int(self.options['macro'] and macro is not None)
@@ -317,11 +384,18 @@ class MapRenderer:
         self.terrain_vao = ctx.vertex_array(p, [])
         self.terrain_vertices = (t.width-1)*(t.height-1)*6
 
+        yield
+
+    def _prepare_image(self, name):
+        if name and name.lower() not in self._images:
+            image = self.assets.image(name)
+            self._images[name.lower()] = bleed_alpha(image) if image is not None else None
+
     def _plain_texture(self, name, fallback=None):
-        image = self.assets.image(name) if name else None
+        self._prepare_image(name)
+        image = self._images.get(name.lower()) if name else None
         if image is None:
             return fallback
-        image = bleed_alpha(image)
         texture = self.ctx.texture((image.shape[1], image.shape[0]), 4, np.ascontiguousarray(image).tobytes())
         texture.build_mipmaps()
         texture.filter = (self.moderngl.LINEAR_MIPMAP_LINEAR, self.moderngl.LINEAR)
@@ -364,12 +438,17 @@ class MapRenderer:
         if not name:
             return None
         key = 'shaders/compiled/' + name.lower() + 'o'
+        if key in self._effects:
+            return self._effects[key]
         if not self.assets.exists(key):
+            self._effects[key] = None
             return None
         try:
-            return Effect(self.assets.read(key))
+            effect = Effect(self.assets.read(key))
         except (ValueError, struct.error):
-            return None
+            effect = None
+        self._effects[key] = effect
+        return effect
 
     def _terrain_lighting(self):
         p = self.terrain_program
@@ -441,10 +520,11 @@ class MapRenderer:
             u['light0_color'] = tuple((2.0 if self.overbright else 1.0)*c for c in lights[0][1])
             if not entry.get('own_specular'):
                 u['specular_dir'] = tuple(lights[1][0]) if len(lights) > 1 else (0.0, 0.0, 1.0)
+        self._prepare_weather()
         self._weather_gpu()
 
     # Weather ----------------------------------------------------------------
-    def _weather_gpu(self):
+    def _prepare_weather(self):
         """map.ini Weather over weather.ini: hardware fog and falling particles."""
         from mapworkshop.render.weather import parse, emitters
         map_ini = self.source.parent/'map.ini' if self.source else None
@@ -452,7 +532,7 @@ class MapRenderer:
             from mapworkshop.mapkit.weather import ini_block
             local = ini_block(self.weather_preset)
         else:
-            local = map_ini.read_text(encoding='cp1252', errors='replace') if map_ini and map_ini.is_file() else ''
+            local = self.map_ini
         sun = ''
         if self.sun:
             from mapworkshop.mapkit.weather import sun_ini
@@ -464,6 +544,12 @@ class MapRenderer:
                                       particles=w['snowtexture'] if w['issnowing'] and w['snowenabled'] else None)
         self.particles = None
         centers = emitters(w, *self.playable)
+        self._weather_centers = centers
+        if len(centers):
+            self._prepare_image(w['snowtexture'])
+
+    def _weather_gpu(self):
+        w, centers = self.weather, self._weather_centers
         texture = self._plain_texture(w['snowtexture']) if len(centers) else None
         if texture is None:
             return
@@ -513,9 +599,10 @@ class MapRenderer:
         ctx.fbo.depth_mask = True
         ctx.disable(mgl.BLEND)
 
-    def _water_gpu(self):
+    def _prepare_water(self):
         from mapworkshop.render.water import build_mesh, transparency, water_level
         self.water = []
+        self._prepared_water = []
         self.water_level = water_level(self.assets.ini_text('gamelod.ini'), self.options['lod'])
         try:
             areas = records(self.map, 'StandingWaterAreas')
@@ -523,22 +610,33 @@ class MapRenderer:
             areas = []
         if not areas:
             return
-        program = self.ctx.program(vertex_shader=shaders.WATER_VS, fragment_shader=shaders.WATER_FS)
-        self.water_program = program
         map_ini = self.source.parent/'map.ini' if self.source else None
         depth, opacity = transparency(self.assets.ini_text('water.ini'),
-                                      map_ini.read_text(encoding='cp1252', errors='replace') if map_ini and map_ini.exists() else '')
+                                      self.map_ini)
         self.report['water'] = dict(transparent_depth=depth, min_opacity=opacity, areas=[])
         for area in areas:
             mesh = build_mesh(area['points'], float(area['water_height']), self.terrain.height_at, self.water_level)
             if mesh is None:
                 continue
             vertices, triangles, spacing = mesh
+            fx = self._water_material(area.get('shader'))
+            self._prepared_water.append((area, mesh, fx))
+            for name in (fx.get('WaterBumpTexture') or area.get('bump_texture'),
+                         fx.get('WaterEnvTexture') or area.get('sky_texture'), fx.get('WaveTexture')):
+                self._prepare_image(name)
+
+    def _water_steps(self):
+        if not self._prepared_water:
+            return
+        program = self.ctx.program(vertex_shader=shaders.WATER_VS, fragment_shader=shaders.WATER_FS)
+        self.water_program = program
+        depth, opacity = self.report['water']['transparent_depth'], self.report['water']['min_opacity']
+        for area, (vertices, triangles, spacing), fx in self._prepared_water:
+            yield
             self.report['water']['areas'].append(dict(name=area['name'], grid_spacing=spacing,
                                                       vertices=len(vertices), triangles=len(triangles)))
             vbo = self.ctx.buffer(vertices.tobytes())
             ibo = self.ctx.buffer(triangles.tobytes())
-            fx = self._water_material(area.get('shader'))
             from mapworkshop.render.water import shader_model
             self.report['water']['areas'][-1]['model'] = shader_model(
                 area.get('shader') or '', self.water_level, lambda n: self.assets.model_key(n) is not None)[0]
@@ -650,7 +748,7 @@ class MapRenderer:
         self.batches = []
         self._objects_gpu()
 
-    def _objects_gpu(self):
+    def _object_groups(self):
         """Batches for map objects, as the game sorts them into draw paths.
 
         `KindOf TREE` and `KindOf SHRUB` templates with a W3DTreeDraw go to
@@ -663,11 +761,6 @@ class MapRenderer:
         Everything else is a W3D render object: fixed-function materials or
         FX materials (normalmapped.fx).
         """
-        ctx = self.ctx
-        self._object_resources = []
-        self.sky_horizon = None
-        self.object_program = ctx.program(vertex_shader=shaders.OBJECT_VS, fragment_shader=shaders.OBJECT_FS)
-        self._object_lighting()
         show_props = self._show_props()
         limits = self.options.get('vegetation_limits', False)
         counts = dict(tree=0, shrub=0)
@@ -755,10 +848,72 @@ class MapRenderer:
                                          trees_dropped=dropped['tree'], shrubs_dropped=dropped['shrub'],
                                          props_hidden=dropped['prop'], show_props=show_props, limits=limits,
                                          technique='Default' if self.options['lod'] in ('high', 'ultrahigh') else 'Default_L')
+        return groups, volumes, objects
+
+    def _objects_gpu(self):
+        self._prepared_objects = self._object_groups()
+        self._prepare_models()
+        self._prepare_volumes(self._prepared_objects[1])
+        self._prepared_volume_triangles = self._volume_triangles()
+        for _ in self._objects_steps():
+            pass
+        self._draw_batches = sorted(self.batches, key=lambda b: (not b['vegetation'], b['blend'] is not None and not b['depth_mask']))
+
+    def _prepare_models(self):
+        """Decode models and their texture pixels before any GPU work begins."""
+        groups, _, objects = self._prepared_objects
+        names = set()
+
+        def textures(model):
+            for part in (model or {}).get('parts', []):
+                names.add(part.get('texture'))
+                fx = part.get('fx') or {}
+                names.update(value for key, value in fx.items()
+                             if ('texture' in key.lower() or key == 'NormalMap') and isinstance(value, str))
+                if fx.get('__shader__', '').lower() == 'normalmapped.fx':
+                    self._effect('normalmapped.fx')
+
+        for index, (model, override, caster, decal, buffer, prop, sky) in enumerate(groups):
+            self._progress(0.38 + 0.25*index/max(len(groups), 1), f'Preparing model: {model}')
+            names.update((override, decal))
+            if buffer is not None:
+                tree = self.model_cache.load_tree(model)
+                if tree:
+                    names.add(tree.get('texture'))
+            else:
+                textures(self.model_cache.load(model))
+        from mapworkshop.mapkit.bridges import bridge_types
+        from mapworkshop.render.bridges import endpoint_pairs
+        pairs = endpoint_pairs(objects)
+        if pairs:
+            types = {k.lower(): v for k, v in bridge_types(self.assets.ini_text('roads.ini')+'\n'+self.map_ini).items()}
+            for a, _ in pairs:
+                kind = types.get(a['template'].lower())
+                if kind and kind['model']:
+                    textures(self.model_cache.load(kind['model'].lower()))
+                    names.add(kind['texture'])
+        from mapworkshop.mapkit.weather import PRESETS, SUNS, sky_texture
+        sky = (SUNS[self.sun].get('sky') if self.sun else None) or \
+              (PRESETS[self.weather_preset].get('sky') if self.weather_preset else None)
+        if sky:
+            names.add(sky_texture(sky))
+        for name in names:
+            self._progress(0.64, 'Preparing object textures')
+            self._prepare_image(name)
+
+    def _objects_steps(self):
+        ctx = self.ctx
+        self._object_resources = []
+        self.sky_horizon = None
+        self.object_program = ctx.program(vertex_shader=shaders.OBJECT_VS, fragment_shader=shaders.OBJECT_FS)
+        self._object_uniforms = frozenset(self.object_program)
+        self._object_lighting()
+        groups, volumes, objects = self._prepared_objects
         decals = {}
         fx_report = {}
         for index, ((model, texture_override, caster, decal, buffer, prop, sky), instances) in enumerate(groups.items()):
-            self._progress(0.45+0.55*index/max(len(groups), 1), f'Objects: {model}')
+            self._progress(0.80+0.18*index/max(len(groups), 1), f'Uploading objects: {model}')
+            yield
             inst = ctx.buffer(np.array([i[:4] for i in instances], 'f4').tobytes())
             scales = ctx.buffer(np.array([i[4] for i in instances], 'f4').tobytes())
             sway = ctx.buffer(np.array([i[5] for i in instances], 'f4').tobytes())
@@ -795,6 +950,7 @@ class MapRenderer:
                 self.report['missing_models'].append(model)
                 continue
             for part in loaded['parts']:
+                yield
                 n = len(part['positions'])
                 tangents = part['tangents'] if part['tangents'] is not None else np.zeros((n, 3), np.float32)
                 binormals = part['binormals'] if part['binormals'] is not None else np.zeros((n, 3), np.float32)
@@ -817,12 +973,14 @@ class MapRenderer:
                 elif batch['technique'] == 5:
                     batch['uniforms']['sky_rim'] = (0.0, 0.0)
             self.report['objects_drawn'] += len(instances)
-        self._bridges_gpu(objects, fx_report)
+        yield
+        yield from self._bridges_steps(objects, fx_report)
         self.report['fx_materials'] = fx_report
         self.decal_count = sum(len(v) for v in decals.values())
         if decals and self.options['decals']:
             self._bake_decals(decals)
-        self._volumes_gpu(volumes)
+        yield
+        self._upload_volumes(self._prepared_volume_triangles)
         self.report['missing_models'] = sorted(set(self.report['missing_models']))
         self._apply_sky()
 
@@ -830,19 +988,38 @@ class MapRenderer:
         """Local walkability as an overlay texture and its world extent.
         self.walkable holds the analysis: categories and cut-off areas."""
         if not hasattr(self, '_walk'):
-            from mapworkshop.mapkit import pathing, walkable
-            grid = pathing.compute(self.map, assets=self.pathing_assets, map_ini=self.map_ini, models=self.model_cache)
-            self.walkable = walkable.analyse(grid, self.map)
-            self.walkable['info'] = grid['info']
-            rgba = np.ascontiguousarray(walkable.overlay(self.walkable))     # row 0 is the south edge
-            h, w = rgba.shape[:2]
-            texture = self.ctx.texture((w, h), 4, rgba.tobytes())
-            texture.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
-            texture.repeat_x = texture.repeat_y = False
-            self._walk = (texture, (w*walkable.CELL, h*walkable.CELL))
+            self.install_walkability(self.compute_walkability())
         return self._walk
 
-    def _bridges_gpu(self, objects, fx_report):
+    def compute_walkability(self):
+        """CPU-only analysis; do not mutate the live renderer on a worker."""
+        from mapworkshop.mapkit import pathing, walkable
+        models = ModelCache(self.pathing_assets)
+        models.cache = dict(self.model_cache.cache)
+        grid = pathing.compute(self.map, assets=self.pathing_assets, map_ini=self.map_ini, models=models)
+        result = walkable.analyse(grid, self.map)
+        result['info'] = grid['info']
+        return result, np.ascontiguousarray(walkable.overlay(result))
+
+    def walkability_task(self):
+        """Capture CPU data only; a worker must never own live GPU resources."""
+        from functools import partial
+        from types import SimpleNamespace
+        data = SimpleNamespace(map=self.map, pathing_assets=self.pathing_assets,
+                               map_ini=self.map_ini, model_cache=self.model_cache)
+        return partial(MapRenderer.compute_walkability, data)
+
+    def install_walkability(self, prepared):
+        """Install a worker result on the context-owning thread."""
+        from mapworkshop.mapkit import walkable
+        self.walkable, rgba = prepared
+        h, w = rgba.shape[:2]
+        texture = self.ctx.texture((w, h), 4, rgba.tobytes())
+        texture.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        texture.repeat_x = texture.repeat_y = False
+        self._walk = (texture, (w*walkable.CELL, h*walkable.CELL))
+
+    def _bridges_steps(self, objects, fx_report):
         """Bridges the game spans between two map objects flagged 0x10 and
         0x20 (render.bridges): their Bridge type (roads.ini or the map's
         map.ini) names the model, texture and BridgeScale. Drawn as lit
@@ -860,6 +1037,7 @@ class MapRenderer:
         still = self.ctx.buffer(np.zeros(1, 'f4').tobytes())
         self._object_resources += [identity, one, still]
         for a, b in pairs:
+            yield
             entry = dict(type=a['template'], start=[round(a['x']), round(a['y'])], end=[round(b['x']), round(b['y'])])
             self.report['bridges'].append(entry)
             kind = types.get(a['template'].lower())
@@ -877,6 +1055,7 @@ class MapRenderer:
             texture = kind['texture']
             for piece, offset in plan['draw']:
                 for part in found[piece]:
+                    yield
                     positions, normals = place(part, offset, plan, ends[0])
                     n = len(positions)
                     zeros = np.zeros((n, 3), np.float32)
@@ -992,15 +1171,13 @@ class MapRenderer:
             return 0.0
 
     # Shadow volumes ---------------------------------------------------------
-    def _volumes_gpu(self, volumes):
+    def _prepare_volumes(self, volumes):
         """Static GPU data for SHADOW_VOLUME / SHADOW_VOLUME_NEW casters."""
         from mapworkshop.render.shadows import shadow_geometry
         self.volumes = []
         self.volume_vao = None
         if not volumes:
             return
-        ctx = self.ctx
-        self.volume_program = ctx.program(vertex_shader=shaders.VOLUME_VS, fragment_shader=shaders.VOLUME_FS)
         counts = dict(classic=0, v2=0, without_geometry=0)
         for (model, kind), instances in volumes.items():
             loaded = self.model_cache.load(model)
@@ -1022,9 +1199,11 @@ class MapRenderer:
                                          place=place, scale=scale,
                                          mesh_top=float(mesh['positions'][:, 2].max()), bounds=(lo, hi)))
         self.report['shadow_volumes'] = counts
-        self._volume_extrusions()
 
     def _volume_extrusions(self):
+        self._upload_volumes(self._volume_triangles())
+
+    def _volume_triangles(self):
         """Shadow volume triangles for the current light (see render.shadows)."""
         from mapworkshop.render.shadows import classic_extrusion, classic_floor, silhouette_quads, v2_offset, world_box
         direction = -np.asarray(self.sun_dir, float)
@@ -1047,11 +1226,15 @@ class MapRenderer:
                 vectors.append(classic_extrusion(i['z'] + entry['mesh_top']*i['scale'], floors[key], direction))
             entry['extrude'] = np.asarray(vectors, float).reshape(-1, 3)
             parts.append(silhouette_quads(entry['geometry'], entry['place'], entry['scale'], entry['extrude']))
+        return np.concatenate(parts) if parts else np.zeros((0, 3, 3), np.float32)
+
+    def _upload_volumes(self, triangles):
         if getattr(self, 'volume_vao', None) is not None:
             self.volume_vao.release()
             self.volume_buffer.release()
             self.volume_vao = None
-        triangles = np.concatenate(parts) if parts else np.zeros((0, 3, 3), np.float32)
+        if not hasattr(self, 'volume_program'):
+            self.volume_program = self.ctx.program(vertex_shader=shaders.VOLUME_VS, fragment_shader=shaders.VOLUME_FS)
         self.volume_vertices = len(triangles)*3
         if self.volume_vertices:
             self.volume_buffer = self.ctx.buffer(np.ascontiguousarray(triangles, 'f4').tobytes())
@@ -1327,7 +1510,7 @@ class MapRenderer:
             batch['normal'].use(9)
             op['normal_tex'].value = 9
         for key, value in batch['uniforms'].items():
-            if key in op:
+            if key in self._object_uniforms:
                 op[key].value = value
         if batch.get('scaled', True) != getattr(self, '_bound_scaled', True):
             # W3DPropBuffer::drawProps builds its own light environment from
@@ -1475,7 +1658,8 @@ class MapRenderer:
         scale = min(max(width/1024, 0.5), 2.5)
         p['distance_2x'].value = scale*260 + scale*170 + 25
         p['grid_lines'].value = int(grid)
-        walk = self.walkable_overlay() if self.visible['walkable'] else None
+        walk = (getattr(self, '_walk', None) if getattr(self, 'defer_walkability', False)
+                else self.walkable_overlay()) if self.visible['walkable'] else None
         if 'use_walk' in p:
             p['use_walk'].value = int(walk is not None)
             if walk is not None:
@@ -1520,8 +1704,7 @@ class MapRenderer:
             op['cloud_tex'].value = 5
             # The tree and shrub buffers draw with the terrain; then opaque
             # objects, then translucent ones without depth writes.
-            order = lambda b: (not b['vegetation'], b['blend'] is not None and not b['depth_mask'])
-            for batch in sorted(self.batches, key=order):
+            for batch in self._draw_batches:
                 if batch.get('sky'):
                     # Drawn before the terrain; top views leave sky domes out.
                     continue

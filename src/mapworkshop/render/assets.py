@@ -6,6 +6,7 @@ Nothing is written back to the game or the mod.
 """
 
 import io
+import copy
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -36,6 +37,9 @@ class GameAssets:
         self.mod = Path(mod or GAME_DATA)
         self.entries = {}
         self.basenames = {}
+        # Per-base-index cache: map scopes share it without retaining a new
+        # assets instance for every map switch in a class-level LRU.
+        self.image = lru_cache(maxsize=512)(self._image)
         for path in sorted(self.game.glob('*.big'), key=_archive_order):
             try:
                 archive = BigArchive(path)
@@ -84,14 +88,23 @@ class GameAssets:
                           TEXTURE_EXTENSIONS.index(k[-4:]))
         return sorted(preferred, key=rank)[0]
 
-    @lru_cache(maxsize=512)
-    def image(self, name):
+    def _image(self, name):
         """RGBA uint8 array, top row first, or None when the texture is absent."""
         key = self.texture_key(name)
         if key is None:
             return None
         with Image.open(io.BytesIO(self.read(key))) as im:
             return np.asarray(im.convert('RGBA')).copy()
+
+    def for_map(self, text):
+        """An isolated template overlay over the shared, read-only game index."""
+        base = getattr(self, '_base', self)
+        scoped = copy.copy(base)
+        scoped._base = base
+        scoped._templates = dict(base.templates)
+        scoped._models = {}
+        scoped.add_map_templates(text)
+        return scoped
 
     # Terrain ----------------------------------------------------------------
     @property
@@ -109,7 +122,10 @@ class GameAssets:
             text = self.ini_text('object')
             found = {}
             pattern = r'(?ms)^(Object|ObjectReskin|ChildObject)\s+(\S+)(?:[ \t]+(\S+))?[^\n]*\n(.*?)(?=^(?:Object|ObjectReskin|ChildObject)\s|\Z)'
-            for kind, name, parent, body in re.findall(pattern, text):
+            # Yield between template matches instead of holding the GIL for
+            # one regex over the entire game's object INIs during a load.
+            for match in re.finditer(pattern, text):
+                kind, name, parent, body = match.groups()
                 found[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
                                            body=body, name=name)
             self._templates = found
