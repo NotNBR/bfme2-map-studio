@@ -1,9 +1,9 @@
 """Map marks: pins and shapes drawn in the viewer to point at places on a map.
 
 The viewer's Mark tools (pin, circle, rectangle, freehand) draw red marks on
-the terrain; Select moves or deletes them. Marks are kept per map in
-local/marks/<map file name>.json and rewritten on every change, so another
-program can read them while the viewer runs:
+the terrain; clicking a mark selects it to move, resize or delete it. Marks
+are kept per map in local/marks/<map file name>.json and rewritten on every
+change, so another program can read them while the viewer runs:
 
     mw marks [MAP] [--json]
 
@@ -12,9 +12,11 @@ map units, the coordinates of map objects and of build scripts; z is the
 terrain height there) and the map objects inside it. Use it to act on what
 the user points at, e.g. "add a forest in mark 2" or "remove the bridge in
 mark 1". Shapes: pin = a point (objects within --near units count as
-inside), circle = centre and radius, rect = two opposite corners (axis
-aligned in map coordinates), freehand = a path; a path whose ends meet is an
-area, otherwise objects within --near of the line count.
+inside), circle = centre and radius, rect = two opposite corners of the
+rectangle before rotation plus an optional angle (radians, counter-clockwise,
+like object angles) it is turned by around its centre, freehand = a path; a
+path whose ends meet is an area, otherwise objects within --near of the line
+count.
 """
 
 import argparse
@@ -38,12 +40,17 @@ def marks_path(map_path):
 
 
 class Marks:
-    """The marks of one map; every change is written to marks_path()."""
+    """The marks of one map; every change is written to marks_path().
+    add, remove and clear can be undone; so can a move or resize that
+    called checkpoint() first."""
+
+    UNDO_STEPS = 50
 
     def __init__(self, map_path):
         self.map_path = Path(map_path)
         self.path = marks_path(map_path)
         self.items, self.next_id = [], 1
+        self.history = []
         try:
             data = json.loads(self.path.read_text(encoding='utf-8'))
             self.items = [m for m in data.get('marks', []) if m.get('kind') in KINDS]
@@ -51,10 +58,25 @@ class Marks:
         except (OSError, ValueError, KeyError, TypeError):
             pass
 
-    def add(self, kind, points, radius=None):
+    def checkpoint(self):
+        """Remember the current marks for undo()."""
+        self.history.append((json.loads(json.dumps(self._plain())), self.next_id))
+        del self.history[:-self.UNDO_STEPS]
+
+    def undo(self):
+        """Go back to the last checkpoint; False when there is none."""
+        if not self.history:
+            return False
+        self.items, self.next_id = self.history.pop()
+        self.save()
+        return True
+
+    def add(self, kind, points, radius=None, angle=0.0):
+        self.checkpoint()
         mark = dict(id=self.next_id, kind=kind, points=[[round(float(x), 1), round(float(y), 1)] for x, y in points])
         if radius is not None:
             mark['radius'] = round(float(radius), 1)
+        _set_angle(mark, angle)
         self.next_id += 1
         self.items.append(mark)
         self.save()
@@ -71,21 +93,51 @@ class Marks:
             if save:
                 self.save()
 
+    def resize(self, mark_id, fixed, x, y, save=True):
+        """Drag a handle (see handles()) to map point x, y: a circle's rim,
+        or a rectangle's corner opposite the corner `fixed`, along the
+        rectangle's own (rotated) sides."""
+        mark = self.get(mark_id)
+        if not mark:
+            return
+        mark.pop('_world', None)
+        if mark['kind'] == 'circle':
+            cx, cy = mark['points'][0]
+            mark['radius'] = round(max(5.0, math.hypot(x - cx, y - cy)), 1)
+        elif mark['kind'] == 'rect':
+            mark['points'] = rect_points(fixed, (x, y), mark.get('angle', 0.0))
+        if save:
+            self.save()
+
+    def rotate(self, mark_id, angle, save=True):
+        """Turn a rectangle to `angle` (radians, counter-clockwise) around its centre."""
+        mark = self.get(mark_id)
+        if mark and mark['kind'] == 'rect':
+            mark.pop('_world', None)
+            _set_angle(mark, angle)
+            if save:
+                self.save()
+
     def remove(self, mark_id):
+        self.checkpoint()
         self.items = [m for m in self.items if m['id'] != mark_id]
         self.save()
 
     def clear(self):
+        self.checkpoint()
         self.items = []
         self.next_id = 1
         self.save()
+
+    def _plain(self):
+        return [{k: v for k, v in m.items() if not k.startswith('_')} for m in self.items]
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = dict(map=self.map_path.stem, map_path=str(self.map_path.resolve()),
                     updated=time.strftime('%Y-%m-%d %H:%M:%S'),
                     coordinates='map units: x east, y north (map object coordinates); z terrain height',
-                    marks=[{k: v for k, v in m.items() if not k.startswith('_')} for m in self.items])
+                    marks=self._plain())
         temp = self.path.with_suffix('.tmp')
         temp.write_text(json.dumps(data, indent=2), encoding='utf-8')
         os.replace(temp, self.path)
@@ -114,14 +166,67 @@ def outline(mark, step=40.0):
         a = np.linspace(0, 2*math.pi, n, endpoint=False)
         return p[0] + np.column_stack([np.cos(a), np.sin(a)])*r, True
     if mark['kind'] == 'rect':
-        (x0, y0), (x1, y1) = p[0], p[1]
-        corners = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
         edges = []
-        for a, b in zip(corners, np.roll(corners, -1, axis=0)):
+        for a, b in zip(corners(mark), np.roll(corners(mark), -1, axis=0)):
             n = max(1, int(np.linalg.norm(b - a)/step))
             edges.append(a + np.outer(np.arange(n)/n, b - a))
         return np.concatenate(edges), True
     return p, closed(mark)
+
+
+def _set_angle(mark, angle):
+    """Store a rectangle's angle in (-pi, pi]; an unrotated one has none."""
+    angle = round(math.remainder(float(angle), 2*math.pi), 4)
+    if mark['kind'] == 'rect' and angle:
+        mark['angle'] = angle
+    else:
+        mark.pop('angle', None)
+
+
+def _turn(v, angle):
+    """Vectors [n, 2] turned counter-clockwise by angle (radians)."""
+    c, s = math.cos(angle), math.sin(angle)
+    return np.asarray(v, float) @ np.array([[c, s], [-s, c]])
+
+
+def rect_points(a, b, angle=0.0):
+    """A rectangle's points from two opposite corners a and b (map x/y) and
+    the angle its sides are turned by: the corners before rotation."""
+    a, b = _turn([a, b], -angle)
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    centre = _turn([(lo + hi)/2], angle)[0]
+    half = (hi - lo)/2
+    return [[round(float(v), 1) for v in centre - half], [round(float(v), 1) for v in centre + half]]
+
+
+def corners(mark):
+    """A rectangle's corners [4, 2] in map x/y, counter-clockwise from the
+    one that is south-west before rotation."""
+    p = np.asarray(mark['points'], float)
+    lo, hi = p[:2].min(axis=0), p[:2].max(axis=0)
+    half = (hi - lo)/2
+    local = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]])*half
+    return (lo + hi)/2 + _turn(local, mark.get('angle', 0.0))
+
+
+def rotate_anchor(mark):
+    """(centre, middle of the side that faces north before rotation) of a
+    rectangle, in map x/y: the rotation handle sits beyond that side."""
+    c = corners(mark)
+    return c.mean(axis=0), (c[2] + c[3])/2
+
+
+def handles(mark):
+    """Resize handles in map x/y [n, 2]: a circle's rim at east, north, west
+    and south, a rectangle's corners (see corners()); none for pins and
+    freehand paths. Handle i of a rectangle is dragged against corner (i+2)%4."""
+    p = np.asarray(mark['points'], float)
+    if mark['kind'] == 'circle':
+        r = float(mark['radius'])
+        return p[0] + np.array([[r, 0], [0, r], [-r, 0], [0, -r]])
+    if mark['kind'] == 'rect':
+        return corners(mark)
+    return np.zeros((0, 2))
 
 
 def center(mark):
@@ -165,7 +270,10 @@ def contains(mark, x, y, near=150.0):
         return np.hypot(x - p[0, 0], y - p[0, 1]) <= mark['radius']
     if mark['kind'] == 'rect':
         lo, hi = p[:2].min(axis=0), p[:2].max(axis=0)
-        return (x >= lo[0]) & (x <= hi[0]) & (y >= lo[1]) & (y <= hi[1])
+        c = (lo + hi)/2
+        local = _turn(np.column_stack([x.ravel() - c[0], y.ravel() - c[1]]), -mark.get('angle', 0.0))
+        half = (hi - lo)/2
+        return ((np.abs(local[:, 0]) <= half[0]) & (np.abs(local[:, 1]) <= half[1])).reshape(x.shape)
     if closed(mark):
         return _point_in_polygon(x, y, p)
     return _distance_to_path(x, y, p) <= near
@@ -216,6 +324,8 @@ def describe(data, near=150.0, assets=None, m=None, terrain=None):
         entry['center'] = [round(float(c[0]), 1), round(float(c[1]), 1),
                            round(float(terrain.height_at(np.array([c[0]]), np.array([c[1]]))[0]), 1)]
         pts, _ = outline(mark)
+        if mark['kind'] == 'rect':
+            entry['corners'] = [[round(float(v), 1) for v in c] for c in corners(mark)]
         if mark['kind'] != 'pin':
             entry['bounds'] = [round(float(v), 1) for v in (*pts.min(axis=0), *pts.max(axis=0))]
             entry['area'] = round(area(mark))
@@ -245,6 +355,11 @@ def text(result):
             shape = f'at ({x:g}, {y:g}), ground z {z:g}'
         elif m['kind'] == 'circle':
             shape = f'centre ({x:g}, {y:g}), radius {m["radius"]:g}, ground z {z:g}'
+        elif m['kind'] == 'rect' and m.get('angle'):
+            (x0, y0), (x1, y1) = m['points']
+            shape = (f'centre ({x:g}, {y:g}), {abs(x1 - x0):g} x {abs(y1 - y0):g} turned '
+                     f'{math.degrees(m["angle"]):.1f} degrees counter-clockwise, corners '
+                     + ', '.join(f'({cx:g}, {cy:g})' for cx, cy in corners(m)))
         elif m['kind'] == 'rect':
             (x0, y0), (x1, y1) = m['points']
             shape = f'from ({min(x0, x1):g}, {min(y0, y1):g}) to ({max(x0, x1):g}, {max(y0, y1):g}), centre ({x:g}, {y:g})'

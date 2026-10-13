@@ -17,7 +17,9 @@ Keyboard
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
-  G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls  Esc quit
+  G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
+  Esc        steps back: closes a menu, cancels a drawing, drops the selection,
+             puts the mark tool away, closes the marking row, then quits
 
 Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
@@ -29,12 +31,17 @@ Toolbar
   Sun        the weather's own sun, or a light rig over it
   View       layers: objects, water, shadows; cloud shadows, normal maps, fog and
              rain/snow; grid, map border; animate; the game's object limits
-  Mark       the marking row: Pin, Circle, Rectangle, Freehand, Select, Delete,
-             Clear all and Copy for agent. Marks are red, numbered and saved per
-             map, and a panel lists what each one covers. Copy for agent puts the
-             marks, their map coordinates, the objects inside and the map's source
-             project on the clipboard, to paste into an agent ("add a forest in
-             mark 2"); `mw marks` prints the same.
+  Mark       the marking row: Pin, Circle, Rectangle, Freehand, Delete, Clear
+             all and Copy for agent. The mouse keeps navigating until you pick a
+             tool; the tool then draws until Esc (or a second click on it). Click
+             a mark to select it: drag it to move it, drag its square handles to
+             resize it (a rectangle's round handle rotates it, Shift snaps to
+             15 degrees), Del deletes it, Ctrl+Z undoes. Rectangles are drawn
+             lined up with the screen. Marks are red, numbered and
+             saved per map, and a panel lists what each one covers. Copy for agent
+             puts the marks, their map coordinates, the objects inside and the
+             map's source project on the clipboard, to paste into an agent ("add
+             a forest in mark 2"); `mw marks` prints the same.
   Buttons    top view, reset view, screenshot
   FPS        the frame rate at the right; click it to cap it (30-144), follow the
              monitor (VSync) or run unlimited. Default 60 (--fps).
@@ -218,7 +225,8 @@ def main(argv=None):
                  last_click=0.0, fps=0.0, help=True, status='', status_until=0.0,
                  reload=False, changed_at=None, lod=args.lod, weather=args.weather, source=source,
                  loading=False, animate=True, time=0.0, sun=args.sun,
-                 marking=args.marking, tool='pin', selected=None, drawing=None,
+                 marking=args.marking, tool=None, selected=None, hovered=None, drawing=None, press=None,
+                 edited=False, cursor=None,
                  fps_limit=args.fps, next_frame=0.0, building=False, build_line='',
                  summary=None, summary_key=None, summary_busy=False, requested=source,
                  request=None, upload=None, walk_request=None, limits=False, normal_maps=None, clouds=True,
@@ -239,11 +247,14 @@ def main(argv=None):
         dict(kind='button', id='shot', label='Screenshot'),
         dict(kind='status', id='status'), dict(kind='dropdown', id='fps', align='right')])
     # The marking row, shown below the main one while Mark is on.
-    tools = [('pin', 'Pin'), ('circle', 'Circle'), ('rect', 'Rectangle'), ('freehand', 'Freehand'),
-             ('select', 'Select')]
-    hints = dict(pin='click the terrain to drop a pin', circle='drag from the centre outwards',
-                 rect='drag from corner to corner', freehand='hold the left button and draw',
-                 select='click a mark to select it, drag to move, Del to delete')
+    # A tool stays armed until Esc or a second click on it; with none the
+    # mouse navigates and selects marks.
+    tools = [('pin', 'Pin'), ('circle', 'Circle'), ('rect', 'Rectangle'), ('freehand', 'Freehand')]
+    hints = {None: 'pick a tool to draw; click a mark to select it',
+             'pin': 'click the terrain to drop pins - Esc when done',
+             'circle': 'drag from the centre outwards - Esc when done',
+             'rect': 'drag from corner to corner, lined up with the screen - Esc when done',
+             'freehand': 'hold the left button and draw - Esc when done'}
     mark_bar = Toolbar(ctx, [dict(kind='toggle', id='tool_'+key, label=label) for key, label in tools] +
                        [dict(kind='gap'), dict(kind='button', id='delete', label='Delete'),
                         dict(kind='button', id='clear', label='Clear all'), dict(kind='gap'),
@@ -346,7 +357,10 @@ def main(argv=None):
         count = len(scene['marks'].items)
         hint = hints[state['tool']]
         if state['selected'] is not None:
-            hint = f'mark {state["selected"]} selected: drag to move, Del to delete'
+            mark = scene['marks'].get(state['selected'])
+            resize = dict(circle=', handles resize', rect=', square handles resize, the round one rotates')
+            hint = (f'mark {state["selected"]} selected: drag to move{resize.get(mark and mark["kind"], "")}, '
+                    'Del deletes, Ctrl+Z undoes')
         return dict({f'tool_{key}': state['tool'] == key for key, _ in tools},
                     hint=f'{hint}   |   {count} mark{"s" if count != 1 else ""}')
 
@@ -416,14 +430,10 @@ def main(argv=None):
             name = target[1]
             if name == 'marking':
                 state['marking'] = not state['marking']
-                state['drawing'] = None
-                if not state['marking']:
-                    state['selected'] = None
+                state['tool'] = state['drawing'] = state['selected'] = state['hovered'] = None
             elif name.startswith('tool_'):
-                state['tool'] = name[5:]
-                state['drawing'] = None
-                if state['tool'] != 'select':
-                    state['selected'] = None
+                state['tool'] = None if state['tool'] == name[5:] else name[5:]
+                state['drawing'] = state['selected'] = None
             return
         if kind == 'button':
             action = target[1]
@@ -433,8 +443,8 @@ def main(argv=None):
                 delete_selected()
             elif action == 'clear':
                 scene['marks'].clear()
-                state['selected'] = None
-                set_status('all marks cleared', 3)
+                state['selected'] = state['hovered'] = None
+                set_status('all marks cleared - Ctrl+Z brings them back', 5)
             elif action == 'top':
                 toggle_top()
             elif action == 'reset':
@@ -555,10 +565,22 @@ def main(argv=None):
         return lines[-18:]
 
     def delete_selected():
-        if state['selected'] is not None:
-            scene['marks'].remove(state['selected'])
-            set_status(f'mark {state["selected"]} deleted', 3)
+        if state['selected'] is None:
+            set_status('nothing selected: click a mark first', 3)
+            return
+        scene['marks'].remove(state['selected'])
+        set_status(f'mark {state["selected"]} deleted - Ctrl+Z brings it back', 4)
+        state['selected'] = state['hovered'] = None
+
+    def undo_marks():
+        state['drawing'] = state['drag'] = None
+        if not scene['marks'].undo():
+            set_status('nothing to undo', 2)
+            return
+        if not scene['marks'].get(state['selected']):
             state['selected'] = None
+        state['hovered'] = None
+        set_status('mark change undone', 2)
 
     def ground_hit(pos, z=None):
         """Map point under the cursor: the terrain, or the plane at height z."""
@@ -745,26 +767,44 @@ def main(argv=None):
             if toolbar.open_menu:
                 toolbar.open_menu = None
                 return
+            state['press'] = pos
             if button == glfw.MOUSE_BUTTON_LEFT and state['marking']:
-                tool = state['tool']
-                if tool == 'select':
-                    k = scale()
-                    picked = overlay.mark_at((pos[0]*k, pos[1]*k), k)
-                    state['selected'] = picked
-                    if picked is not None:
-                        hit = ground_hit(pos)
-                        state['drag'] = ('move', hit)
-                        return
-                else:
+                # A handle of the selected mark resizes it; with no tool a
+                # mark's tag, pin or outline (or the inside of the selected
+                # area) moves it; an armed tool draws; anything else navigates.
+                tool, k = state['tool'], scale()
+                at = (pos[0]*k, pos[1]*k)
+                handle = overlay.handle_at(at, k)
+                mark = scene['marks'].get(state['selected'])
+                if handle == 'rotate' and mark:
+                    hit = ground_hit(pos)
+                    if hit is not None:
+                        c = marklib.center(mark)
+                        start = (mark.get('angle', 0.0), math.atan2(hit[1]-c[1], hit[0]-c[0]))
+                        state['drag'], state['edited'] = ('rotate', (c, start, float(hit[2]))), False
+                    return
+                if handle is not None and mark:
+                    hit = ground_hit(pos)
+                    z = float(hit[2]) if hit is not None else camera.cur['z']
+                    state['drag'], state['edited'] = ('resize', (marklib.handles(mark)[(handle+2) % 4], z)), False
+                    return
+                grab = overlay.grab_at(at, state['selected'], k) if tool is None else None
+                if grab is not None:
+                    state['selected'] = grab
+                    state['drag'], state['edited'] = ('move', ground_hit(pos)), False
+                    return
+                if tool is not None:
                     hit = ground_hit(pos)
                     if hit is None:
                         return
                     x, y = float(hit[0]), float(hit[1])
                     if tool == 'pin':
                         mark = scene['marks'].add('pin', [(x, y)])
+                        state['selected'] = mark['id']
                         set_status(f'pin {mark["id"]} at ({x:.0f}, {y:.0f})', 3)
                         return
-                    state['drawing'] = dict(kind=tool, points=[[x, y], [x, y]], radius=0.0)
+                    state['drawing'] = dict(kind=tool, points=[[x, y], [x, y]], radius=0.0, start=(x, y),
+                                            angle=screen_angle() if tool == 'rect' else 0.0)
                     state['drag'] = ('draw', hit)
                     return
             if button == glfw.MOUSE_BUTTON_LEFT:
@@ -786,8 +826,16 @@ def main(argv=None):
             drag, state['drag'] = state['drag'], None
             if drag and drag[0] == 'draw' and state['drawing']:
                 finish_drawing()
-            elif drag and drag[0] == 'move':
-                scene['marks'].save()
+            elif drag and drag[0] in ('move', 'resize', 'rotate'):
+                if state['edited']:
+                    scene['marks'].save()
+            elif drag and drag[0] == 'orbit' and state['marking'] and state['tool'] is None:
+                # A click that did not orbit selects the mark under it.
+                press = state['press']
+                if press and math.hypot(pos[0]-press[0], pos[1]-press[1]) < 4:
+                    k = scale()
+                    state['selected'] = overlay.mark_at((pos[0]*k, pos[1]*k), k)
+            update_pointer(toolbar_target(pos), pos)
 
     def finish_drawing():
         d, state['drawing'] = state['drawing'], None
@@ -796,18 +844,52 @@ def main(argv=None):
         if d['kind'] == 'circle' and d['radius'] >= 5:
             mark = marks.add('circle', [d['points'][0]], radius=d['radius'])
         elif d['kind'] == 'rect' and abs(x1-x0) >= 5 and abs(y1-y0) >= 5:
-            mark = marks.add('rect', [(min(x0, x1), min(y0, y1)), (max(x0, x1), max(y0, y1))])
+            mark = marks.add('rect', d['points'], angle=d['angle'])
         elif d['kind'] == 'freehand' and len(d['points']) >= 3:
             mark = marks.add('freehand', d['points'][1:])
         else:
             return
+        state['selected'] = mark['id']
         set_status(f'{mark["kind"]} {mark["id"]} added', 3)
+
+    cursors = {name: glfw.create_standard_cursor(shape) for name, shape in (
+        ('draw', glfw.CROSSHAIR_CURSOR), ('move', glfw.RESIZE_ALL_CURSOR), ('rotate', glfw.POINTING_HAND_CURSOR),
+        ('ew', glfw.RESIZE_EW_CURSOR), ('ns', glfw.RESIZE_NS_CURSOR),
+        ('nesw', glfw.RESIZE_NESW_CURSOR), ('nwse', glfw.RESIZE_NWSE_CURSOR))}
+
+    def screen_angle():
+        """The angle (radians, counter-clockwise) that lines a new rectangle up
+        with the screen; 0 within 10 degrees of the map axes."""
+        a = math.remainder(-math.radians(camera.cur['heading']), math.pi/2)
+        return 0.0 if abs(a) < math.radians(10) else a
+
+    def update_pointer(target, pos):
+        """Highlight the mark under the cursor and show with the cursor what
+        a press there does: draw, move a mark, resize or rotate it."""
+        hovered = cursor = None
+        if target is None and state['marking'] and scene['renderer'] is not None and not toolbar.open_menu:
+            k = scale()
+            at = (pos[0]*k, pos[1]*k)
+            handle = overlay.handle_at(at, k)
+            if handle is not None:
+                hovered, cursor = state['selected'], overlay.handle_direction(handle)
+            elif state['tool'] is not None:
+                cursor = 'draw'
+            else:
+                hovered = overlay.mark_at(at, k)
+                if overlay.grab_at(at, state['selected'], k) is not None:
+                    cursor = 'move'
+        state['hovered'] = hovered
+        if cursor != state.get('cursor'):
+            state['cursor'] = cursor
+            glfw.set_cursor(window, cursors.get(cursor))
 
     def on_cursor(win, x, y):
         drag = state['drag']
         if drag is None:
             target = toolbar_target((x, y))
             toolbar.hover = mark_bar.hover = target if isinstance(target, tuple) else None
+            update_pointer(target, (x, y))
             return
         kind, anchor = drag
         if kind == 'draw':
@@ -820,7 +902,7 @@ def main(argv=None):
                 cx, cy = d['points'][0]
                 d['radius'] = math.hypot(px-cx, py-cy)
             elif d['kind'] == 'rect':
-                d['points'][-1] = [px, py]
+                d['points'] = marklib.rect_points(d['start'], (px, py), d['angle'])
             else:
                 lx, ly = d['points'][-1]
                 if math.hypot(px-lx, py-ly) >= max(6.0, camera.cur['distance']*0.006):
@@ -831,8 +913,35 @@ def main(argv=None):
                 return
             hit = camera.plane_hit((x, y), window_size(), float(anchor[2]))
             if hit is not None:
+                if not state['edited']:
+                    scene['marks'].checkpoint()
+                    state['edited'] = True
                 scene['marks'].move(state['selected'], float(hit[0]-anchor[0]), float(hit[1]-anchor[1]), save=False)
                 state['drag'] = ('move', hit)
+            return
+        if kind == 'resize':
+            fixed, z = anchor
+            hit = ground_hit((x, y), z)
+            if hit is not None and state['selected'] is not None:
+                if not state['edited']:
+                    scene['marks'].checkpoint()
+                    state['edited'] = True
+                scene['marks'].resize(state['selected'], fixed, float(hit[0]), float(hit[1]), save=False)
+            return
+        if kind == 'rotate':
+            c, (start, grip), z = anchor
+            hit = ground_hit((x, y), z)
+            if hit is not None and state['selected'] is not None:
+                if not state['edited']:
+                    scene['marks'].checkpoint()
+                    state['edited'] = True
+                angle = start + math.atan2(hit[1]-c[1], hit[0]-c[0]) - grip
+                if glfw.get_key(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS or \
+                        glfw.get_key(window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS:
+                    angle = round(angle/math.radians(15))*math.radians(15)
+                scene['marks'].rotate(state['selected'], angle, save=False)
+                set_status(f'turned {math.degrees(math.remainder(angle, 2*math.pi)):.0f} degrees'
+                           ' (Shift snaps to 15)', 2)
             return
         if kind == 'orbit':
             dx, dy = x-anchor[0], y-anchor[1]
@@ -887,25 +996,36 @@ def main(argv=None):
         if action != glfw.PRESS:
             return
         if scene['renderer'] is None:
-            if key == glfw.KEY_ESCAPE:
+            if key == glfw.KEY_ESCAPE and toolbar.open_menu:
+                toolbar.open_menu = None
+            elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
             elif key == glfw.KEY_F5:
                 state['reload'] = True
             return
         if key == glfw.KEY_ESCAPE:
-            # Esc steps back: cancel a drawing, drop the selection, leave the
-            # marking row; with nothing left to undo it quits.
-            if state['drawing'] is not None:
+            # Esc steps back: close a menu, cancel a drawing, drop the
+            # selection, put the tool away, leave the marking row; with
+            # nothing left to undo it quits.
+            if toolbar.open_menu:
+                toolbar.open_menu = None
+            elif state['drawing'] is not None:
                 state['drawing'] = None
                 state['drag'] = None
             elif state['selected'] is not None:
                 state['selected'] = None
+            elif state['tool'] is not None:
+                state['tool'] = None
             elif state['marking']:
                 state['marking'] = False
             else:
                 glfw.set_window_should_close(window, True)
+            if state['drag'] is None:
+                update_pointer(toolbar_target(cursor_pos()), cursor_pos())
         elif key in (glfw.KEY_DELETE, glfw.KEY_BACKSPACE) and state['marking']:
             delete_selected()
+        elif key == glfw.KEY_Z and mods & glfw.MOD_CONTROL:
+            undo_marks()
         elif key == glfw.KEY_7:
             toggle('walkable')
         elif key in toggles:
@@ -984,7 +1104,7 @@ def main(argv=None):
                 camera.goal['y'] += (math.cos(h)*forward-math.sin(h)*right)*speed*dt
             camera.goal['heading'] += (pressed(glfw.KEY_E)-pressed(glfw.KEY_Q))*90*dt
             camera.goal['elevation'] = min(89.5, max(5.0, camera.goal['elevation']+(pressed(glfw.KEY_R)-pressed(glfw.KEY_F))*60*dt))
-            if pressed(glfw.KEY_Z) or pressed(glfw.KEY_X):
+            if (pressed(glfw.KEY_Z) or pressed(glfw.KEY_X)) and not pressed(glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL):
                 camera.goal['distance'] = min(MAX_DISTANCE, max(MIN_DISTANCE,
                     camera.goal['distance']*math.exp((pressed(glfw.KEY_X)-pressed(glfw.KEY_Z))*1.5*dt)))
             w, h = camera.playable
@@ -1004,9 +1124,10 @@ def main(argv=None):
                     ctx.screen.use()
                     ctx.viewport = (0, 0, fw, fh)
                     ctx.clear(0.08, 0.09, 0.10)
-                if scene['renderer'] is not None and (scene['marks'].items or state['drawing']):
+                if scene['renderer'] is not None:
+                    # Every frame, so picking never sees marks that are gone.
                     overlay.draw(scene['marks'].items, state['drawing'], state['selected'], cam,
-                                 scene['renderer'].surface_at, (fw, fh), scale())
+                                 scene['renderer'].surface_at, (fw, fh), scale(), state['hovered'])
                 if toolbar.open_menu and toolbar.open_menu[0] != 'map':
                     # Keep check marks current (keyboard toggles, a finished reload).
                     toolbar.open_menu = (toolbar.open_menu[0], menu_entries(toolbar.open_menu[0]))
