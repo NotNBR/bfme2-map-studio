@@ -1,0 +1,3 @@
+# Store text consistently; Windows double-click entry points use CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf

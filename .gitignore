@@ -1,0 +1,17 @@
+/local/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Agent worktrees hold copies of the repository.
+/.claude/worktrees/
+
+# The game's and WorldBuilder's profiler writes this into its current folder.
+profile-*.csv
+
+# Operating-system metadata.
+Thumbs.db
+.DS_Store

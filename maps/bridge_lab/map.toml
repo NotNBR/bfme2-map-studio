@@ -1,0 +1,6 @@
+id = "bridge-lab"
+title = "Bridge Lab"
+native_name = "map mp bridge lab"
+players = 2
+description = "Test map: bridges spanned between two endpoints, stretched by the engine."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

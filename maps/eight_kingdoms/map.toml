@@ -1,0 +1,12 @@
+id = "eight-kingdoms"
+title = "Eight Kingdoms"
+native_name = "map mp bfmexbar eight kingdoms"
+players = 8
+description = "Eight kingdoms encircle a ruined citadel. Twenty-four stone bridges connect mountain-framed realms."
+
+# Read by build.py.
+width = 900
+height = 960
+border = 150
+native_border = 30
+seed = 82165

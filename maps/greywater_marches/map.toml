@@ -1,0 +1,6 @@
+id = "greywater-marches"
+title = "The Greywater Marches"
+native_name = "map mp bfmexbar greywater marches"
+players = 6
+description = "Six open realms across rocky grasslands, mountain passes and branching rivers."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

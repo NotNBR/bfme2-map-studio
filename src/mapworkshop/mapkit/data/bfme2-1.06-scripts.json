@@ -1,0 +1,7161 @@
+{
+  "schema": 1,
+  "game": "BFME2 1.06",
+  "evidence": "Source-declared signatures reconciled with live BFME2 1.06 template memory",
+  "behavior_verified": false,
+  "sources": [
+    {
+      "path": "Code/GameEngine/Source/GameLogic/ScriptEngine/ScriptEngine_initActionTemplates.cpp",
+      "sha256": "0d33fd0b9f92af89918e59165b8e1f4f69c7ff492bf8303ec4525ecaffd80ffb"
+    },
+    {
+      "path": "Code/GameEngine/Source/GameLogic/ScriptEngine/ScriptEngine_initConditionTemplates.cpp",
+      "sha256": "d4cafd7a87e34759b1939765ad1f6d4248214b4792b051f736f0120c4425ec35"
+    }
+  ],
+  "action": {
+    "slots": 599,
+    "named": 595,
+    "holes": [
+      227,
+      343,
+      382,
+      480
+    ],
+    "templates": [
+      {
+        "opcode": 0,
+        "name": "DEBUG_MESSAGE_BOX",
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 1,
+        "name": "SET_FLAG",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          5,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 2,
+        "name": "SET_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 3,
+        "name": "VICTORY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 4,
+        "name": "DEFEAT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 5,
+        "name": "NO_OP",
+        "target_only_00_raw": 3,
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 6,
+        "name": "SET_TIMER",
+        "argument_types": [
+          4,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 7,
+        "name": "PLAY_SOUND_EFFECT",
+        "argument_types": [
+          12
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 8,
+        "name": "ENABLE_SCRIPT",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          2
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 9,
+        "name": "DISABLE_SCRIPT",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          2
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 10,
+        "name": "CALL_SUBROUTINE",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          13
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 11,
+        "name": "PLAY_SOUND_EFFECT_AT",
+        "argument_types": [
+          12,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 12,
+        "name": "DAMAGE_MEMBERS_OF_TEAM",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 13,
+        "name": "MOVE_TEAM_TO",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 14,
+        "name": "MOVE_CAMERA_TO",
+        "argument_types": [
+          51,
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 15,
+        "name": "INCREMENT_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          0,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 16,
+        "name": "DECREMENT_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          0,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 17,
+        "name": "MOVE_CAMERA_ALONG_SPLINE_PATH",
+        "argument_types": [
+          24,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 18,
+        "name": "ROTATE_CAMERA",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 19,
+        "name": "RESET_CAMERA",
+        "argument_types": [
+          7,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 20,
+        "name": "SET_MILLISECOND_TIMER",
+        "argument_types": [
+          4,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 21,
+        "name": "CAMERA_MOD_FREEZE_TIME",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 22,
+        "name": "SET_VISUAL_SPEED_MULTIPLIER",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 23,
+        "name": "CREATE_OBJECT",
+        "argument_types": [
+          15,
+          3,
+          16,
+          17
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 24,
+        "name": "SUSPEND_BACKGROUND_SOUNDS",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 25,
+        "name": "RESUME_BACKGROUND_SOUNDS",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 26,
+        "name": "CAMERA_MOD_SET_FINAL_ZOOM",
+        "argument_types": [
+          1,
+          52,
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 27,
+        "name": "CAMERA_MOD_SET_FINAL_PITCH",
+        "argument_types": [
+          1,
+          52,
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 28,
+        "name": "CAMERA_MOD_FREEZE_ANGLE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 29,
+        "name": "CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 30,
+        "name": "CAMERA_MOD_SET_ROLLING_AVERAGE",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 31,
+        "name": "CAMERA_MOD_FINAL_LOOK_TOWARD",
+        "argument_types": [
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 32,
+        "name": "CAMERA_MOD_LOOK_TOWARD",
+        "argument_types": [
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 33,
+        "name": "TEAM_ATTACK_TEAM",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 34,
+        "name": "CREATE_REINFORCEMENT_TEAM",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 35,
+        "name": "MOVE_CAMERA_TO_SELECTION",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 36,
+        "name": "TEAM_FOLLOW_WAYPOINTS",
+        "argument_types": [
+          3,
+          24,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 37,
+        "name": "TEAM_SET_STATE",
+        "argument_types": [
+          3,
+          18
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 38,
+        "name": "MOVE_NAMED_UNIT_TO",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 39,
+        "name": "NAMED_ATTACK_NAMED",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 40,
+        "name": "CREATE_NAMED_ON_TEAM_AT_WAYPOINT",
+        "argument_types": [
+          14,
+          15,
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 41,
+        "name": "CREATE_UNNAMED_ON_TEAM_AT_WAYPOINT",
+        "argument_types": [
+          15,
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 42,
+        "name": "NAMED_APPLY_ATTACK_PRIORITY_SET",
+        "argument_types": [
+          14,
+          28
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 43,
+        "name": "TEAM_APPLY_ATTACK_PRIORITY_SET",
+        "argument_types": [
+          3,
+          28
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 44,
+        "name": "SET_BASE_CONSTRUCTION_SPEED",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 45,
+        "name": "NAMED_SET_ATTITUDE",
+        "argument_types": [
+          14,
+          20
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 46,
+        "name": "TEAM_SET_ATTITUDE",
+        "argument_types": [
+          3,
+          20
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 47,
+        "name": "NAMED_ATTACK_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 48,
+        "name": "NAMED_ATTACK_AREA_FOR_SECONDS",
+        "argument_types": [
+          14,
+          9,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 49,
+        "name": "NAMED_ATTACK_TEAM",
+        "argument_types": [
+          14,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 50,
+        "name": "TEAM_ATTACK_AREA",
+        "argument_types": [
+          3,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 51,
+        "name": "TEAM_ATTACK_NAMED",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 52,
+        "name": "TEAM_LOAD_TRANSPORTS",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 53,
+        "name": "NAMED_ENTER_NAMED",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 54,
+        "name": "TEAM_ENTER_NAMED",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 55,
+        "name": "NAMED_EXIT_ALL",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 56,
+        "name": "TEAM_EXIT_ALL",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 57,
+        "name": "NAMED_FOLLOW_WAYPOINTS",
+        "argument_types": [
+          14,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 58,
+        "name": "NAMED_GUARD",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 59,
+        "name": "TEAM_GUARD",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 60,
+        "name": "NAMED_HUNT",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 61,
+        "name": "TEAM_HUNT",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 62,
+        "name": "PLAYER_SELL_EVERYTHING",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 63,
+        "name": "PLAYER_DISABLE_BASE_CONSTRUCTION",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 64,
+        "name": "PLAYER_DISABLE_FACTORIES",
+        "argument_types": [
+          11,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 65,
+        "name": "PLAYER_DISABLE_UNIT_CONSTRUCTION",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 66,
+        "name": "PLAYER_ENABLE_BASE_CONSTRUCTION",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 67,
+        "name": "PLAYER_ENABLE_FACTORIES",
+        "argument_types": [
+          11,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 68,
+        "name": "PLAYER_ENABLE_UNIT_CONSTRUCTION",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 69,
+        "name": "CAMERA_MOVE_HOME",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 70,
+        "name": "BUILD_TEAM",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 71,
+        "name": "NAMED_DAMAGE",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 72,
+        "name": "NAMED_DELETE",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 73,
+        "name": "TEAM_DELETE",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 74,
+        "name": "NAMED_SHOCK",
+        "argument_types": [
+          14,
+          1,
+          1,
+          1,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 75,
+        "name": "NAMED_KILL",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 76,
+        "name": "TEAM_KILL",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 77,
+        "name": "PLAYER_KILL",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 78,
+        "name": "DISPLAY_TEXT",
+        "argument_types": [
+          25
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 79,
+        "name": "CAMEO_FLASH",
+        "argument_types": [
+          39,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 80,
+        "name": "NAMED_FLASH",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 81,
+        "name": "TEAM_FLASH",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 82,
+        "name": "MOVIE_PLAY_FULLSCREEN",
+        "argument_types": [
+          23,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 83,
+        "name": "MOVIE_PLAY_RADAR",
+        "argument_types": [
+          23
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 84,
+        "name": "SOUND_PLAY_NAMED",
+        "argument_types": [
+          12,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 85,
+        "name": "SPEECH_PLAY",
+        "argument_types": [
+          21,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 86,
+        "name": "PLAYER_TRANSFER_OWNERSHIP_PLAYER",
+        "argument_types": [
+          11,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 87,
+        "name": "NAMED_TRANSFER_OWNERSHIP_PLAYER",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 88,
+        "name": "PLAYER_RELATES_PLAYER",
+        "argument_types": [
+          11,
+          11,
+          19
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 89,
+        "name": "PALANTIR_EVENT",
+        "argument_types": [
+          29
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 90,
+        "name": "RADAR_CREATE_EVENT",
+        "argument_types": [
+          16,
+          30
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 91,
+        "name": "RADAR_DISABLE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 92,
+        "name": "RADAR_ENABLE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 93,
+        "name": "MAP_REVEAL_AT_WAYPOINT",
+        "argument_types": [
+          7,
+          1,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 94,
+        "name": "TEAM_AVAILABLE_FOR_RECRUITMENT",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 95,
+        "name": "TEAM_COLLECT_NEARBY_FOR_TEAM",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 96,
+        "name": "TEAM_MERGE_INTO_TEAM",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 97,
+        "name": "DISABLE_INPUT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 98,
+        "name": "ENABLE_INPUT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 99,
+        "name": "PLAYER_HUNT",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 100,
+        "name": "SOUND_AMBIENT_PAUSE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 101,
+        "name": "SOUND_AMBIENT_RESUME",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 102,
+        "name": "MUSIC_SET_TRACK",
+        "argument_types": [
+          22,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 103,
+        "name": "SET_TREE_SWAY",
+        "argument_types": [
+          17,
+          17,
+          17,
+          0,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 104,
+        "name": "DEBUG_STRING",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 105,
+        "name": "MAP_REVEAL_ALL",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 106,
+        "name": "TEAM_GARRISON_SPECIFIC_BUILDING",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 107,
+        "name": "EXIT_SPECIFIC_BUILDING",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 108,
+        "name": "TEAM_GARRISON_NEAREST_BUILDING",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 109,
+        "name": "TEAM_EXIT_ALL_BUILDINGS",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 110,
+        "name": "NAMED_GARRISON_SPECIFIC_BUILDING",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 111,
+        "name": "NAMED_GARRISON_NEAREST_BUILDING",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 112,
+        "name": "NAMED_EXIT_BUILDING",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 113,
+        "name": "PLAYER_GARRISON_ALL_BUILDINGS",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 114,
+        "name": "PLAYER_EXIT_ALL_BUILDINGS",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 115,
+        "name": "TEAM_WANDER",
+        "argument_types": [
+          3,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 116,
+        "name": "TEAM_PANIC",
+        "argument_types": [
+          3,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 117,
+        "name": "SETUP_CAMERA",
+        "argument_types": [
+          7,
+          1,
+          1,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 118,
+        "name": "CAMERA_LETTERBOX_BEGIN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 119,
+        "name": "CAMERA_LETTERBOX_END",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 120,
+        "name": "ZOOM_CAMERA",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 121,
+        "name": "PITCH_CAMERA",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 122,
+        "name": "CAMERA_FOLLOW_NAMED",
+        "argument_types": [
+          14,
+          8,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 123,
+        "name": "OVERSIZE_TERRAIN",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 124,
+        "name": "CAMERA_FADE_ADD",
+        "argument_types": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 125,
+        "name": "CAMERA_FADE_SUBTRACT",
+        "argument_types": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 126,
+        "name": "CAMERA_FADE_SATURATE",
+        "argument_types": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 127,
+        "name": "CAMERA_FADE_MULTIPLY",
+        "argument_types": [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 128,
+        "name": "CAMERA_BW_MODE_BEGIN",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 129,
+        "name": "CAMERA_BW_MODE_END",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 130,
+        "name": "DRAW_SKYBOX_BEGIN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 131,
+        "name": "DRAW_SKYBOX_END",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 132,
+        "name": "SET_ATTACK_PRIORITY_THING",
+        "argument_types": [
+          28,
+          61,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 133,
+        "name": "SET_ATTACK_PRIORITY_KIND_OF",
+        "argument_types": [
+          28,
+          27,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 134,
+        "name": "SET_DEFAULT_ATTACK_PRIORITY",
+        "argument_types": [
+          28,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 135,
+        "name": "CAMERA_STOP_FOLLOW",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 136,
+        "name": "CAMERA_MOTION_BLUR",
+        "argument_types": [
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 137,
+        "name": "CAMERA_MOTION_BLUR_JUMP",
+        "argument_types": [
+          7,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 138,
+        "name": "CAMERA_MOTION_BLUR_FOLLOW",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 139,
+        "name": "CAMERA_MOTION_BLUR_END_FOLLOW",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 140,
+        "name": "FREEZE_TIME",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 141,
+        "name": "UNFREEZE_TIME",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 142,
+        "name": "SHOW_MILITARY_CAPTION",
+        "argument_types": [
+          25,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 143,
+        "name": "CAMERA_SET_AUDIBLE_DISTANCE",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 144,
+        "name": "SET_STOPPING_DISTANCE",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 145,
+        "name": "NAMED_SET_STOPPING_DISTANCE",
+        "argument_types": [
+          14,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 146,
+        "name": "SET_FPS_LIMIT",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 147,
+        "name": "MUSIC_SET_VOLUME",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 148,
+        "name": "MAP_SHROUD_AT_WAYPOINT",
+        "argument_types": [
+          7,
+          1,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 149,
+        "name": "MAP_SHROUD_ALL",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 150,
+        "name": "SET_RANDOM_TIMER",
+        "argument_types": [
+          4,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 151,
+        "name": "SET_RANDOM_MSEC_TIMER",
+        "argument_types": [
+          4,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 152,
+        "name": "STOP_TIMER",
+        "argument_types": [
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 153,
+        "name": "RESTART_TIMER",
+        "argument_types": [
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 154,
+        "name": "ADD_TO_MSEC_TIMER",
+        "argument_types": [
+          1,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 155,
+        "name": "SUB_FROM_MSEC_TIMER",
+        "argument_types": [
+          1,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 156,
+        "name": "TEAM_TRANSFER_TO_PLAYER",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 157,
+        "name": "PLAYER_SET_MONEY",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 158,
+        "name": "PLAYER_GIVE_MONEY",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 159,
+        "name": "DISABLE_SPECIAL_POWER_DISPLAY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 160,
+        "name": "ENABLE_SPECIAL_POWER_DISPLAY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 161,
+        "name": "NAMED_HIDE_SPECIAL_POWER_DISPLAY",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 162,
+        "name": "NAMED_SHOW_SPECIAL_POWER_DISPLAY",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 163,
+        "name": "DISPLAY_COUNTDOWN_TIMER",
+        "argument_types": [
+          4,
+          25
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 164,
+        "name": "HIDE_COUNTDOWN_TIMER",
+        "argument_types": [
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 165,
+        "name": "ENABLE_COUNTDOWN_TIMER_DISPLAY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 166,
+        "name": "DISABLE_COUNTDOWN_TIMER_DISPLAY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 167,
+        "name": "NAMED_STOP_SPECIAL_POWER_COUNTDOWN",
+        "argument_types": [
+          14,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 168,
+        "name": "NAMED_START_SPECIAL_POWER_COUNTDOWN",
+        "argument_types": [
+          14,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 169,
+        "name": "NAMED_SET_SPECIAL_POWER_COUNTDOWN",
+        "argument_types": [
+          14,
+          31,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 170,
+        "name": "NAMED_ADD_SPECIAL_POWER_COUNTDOWN",
+        "argument_types": [
+          14,
+          31,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 171,
+        "name": "NAMED_FIRE_SPECIAL_POWER_AT_WAYPOINT",
+        "argument_types": [
+          14,
+          31,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 172,
+        "name": "NAMED_FIRE_SPECIAL_POWER_AT_NAMED",
+        "argument_types": [
+          14,
+          31,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 173,
+        "name": "REFRESH_RADAR",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 174,
+        "name": "CAMERA_TETHER_NAMED",
+        "argument_types": [
+          14,
+          8,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 175,
+        "name": "CAMERA_STOP_TETHER_NAMED",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 176,
+        "name": "CAMERA_SET_DEFAULT",
+        "argument_types": [
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 177,
+        "name": "NAMED_STOP",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 178,
+        "name": "TEAM_STOP",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 179,
+        "name": "TEAM_STOP_AND_DISBAND",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 180,
+        "name": "RECRUIT_TEAM",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 181,
+        "name": "RECRUIT_TEAM_AT_TEAM",
+        "argument_types": [
+          3,
+          1,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 182,
+        "name": "TEAM_SET_OVERRIDE_RELATION_TO_TEAM",
+        "argument_types": [
+          3,
+          3,
+          19
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 183,
+        "name": "TEAM_REMOVE_OVERRIDE_RELATION_TO_TEAM",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 184,
+        "name": "TEAM_REMOVE_ALL_OVERRIDE_RELATIONS",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 185,
+        "name": "CAMERA_LOOK_TOWARD_OBJECT",
+        "argument_types": [
+          14,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 186,
+        "name": "NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH",
+        "argument_types": [
+          14,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 187,
+        "name": "TEAM_SET_OVERRIDE_RELATION_TO_PLAYER",
+        "argument_types": [
+          3,
+          11,
+          19
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 188,
+        "name": "TEAM_REMOVE_OVERRIDE_RELATION_TO_PLAYER",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 189,
+        "name": "PLAYER_SET_OVERRIDE_RELATION_TO_TEAM",
+        "argument_types": [
+          11,
+          3,
+          19
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 190,
+        "name": "PLAYER_REMOVE_OVERRIDE_RELATION_TO_TEAM",
+        "argument_types": [
+          11,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 191,
+        "name": "UNIT_EXECUTE_SEQUENTIAL_SCRIPT",
+        "argument_types": [
+          14,
+          2
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 192,
+        "name": "UNIT_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING",
+        "argument_types": [
+          14,
+          2,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 193,
+        "name": "UNIT_STOP_SEQUENTIAL_SCRIPT",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 194,
+        "name": "TEAM_EXECUTE_SEQUENTIAL_SCRIPT",
+        "argument_types": [
+          3,
+          2
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 195,
+        "name": "TEAM_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING",
+        "argument_types": [
+          3,
+          2,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 196,
+        "name": "TEAM_STOP_SEQUENTIAL_SCRIPT",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 197,
+        "name": "UNIT_GUARD_FOR_FRAMECOUNT",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 198,
+        "name": "UNIT_IDLE_FOR_FRAMECOUNT",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 199,
+        "name": "TEAM_GUARD_FOR_FRAMECOUNT",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 200,
+        "name": "TEAM_IDLE_FOR_FRAMECOUNT",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 201,
+        "name": "WATER_CHANGE_HEIGHT",
+        "argument_types": [
+          9,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 202,
+        "name": "NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED",
+        "argument_types": [
+          14,
+          34,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 203,
+        "name": "NAMED_USE_COMMANDBUTTON_ABILITY_AT_WAYPOINT",
+        "argument_types": [
+          14,
+          34,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 204,
+        "name": "WATER_CHANGE_HEIGHT_OVER_TIME",
+        "argument_types": [
+          9,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 205,
+        "name": "MAP_SWITCH_BORDER",
+        "argument_types": [
+          35
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 206,
+        "name": "TEAM_GUARD_POSITION",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 207,
+        "name": "TEAM_GUARD_OBJECT",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 208,
+        "name": "TEAM_GUARD_AREA",
+        "argument_types": [
+          3,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 209,
+        "name": "OBJECT_FORCE_SELECT",
+        "argument_types": [
+          3,
+          15,
+          8,
+          21
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 210,
+        "name": "CAMERA_LOOK_TOWARD_WAYPOINT",
+        "argument_types": [
+          7,
+          1,
+          1,
+          1,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 211,
+        "name": "UNIT_DESTROY_ALL_CONTAINED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 212,
+        "name": "RADAR_FORCE_ENABLE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 213,
+        "name": "RADAR_REVERT_TO_NORMAL",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 214,
+        "name": "SCREEN_SHAKE",
+        "argument_types": [
+          38
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 215,
+        "name": "TECHTREE_MODIFY_BUILDABILITY_OBJECT",
+        "argument_types": [
+          15,
+          36
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 216,
+        "name": "WAREHOUSE_SET_VALUE",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 217,
+        "name": "OBJECT_CREATE_RADAR_EVENT",
+        "argument_types": [
+          14,
+          30
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 218,
+        "name": "TEAM_CREATE_RADAR_EVENT",
+        "argument_types": [
+          3,
+          30
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 219,
+        "name": "DISPLAY_CINEMATIC_TEXT",
+        "argument_types": [
+          25,
+          40,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 220,
+        "name": "DEBUG_CRASH_BOX",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 221,
+        "name": "SOUND_DISABLE_TYPE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 222,
+        "name": "SOUND_ENABLE_TYPE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 223,
+        "name": "SOUND_ENABLE_ALL",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 224,
+        "name": "AUDIO_OVERRIDE_VOLUME_TYPE",
+        "argument_types": [
+          59,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 225,
+        "name": "AUDIO_RESTORE_VOLUME_TYPE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 226,
+        "name": "AUDIO_RESTORE_VOLUME_ALL_TYPE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 228,
+        "name": "SET_CAVE_INDEX",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 229,
+        "name": "NAMED_SET_HELD",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 230,
+        "name": "NAMED_SET_TOPPLE_DIRECTION",
+        "argument_types": [
+          14,
+          16
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 231,
+        "name": "UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE",
+        "argument_types": [
+          14,
+          15,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 232,
+        "name": "TEAM_MOVE_TOWARDS_NEAREST_OBJECT_TYPE",
+        "argument_types": [
+          3,
+          15,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 233,
+        "name": "MAP_REVEAL_ALL_PERM",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 234,
+        "name": "MAP_REVEAL_ALL_UNDO_PERM",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 235,
+        "name": "NAMED_SET_REPULSOR",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 236,
+        "name": "TEAM_SET_REPULSOR",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 237,
+        "name": "TEAM_WANDER_IN_PLACE",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 238,
+        "name": "TEAM_INCREASE_PRIORITY",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 239,
+        "name": "TEAM_DECREASE_PRIORITY",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 240,
+        "name": "DISPLAY_COUNTER",
+        "argument_types": [
+          4,
+          25
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 241,
+        "name": "HIDE_COUNTER",
+        "argument_types": [
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 242,
+        "name": "TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED",
+        "argument_types": [
+          3,
+          42,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 243,
+        "name": "TEAM_USE_COMMANDBUTTON_ABILITY_AT_WAYPOINT",
+        "argument_types": [
+          3,
+          42,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 244,
+        "name": "NAMED_USE_COMMANDBUTTON_ABILITY",
+        "argument_types": [
+          14,
+          34
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 245,
+        "name": "TEAM_USE_COMMANDBUTTON_ABILITY",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 246,
+        "name": "NAMED_FLASH_WHITE",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 247,
+        "name": "TEAM_FLASH_WHITE",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 248,
+        "name": "SKIRMISH_BUILD_BUILDING",
+        "argument_types": [
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 249,
+        "name": "SKIRMISH_FOLLOW_APPROACH_PATH",
+        "argument_types": [
+          3,
+          43,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 250,
+        "name": "IDLE_ALL_UNITS",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 251,
+        "name": "RESUME_SUPPLY_TRUCKING",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 252,
+        "name": "NAMED_CUSTOM_COLOR",
+        "argument_types": [
+          14,
+          44
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 253,
+        "name": "SKIRMISH_MOVE_TO_APPROACH_PATH",
+        "argument_types": [
+          3,
+          43
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 254,
+        "name": "SKIRMISH_BUILD_BASE_DEFENSE_FRONT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 255,
+        "name": "SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST",
+        "argument_types": [
+          11,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 256,
+        "name": "NAMED_RECEIVE_UPGRADE",
+        "argument_types": [
+          14,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 257,
+        "name": "PLAYER_REPAIR_NAMED_STRUCTURE",
+        "argument_types": [
+          11,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 258,
+        "name": "SKIRMISH_BUILD_BASE_DEFENSE_FLANK",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 259,
+        "name": "SKIRMISH_BUILD_STRUCTURE_FRONT",
+        "argument_types": [
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 260,
+        "name": "SKIRMISH_BUILD_STRUCTURE_FLANK",
+        "argument_types": [
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 261,
+        "name": "SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE",
+        "argument_types": [
+          3,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 262,
+        "name": "SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT",
+        "argument_types": [
+          3,
+          42,
+          1,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 263,
+        "name": "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_ALL",
+        "argument_types": [
+          11,
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 264,
+        "name": "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_PARTIAL",
+        "argument_types": [
+          11,
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 265,
+        "name": "TEAM_SPIN_FOR_FRAMECOUNT",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 266,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NAMED",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 267,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_UNIT",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 268,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_GARRISONED_BUILDING",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 269,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_KINDOF",
+        "argument_types": [
+          3,
+          42,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 270,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_BUILDING",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 271,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_BUILDING_CLASS",
+        "argument_types": [
+          3,
+          42,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 272,
+        "name": "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_OBJECTTYPE",
+        "argument_types": [
+          3,
+          42,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 273,
+        "name": "TEAM_PARTIAL_USE_COMMANDBUTTON",
+        "argument_types": [
+          1,
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 274,
+        "name": "TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 275,
+        "name": "PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS",
+        "argument_types": [
+          11,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 276,
+        "name": "PLAYER_ADD_SKILLPOINTS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 277,
+        "name": "PLAYER_ADD_RANKLEVEL",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 278,
+        "name": "PLAYER_SET_RANKLEVEL",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 279,
+        "name": "PLAYER_SET_RANKLEVELLIMIT",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 280,
+        "name": "PLAYER_GRANT_SCIENCE",
+        "argument_types": [
+          11,
+          32
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 281,
+        "name": "PLAYER_PURCHASE_SCIENCE",
+        "argument_types": [
+          11,
+          32
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 282,
+        "name": "TEAM_HUNT_WITH_COMMAND_BUTTON",
+        "argument_types": [
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 283,
+        "name": "TEAM_WAIT_FOR_NOT_CONTAINED_ALL",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 284,
+        "name": "TEAM_WAIT_FOR_NOT_CONTAINED_PARTIAL",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 285,
+        "name": "TEAM_FOLLOW_WAYPOINTS_EXACT",
+        "argument_types": [
+          3,
+          24,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 286,
+        "name": "NAMED_FOLLOW_WAYPOINTS_EXACT",
+        "argument_types": [
+          14,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 287,
+        "name": "TEAM_SET_EMOTICON",
+        "argument_types": [
+          3,
+          45,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 288,
+        "name": "NAMED_SET_EMOTICON",
+        "argument_types": [
+          14,
+          45,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 289,
+        "name": "AI_PLAYER_BUILD_SUPPLY_CENTER",
+        "argument_types": [
+          11,
+          15,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 290,
+        "name": "AI_PLAYER_BUILD_UPGRADE",
+        "argument_types": [
+          11,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 291,
+        "name": "OBJECTLIST_ADDOBJECTTYPE",
+        "argument_types": [
+          48,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 292,
+        "name": "OBJECTLIST_REMOVEOBJECTTYPE",
+        "argument_types": [
+          48,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 293,
+        "name": "MAP_REVEAL_PERMANENTLY_AT_WAYPOINT",
+        "argument_types": [
+          7,
+          1,
+          11,
+          49
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 294,
+        "name": "MAP_UNDO_REVEAL_PERMANENTLY_AT_WAYPOINT",
+        "argument_types": [
+          49
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 295,
+        "name": "NAMED_SET_STEALTH_ENABLED",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 296,
+        "name": "TEAM_SET_STEALTH_ENABLED",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 297,
+        "name": "EVA_SET_ENABLED_DISABLED",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 298,
+        "name": "OPTIONS_SET_OCCLUSION_MODE",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 299,
+        "name": "LOCALDEFEAT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 300,
+        "name": "OPTIONS_SET_DRAWICON_UI_MODE",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 301,
+        "name": "OPTIONS_SET_PARTICLE_CAP_MODE",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 302,
+        "name": "PLAYER_SCIENCE_AVAILABILITY",
+        "argument_types": [
+          11,
+          32,
+          50
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 303,
+        "name": "UNIT_AFFECT_OBJECT_PANEL_FLAGS",
+        "argument_types": [
+          14,
+          46,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 304,
+        "name": "TEAM_AFFECT_OBJECT_PANEL_FLAGS",
+        "argument_types": [
+          3,
+          46,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 305,
+        "name": "PLAYER_SELECT_SKILLSET",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 306,
+        "name": "SCRIPTING_OVERRIDE_HULK_LIFETIME",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 307,
+        "name": "NAMED_FACE_NAMED",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 308,
+        "name": "NAMED_FACE_WAYPOINT",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 309,
+        "name": "TEAM_FACE_NAMED",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 310,
+        "name": "TEAM_FACE_WAYPOINT",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 311,
+        "name": "COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE",
+        "argument_types": [
+          39,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 312,
+        "name": "COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT",
+        "argument_types": [
+          39,
+          15,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 313,
+        "name": "UNIT_SPAWN_NAMED_LOCATION_ORIENTATION",
+        "argument_types": [
+          14,
+          15,
+          3,
+          16,
+          17
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 314,
+        "name": "PLAYER_AFFECT_RECEIVING_EXPERIENCE",
+        "argument_types": [
+          11,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 315,
+        "name": "PLAYER_EXCLUDE_FROM_SCORE_SCREEN",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 316,
+        "name": "TEAM_GUARD_SUPPLY_CENTER",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 317,
+        "name": "ENABLE_SCORING",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 318,
+        "name": "DISABLE_SCORING",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 319,
+        "name": "SOUND_SET_VOLUME",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 320,
+        "name": "SPEECH_SET_VOLUME",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 321,
+        "name": "DISABLE_BORDER_SHROUD",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 322,
+        "name": "ENABLE_BORDER_SHROUD",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 323,
+        "name": "OBJECT_ALLOW_BONUSES",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 324,
+        "name": "SOUND_REMOVE_ALL_DISABLED",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 325,
+        "name": "SOUND_REMOVE_TYPE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 326,
+        "name": "TEAM_GUARD_IN_TUNNEL_NETWORK",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 327,
+        "name": "QUICKVICTORY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 328,
+        "name": "UNIT_SET_MODELCONDITION",
+        "argument_types": [
+          14,
+          0,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 329,
+        "name": "TEAM_SET_MODELCONDITION",
+        "argument_types": [
+          3,
+          0,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 330,
+        "name": "TEAM_DELETE_LIVING",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 331,
+        "name": "RESIZE_VIEW_GUARDBAND",
+        "argument_types": [
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 332,
+        "name": "DELETE_ALL_UNMANNED",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 333,
+        "name": "CHOOSE_VICTIM_ALWAYS_USES_NORMAL",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 334,
+        "name": "SET_CAMERA_CLIP_DEPTH_MULTIPLIER",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 335,
+        "name": "CAMERA_ENABLE_SLAVE_MODE",
+        "argument_types": [
+          10,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 336,
+        "name": "CAMERA_DISABLE_SLAVE_MODE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 337,
+        "name": "CAMERA_ADD_SHAKER_AT",
+        "argument_types": [
+          7,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 338,
+        "name": "ENABLE_OBJECT_SOUND",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 339,
+        "name": "DISABLE_OBJECT_SOUND",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 340,
+        "name": "ROTATE_CAMERA_LOCKED",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 341,
+        "name": "CAMERA_BLOOM_EFFECT_BEGIN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 342,
+        "name": "CAMERA_BLOOM_EFFECT_END",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 344,
+        "name": "UNIT_SET_FLAME_STATUS",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 345,
+        "name": "TEAM_SET_FLAME_STATUS",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 346,
+        "name": "ROLL_CAMERA",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 347,
+        "name": "HIDE_UI",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 348,
+        "name": "SHOW_UI",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 349,
+        "name": "CAMERA_RING_MODE_START",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 350,
+        "name": "CAMERA_RING_MODE_END",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 351,
+        "name": "PLAYER_GIVE_LIGHT_POINTS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 352,
+        "name": "PLAYER_RESET_LIGHT_POINTS",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 353,
+        "name": "PLAYER_GIVE_LIGHT_POINT_LEVEL",
+        "argument_types": [
+          11,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 354,
+        "name": "PLAYER_REMOVE_LIGHT_POINT_LEVEL",
+        "argument_types": [
+          11,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 355,
+        "name": "TEAM_GIVE_EXPERIENCE_LEVEL",
+        "argument_types": [
+          3,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 356,
+        "name": "TEAM_GIVE_EXPERIENCE_POINTS",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 357,
+        "name": "TEAM_SET_EXPERIENCE_POINTS",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 358,
+        "name": "UNIT_GIVE_EXPERIENCE_LEVEL",
+        "argument_types": [
+          14,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 359,
+        "name": "UNIT_GIVE_EXPERIENCE_POINTS",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 360,
+        "name": "UNIT_SET_EXPERIENCE_POINTS",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 361,
+        "name": "LIVING_WORLD_MOVE_ARMY_TO_POSITION",
+        "argument_types": [
+          10,
+          10,
+          16
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 362,
+        "name": "LIVING_WORLD_MOVE_ARMY_TO_ZONE",
+        "argument_types": [
+          10,
+          10,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 363,
+        "name": "LIVING_WORLD_SPAWN_ARMY_AT_POSITION",
+        "argument_types": [
+          10,
+          10,
+          16
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 364,
+        "name": "LIVING_WORLD_SPAWN_ARMY_IN_ZONE",
+        "argument_types": [
+          10,
+          10,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 365,
+        "name": "LIVING_WORLD_DESPAWN_ARMY",
+        "argument_types": [
+          10,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 366,
+        "name": "LIVING_WORLD_EXIT_TO_REGION_VIEW",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 367,
+        "name": "TOGGLE_AVI_CAPTURE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 368,
+        "name": "PLAY_MOVIE_IN_GAME",
+        "argument_types": [
+          23,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 369,
+        "name": "DEPLOY_SIEGE_ON_NAMED_WALL",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 370,
+        "name": "RETRACT_SIEGE_FROM_WALL",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 371,
+        "name": "MAP_CHANGE_CLOUD_SPEED",
+        "argument_types": [
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 372,
+        "name": "TERRAIN_RENDER_DISABLE",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 373,
+        "name": "SET_RANDOM_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 374,
+        "name": "SET_COUNTER_TO_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 375,
+        "name": "SET_FLAG_TO_FLAG",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          5,
+          5
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 376,
+        "name": "SET_UNIT_REFERENCE",
+        "argument_types": [
+          54,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 377,
+        "name": "SET_TEAM_REFERENCE",
+        "argument_types": [
+          55,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 378,
+        "name": "SET_UNIT_REFERENCE_TO_REFERENCE",
+        "argument_types": [
+          54,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 379,
+        "name": "SET_TEAM_REFERENCE_TO_REFERNECE",
+        "argument_types": [
+          55,
+          55
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 380,
+        "name": "TEAM_GIVE_NEAREST_TEAM_UPGRADE",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 381,
+        "name": "NAMED_BASE_UNPACK",
+        "argument_types": [
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 383,
+        "name": "BUILD_BASE_BUILDING",
+        "argument_types": [
+          15,
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 384,
+        "name": "BUILD_BASE_BUILDING_IN_SLOT",
+        "argument_types": [
+          15,
+          0,
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 385,
+        "name": "BUILD_BASE_BUILDING_PER_TACTICAL_MARKER",
+        "argument_types": [
+          15,
+          56,
+          15,
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 386,
+        "name": "BUILD_BUILDING_ON_FOUNDATION",
+        "argument_types": [
+          15,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 387,
+        "name": "ALLOW_DISALLOW_ONE_BUILDING",
+        "argument_types": [
+          11,
+          15,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 388,
+        "name": "ALLOW_DISALLOW_ALL_BUILDINGS",
+        "argument_types": [
+          11,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 389,
+        "name": "FOCAL_LENGTH_CAMERA",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 390,
+        "name": "MOVE_CAMERA_LOCATOR_ALONG_SPLINE_PATH",
+        "argument_types": [
+          24,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 391,
+        "name": "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF",
+        "argument_types": [
+          3,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 392,
+        "name": "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF_OWNED_BY_PLAYER",
+        "argument_types": [
+          3,
+          27,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 393,
+        "name": "TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE",
+        "argument_types": [
+          3,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 394,
+        "name": "TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE_OWNED_BY_PLAYER",
+        "argument_types": [
+          3,
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 395,
+        "name": "COUNTER_MATH_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          57,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 396,
+        "name": "COUNTER_MATH_VALUE",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          57,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 397,
+        "name": "TEAM_RECRUIT_UNITS",
+        "argument_types": [
+          3,
+          0,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 398,
+        "name": "TEAM_RECRUIT_UNITS_FROM_TEAM",
+        "argument_types": [
+          3,
+          0,
+          61,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 399,
+        "name": "TEAM_GUARD_TEAM",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 400,
+        "name": "TEAM_GUARD_NEAREST_KINDOF",
+        "argument_types": [
+          3,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 401,
+        "name": "UNIT_GUARD_NEAREST_KINDOF",
+        "argument_types": [
+          14,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 402,
+        "name": "TEAM_GIVE_TEAM_UPGRADE",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 403,
+        "name": "TEAM_UPGRADE",
+        "argument_types": [
+          3,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 404,
+        "name": "SET_PLAYER_MONEY_TO_COUNTER",
+        "argument_types": [
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 405,
+        "name": "SET_PLAYER_LIGHT_POINTS_TO_COUNTER",
+        "argument_types": [
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 406,
+        "name": "SET_UNIT_EXPERIENCE_TO_COUNTER",
+        "argument_types": [
+          14,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 407,
+        "name": "SET_PLAYER_COMMAND_POINTS_USED_TO_COUNTER",
+        "argument_types": [
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 408,
+        "name": "SET_PLAYER_COMMAND_POINTS_AVAILABLE_TO_COUNTER",
+        "argument_types": [
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 409,
+        "name": "SET_PLAYER_COMMAND_POINTS_TOTAL_TO_COUNTER",
+        "argument_types": [
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 410,
+        "name": "SET_COMMAND_POINTS_TO_BUILD_TEAM_TO_COUNTER",
+        "argument_types": [
+          3,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 411,
+        "name": "UNIT_GUARD_FOR_SECONDS",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 412,
+        "name": "UNIT_IDLE_FOR_SECONDS",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 413,
+        "name": "TEAM_GUARD_FOR_SECONDS",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 414,
+        "name": "TEAM_IDLE_FOR_SECONDS",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 415,
+        "name": "SET_COUNTER_IN_SECONDS",
+        "argument_types": [
+          4,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 416,
+        "name": "SET_RANDOM_COUNTER_IN_SECONDS",
+        "argument_types": [
+          4,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 417,
+        "name": "AUDIO_FADE_VOLUME",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 418,
+        "name": "TOGGLE_AUTO_BUILD",
+        "argument_types": [
+          11,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 419,
+        "name": "GIVE_PLAYER_UPGRADE",
+        "argument_types": [
+          11,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 420,
+        "name": "SET_PLAYER_KILLS_OF_TYPE_TO_COUNTER",
+        "argument_types": [
+          11,
+          15,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 421,
+        "name": "SET_PLAYER_KILLS_OF_KINDOF_TO_COUNTER",
+        "argument_types": [
+          11,
+          27,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 422,
+        "name": "SET_PLAYER_OWNERSHIP_OF_TYPE_COUNTER",
+        "argument_types": [
+          61,
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 423,
+        "name": "TEAM_SET_HEALTH",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 424,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_UNIT",
+        "argument_types": [
+          14,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 425,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_GARRISONED_BUILDING",
+        "argument_types": [
+          14,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 426,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_KINDOF",
+        "argument_types": [
+          14,
+          42,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 427,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_BUILDING",
+        "argument_types": [
+          14,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 428,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_BUILDING_CLASS",
+        "argument_types": [
+          14,
+          42,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 429,
+        "name": "NAMED_USE_COMMANDBUTTON_ON_NEAREST_OBJECTTYPE",
+        "argument_types": [
+          14,
+          42,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 430,
+        "name": "REINFORCEMENTS_DISPLAY_BANNER",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 431,
+        "name": "NAMED_SET_SPECIAL_WEAPONSET",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 432,
+        "name": "NAMED_SET_STRICT_CONTROL_ENABLED",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 433,
+        "name": "TEAM_SET_STRICT_CONTROL_ENABLED",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 434,
+        "name": "UNIT_SET_MODELCONDITION_FOR_DURATION",
+        "argument_types": [
+          14,
+          58,
+          1,
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 435,
+        "name": "TEAM_SET_MODELCONDITION_FOR_DURATION",
+        "argument_types": [
+          3,
+          58,
+          1,
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 436,
+        "name": "KILL_HORDE_MEMBERS",
+        "argument_types": [
+          14,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 437,
+        "name": "DIM_WORLD_LIGHTS",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 438,
+        "name": "RESTORE_WORLD_LIGHTS",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 439,
+        "name": "SET_COUNTER_TO_UNIT_THREAT",
+        "argument_types": [
+          4,
+          14,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 440,
+        "name": "SET_COUNTER_TO_TEAM_THREAT",
+        "argument_types": [
+          4,
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 441,
+        "name": "AUDIO_MAKE_SOUND_IMMUNE_TO_FADE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 442,
+        "name": "AUDIO_MAKE_SOUND_SUBJECT_TO_FADE",
+        "argument_types": [
+          59
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 443,
+        "name": "AUDIO_MAKE_ALL_SOUNDS_SUBJECT_TO_FADE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 444,
+        "name": "CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 445,
+        "name": "FIRE_SPECIAL_POWER_ON_NEAREST_OBJECTTYPE",
+        "argument_types": [
+          11,
+          31,
+          61,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 446,
+        "name": "FIRE_SPECIAL_POWER_ON_NEAREST_OBJECTTYPE_BY_PLAYER",
+        "argument_types": [
+          11,
+          31,
+          61,
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 447,
+        "name": "FIRE_SPECIAL_POWER_ON_TEAM",
+        "argument_types": [
+          11,
+          31,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 448,
+        "name": "AUDIO_SET_REVERB_ROOM_TYPE",
+        "argument_types": [
+          60
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 449,
+        "name": "AUDIO_REMOVE_REVERB",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 450,
+        "name": "AUDIO_PUSH_MUSIC",
+        "argument_types": [
+          22,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 451,
+        "name": "AUDIO_POP_MUSIC",
+        "argument_types": [
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 452,
+        "name": "UNIT_GUARD_POSITION",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 453,
+        "name": "UNIT_GUARD_OBJECT",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 454,
+        "name": "UNIT_GUARD_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 455,
+        "name": "MOVE_TEAM_HOME",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 456,
+        "name": "MUSIC_SCRIPT_SET_TRACK",
+        "argument_types": [
+          22,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 457,
+        "name": "MUSIC_SCRIPT_PUSH_MUSIC",
+        "argument_types": [
+          22,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 458,
+        "name": "MUSIC_SCRIPT_POP_MUSIC",
+        "argument_types": [
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 459,
+        "name": "MUSIC_TURN_OFF_MUSIC_SCRIPTING",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 460,
+        "name": "MUSIC_RETURN_TO_MUSIC_SCRIPTING",
+        "argument_types": [
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 461,
+        "name": "MUSIC_RESET_MUSIC_SCRIPTING_SYSTEM",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 462,
+        "name": "TEAM_SET_PLAYERS_NEAREST_UNIT_OF_TYPE_TO_REFERENCE",
+        "argument_types": [
+          61,
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 463,
+        "name": "GATE_OPEN",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 464,
+        "name": "GATE_CLOSE",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 465,
+        "name": "DEPLOY_NAMED_SIEGE_ON_WAYPOINT",
+        "argument_types": [
+          14,
+          7,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 466,
+        "name": "DEPLOY_SIEGE_ON_WAYPOINT",
+        "argument_types": [
+          3,
+          7,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 467,
+        "name": "DEPLOY_SIEGE_NEAR_TEAM",
+        "argument_types": [
+          3,
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 468,
+        "name": "TEAM_HARVEST",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 469,
+        "name": "TEAM_TOGGLE_CLOSE_RANGE_WEAPON",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 470,
+        "name": "NAMED_TOGGLE_CLOSE_RANGE_WEAPON",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 471,
+        "name": "MUSIC_PLAY_TRACK_FINITE_TIMES",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 472,
+        "name": "MUSIC_PLAY_TRACK_FINITE_TIMES_AND_NOTIFY",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8,
+          5
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 473,
+        "name": "MUSIC_PUSH_TRACK_FINITE_TIMES",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 474,
+        "name": "MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8,
+          5
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 475,
+        "name": "MUSIC_SCRIPT_PLAY_TRACK_FINITE_TIMES",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 476,
+        "name": "MUSIC_SCRIPT_PLAY_TRACK_FINITE_TIMES_AND_NOTIFY",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8,
+          5
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 477,
+        "name": "MUSIC_SCRIPT_PUSH_TRACK_FINITE_TIMES",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 478,
+        "name": "MUSIC_SCRIPT_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY",
+        "argument_types": [
+          22,
+          0,
+          8,
+          8,
+          5
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 479,
+        "name": "TEAM_REPAIR_NEREST",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 481,
+        "name": "NAME_SET_AUTO_ABILITY",
+        "argument_types": [
+          14,
+          39,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 482,
+        "name": "TEAM_SET_AUTO_ABILITY",
+        "argument_types": [
+          3,
+          39,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 483,
+        "name": "SET_LOGIC_FOG_STATE",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 484,
+        "name": "CAMERA_RESTRICT_TO_AREA",
+        "argument_types": [
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 485,
+        "name": "CAMERA_REMOVE_AREA_RESTRICTION",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 486,
+        "name": "UNIT_GUARD_AREA_FROM_POSITION",
+        "argument_types": [
+          14,
+          9,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 487,
+        "name": "TEAM_GUARD_AREA_FROM_POSITION",
+        "argument_types": [
+          3,
+          9,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 488,
+        "name": "FIND_HOME_BASE_OF_PLAYER",
+        "argument_types": [
+          11,
+          54,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 489,
+        "name": "UPGRADE_NEAREST_WALL",
+        "argument_types": [
+          14,
+          33,
+          15,
+          15,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 490,
+        "name": "TEAM_SET_CUSTOM_STATE",
+        "argument_types": [
+          3,
+          18,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 491,
+        "name": "SET_REF_TO_NEREST_TEAM_OF_TYPE_OWNED_BY_PLAYER",
+        "argument_types": [
+          61,
+          11,
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 492,
+        "name": "SET_REF_TO_NEREST_TEAM_OF_UNNAMED_TYPE_OWNED_BY_PLAYER",
+        "argument_types": [
+          61,
+          11,
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 493,
+        "name": "NAMED_BASE_UNPACK_FREE",
+        "argument_types": [
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 494,
+        "name": "SELL_BUILDING_ON_FOUNDATION",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 495,
+        "name": "SET_COUNTER_TO_BASE_POPULATION",
+        "argument_types": [
+          11,
+          14,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 496,
+        "name": "MAP_EXIT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 497,
+        "name": "GATE_READY",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 498,
+        "name": "TEAM_NEEDS_OPEN_GATE",
+        "argument_types": [
+          3,
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 499,
+        "name": "UNIT_SET_TEAM",
+        "argument_types": [
+          14,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 500,
+        "name": "UNIT_STAND_GROUND",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 501,
+        "name": "TEAM_STAND_GROUND",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 502,
+        "name": "UNIT_TELEPORT_TO_WAYPOINT",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 503,
+        "name": "TEAM_TELEPORT_TO_WAYPOINT",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 504,
+        "name": "OVERRIDE_PLAYER_COMMAND_POINTS",
+        "argument_types": [
+          11,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 505,
+        "name": "SELECT_OBJECT",
+        "argument_types": [
+          11,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 506,
+        "name": "DESELECT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 507,
+        "name": "HUMAN_IMPASSABLE_AREA",
+        "argument_types": [
+          9,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 508,
+        "name": "SET_COUNTER_TO_CLIENT_RANDOM_VALUE",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 509,
+        "name": "SET_COUNTER_TO_NUMBER_OBJECTS_PLAYER_OWNES_WITH_MODELCONDITION",
+        "argument_types": [
+          11,
+          58,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 510,
+        "name": "PLAY_SOUND_EFFECT_AT_TEAM",
+        "argument_types": [
+          12,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 511,
+        "name": "VICTORY_SCREEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 512,
+        "name": "HERO_SELECT_BUTTON_FLASH",
+        "argument_types": [
+          62,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 513,
+        "name": "LOCK_CAMERA",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 514,
+        "name": "TEAM_ASSIMILATE_WITH_FIRST_WALK_ON_ARMY",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 515,
+        "name": "UNIT_ASSIMILATE_WITH_FIRST_WALK_ON_ARMY",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 516,
+        "name": "UNIT_ENABLE_HOUSE_COLOR",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 517,
+        "name": "TEAM_ENABLE_HOUSE_COLOR",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 518,
+        "name": "ENABLE_HOUSE_COLOR",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 519,
+        "name": "UNIT_FORCE_EMOTION",
+        "argument_types": [
+          14,
+          63,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 520,
+        "name": "TEAM_FORCE_EMOTION",
+        "argument_types": [
+          3,
+          63,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 521,
+        "name": "PLAYER_FORCE_EMOTION",
+        "argument_types": [
+          11,
+          63,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 522,
+        "name": "SET_PLAYER_OWNERSHIP_OF_TYPE_COUNTER_INCLUDE_DEAD",
+        "argument_types": [
+          61,
+          11,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 523,
+        "name": "UNIT_GAIN_LEVEL",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 524,
+        "name": "TEAM_GAIN_LEVEL",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 525,
+        "name": "AUDIO_SET_REVERB_SUPPRESSION_POLYGON",
+        "argument_types": [
+          9,
+          52
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 526,
+        "name": "AUDIO_REMOVE_REVERB_SUPPRESSION_POLYGON",
+        "argument_types": [
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 527,
+        "name": "AUDIO_REMOVE_ALL_REVERB_SUPPRESSION_POLYGONS",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 528,
+        "name": "LOCK_CAMERA_ANGLE_AND_HEIGHT",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 529,
+        "name": "ROTATE_CAMERA_TO_ANGLE",
+        "argument_types": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 530,
+        "name": "NAMED_SET_CAMERA_FADING",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 531,
+        "name": "SHOW_MISSION_OBJECTIVE",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 532,
+        "name": "HIDE_MISSION_OBJECTIVE",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 533,
+        "name": "MARK_MISSION_OBJECTIVE_COMPLETED",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 534,
+        "name": "MARK_MISSION_OBJECTIVE_NOT_COMPLETED",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 535,
+        "name": "RECRUIT_COMBO_UNITS_FROM_TEAM",
+        "argument_types": [
+          3,
+          0,
+          61,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 536,
+        "name": "UNIT_CHANGE_OBJECT_STATUS",
+        "argument_types": [
+          14,
+          41,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 537,
+        "name": "TEAM_CHANGE_OBJECT_STATUS",
+        "argument_types": [
+          3,
+          41,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 538,
+        "name": "SET_HERO_EXPERIENCE_SHARING",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 539,
+        "name": "REMOVE_REINFORCEMENT_ARMY",
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 540,
+        "name": "PLAYER_ASSIMILATE_WITH_ARMY_BY_NAME",
+        "argument_types": [
+          11,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 541,
+        "name": "TEAM_ASSIMILATE_WITH_ARMY_BY_NAME",
+        "argument_types": [
+          3,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 542,
+        "name": "UNIT_ASSIMILATE_WITH_ARMY_BY_NAME",
+        "argument_types": [
+          14,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 543,
+        "name": "CALL_IN_REINFORCEMENTS_WITHOUT_MOVIE",
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 544,
+        "name": "ATTACK_MOVE_TEAM_TO",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 545,
+        "name": "TEAM_ATTACK_MOVE_FOLLOW_WAYPOINTS",
+        "argument_types": [
+          3,
+          24,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 546,
+        "name": "ATTACK_MOVE_NAMED_UNIT_TO",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 547,
+        "name": "NAMED_ATTACK_FOLLOW_WAYPOINTS",
+        "argument_types": [
+          14,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 548,
+        "name": "UNIT_ATTACK_MOVE_TOWARDS_NEAREST_OBJECT_TYPE",
+        "argument_types": [
+          14,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 549,
+        "name": "TEAM_ATTACK_MOVE_TOWARDS_NEAREST_OBJECT_TYPE",
+        "argument_types": [
+          3,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 550,
+        "name": "MOVE_CAMERA_BY_ANIMATION",
+        "argument_types": [
+          64
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 551,
+        "name": "TEAM_SPIN_FOR_SECONDS",
+        "argument_types": [
+          3,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 552,
+        "name": "MAP_REVEAL_IN_TRIGGER",
+        "argument_types": [
+          9,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 553,
+        "name": "MAP_REVEAL_IN_TRIGGER",
+        "argument_types": [
+          9,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 554,
+        "name": "MAP_REVEAL_PERMANENTLY_IN_TRIGGER",
+        "argument_types": [
+          9,
+          11,
+          49
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 555,
+        "name": "MAP_UNDO_REVEAL_PERMANENTLY_IN_TRIGGER",
+        "argument_types": [
+          49
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 556,
+        "name": "SET_COUNTER_TO_THREAT_FINDER_THREAT",
+        "argument_types": [
+          4,
+          67,
+          66,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 557,
+        "name": "LIVING_WORLD_SET_PLAYER_REF_BY_TEMPLATE",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          74,
+          75
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 558,
+        "name": "LIVING_WORLD_SET_ARMY_REF_TO_HERO_ARMY_BY_INDEX",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          70,
+          0,
+          73
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 559,
+        "name": "LIVING_WORLD_SET_REGION_REF_TO_ARMY_REGION",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          72,
+          69
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 560,
+        "name": "LIVING_WORLD_SET_REGION_REF_TO_ADJACENT_REGION",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          72,
+          71,
+          8,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 561,
+        "name": "LIVING_WORLD_ORDER_ARMY_MOVE_TO_ADJACENT_REGION",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          69,
+          71
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 562,
+        "name": "TEAM_INCREASE_PRIORITY_BY_VALUE",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 563,
+        "name": "TEAM_DECREASE_PRIORITY_BY_VALUE",
+        "argument_types": [
+          3,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 564,
+        "name": "ATTACK_MOVE_TEAM_TO_NAMED_OBJECT",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 565,
+        "name": "ATTACK_MOVE_TEAM_TO_NEAREST_OBJECT_OF_TYPE_OF_PLAYER",
+        "argument_types": [
+          3,
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 566,
+        "name": "TEAM_SET_AI_RECRUITABLE_FLAG",
+        "argument_types": [
+          3,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 567,
+        "name": "NAMED_GARRISON_SPECIFIC_BUILDING_INSTANTLY",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 568,
+        "name": "CHANGE_BURN_RATE_AT_WAYPOINT",
+        "argument_types": [
+          7,
+          1,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 569,
+        "name": "CHANGE_BURN_RATE_IN_AREA",
+        "argument_types": [
+          9,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 570,
+        "name": "TEAM_GARRISON_SPECIFIC_BUILDING_INSTANTLY",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 571,
+        "name": "PLAYER_FIRE_SPECIAL_POWER_AT_WAYPOINT",
+        "argument_types": [
+          11,
+          31,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 572,
+        "name": "NAMED_BUILD_STRUCTURE_AT_WAYPOINT",
+        "argument_types": [
+          14,
+          15,
+          17,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 573,
+        "name": "TEAM_GARRISON_TEAM_INSTANTLY",
+        "argument_types": [
+          3,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 574,
+        "name": "LOCK_CAMERA_ZOOM",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 575,
+        "name": "LOCK_CAMERA_ROTATION",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 576,
+        "name": "LOCK_CAMERA_SCROLL",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 577,
+        "name": "LOCK_CAMERA_RESET",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 578,
+        "name": "PLAYER_SET_SPECIAL_POWER_COUNTDOWN",
+        "argument_types": [
+          11,
+          31,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 579,
+        "name": "CREATE_DELAYED_CARRYOVER_UNIT_AT_WAYPOINT",
+        "argument_types": [
+          61,
+          11,
+          7,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 580,
+        "name": "ENABLE_SPELL_STORE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 581,
+        "name": "DISABLE_SPELL_STORE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 582,
+        "name": "ENABLE_OBJECTIVES_SCREEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 583,
+        "name": "DISABLE_OBJECTIVES_SCREEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 584,
+        "name": "ENABLE_PLANNING_MODE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 585,
+        "name": "DISABLE_PLANNING_MODE",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 586,
+        "name": "FLASH_SPELL_STORE_BUTTON",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 587,
+        "name": "FLASH_OBJECTIVES_BUTTON",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 588,
+        "name": "FLASH_PLANNING_MODE_BUTTON",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 589,
+        "name": "DISPLAY_NOTIFICATION_BOX",
+        "argument_types": [
+          77,
+          25,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 590,
+        "name": "CREATE_NAMED_ON_TEAM_AT_OBJECTTYPE",
+        "argument_types": [
+          14,
+          15,
+          3,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 591,
+        "name": "UNIT_SET_MAX_LEVEL",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 592,
+        "name": "PLAYER_SET_MAX_SPELLPOINTS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 593,
+        "name": "DISPLAY_NOTIFICATION_BOX_WITH_OBJECT_TYPE_IMAGE_OVERRIDE",
+        "argument_types": [
+          77,
+          25,
+          0,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 594,
+        "name": "SELECT_BUILDER_BUTTON_FLASH",
+        "argument_types": [
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 595,
+        "name": "CREATE_UNIT_REVIVAL_ENTRY",
+        "argument_types": [
+          15,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 596,
+        "name": "CREATE_UNIT_REVIVAL_ENTRY_FROM_DELAYED_CARRYOVER_HERO",
+        "argument_types": [
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 597,
+        "name": "CREATE_UNIT_REVIVAL_ENTRY_AT_LEVEL",
+        "argument_types": [
+          15,
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 598,
+        "name": "CLOSE_OBJECTIVES_SCREEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      }
+    ]
+  },
+  "condition": {
+    "slots": 202,
+    "named": 195,
+    "holes": [
+      59,
+      60,
+      67,
+      68,
+      72,
+      73,
+      122
+    ],
+    "templates": [
+      {
+        "opcode": 0,
+        "name": "CONDITION_FALSE",
+        "target_only_00_raw": 3,
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 1,
+        "name": "COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 2,
+        "name": "FLAG",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          5,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 3,
+        "name": "CONDITION_TRUE",
+        "target_only_00_raw": 3,
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 4,
+        "name": "TIMER_EXPIRED",
+        "argument_types": [
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 5,
+        "name": "PLAYER_ALL_DESTROYED",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 6,
+        "name": "PLAYER_ALL_BUILDFACILITIES_DESTROYED",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 7,
+        "name": "TEAM_INSIDE_AREA_PARTIALLY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 8,
+        "name": "TEAM_DESTROYED",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 9,
+        "name": "CAMERA_MOVEMENT_FINISHED",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 10,
+        "name": "TEAM_HAS_UNITS",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 11,
+        "name": "TEAM_STATE_IS",
+        "argument_types": [
+          3,
+          18
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 12,
+        "name": "TEAM_STATE_IS_NOT",
+        "argument_types": [
+          3,
+          18
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 13,
+        "name": "NAMED_INSIDE_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 14,
+        "name": "NAMED_OUTSIDE_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 15,
+        "name": "NAMED_DESTROYED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 16,
+        "name": "NAMED_NOT_DESTROYED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 17,
+        "name": "TEAM_INSIDE_AREA_ENTIRELY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 18,
+        "name": "TEAM_OUTSIDE_AREA_ENTIRELY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 19,
+        "name": "NAMED_ATTACKED_BY_OBJECTTYPE",
+        "argument_types": [
+          14,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 20,
+        "name": "TEAM_ATTACKED_BY_OBJECTTYPE",
+        "argument_types": [
+          3,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 21,
+        "name": "NAMED_ATTACKED_BY_PLAYER",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 22,
+        "name": "TEAM_ATTACKED_BY_PLAYER",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 23,
+        "name": "BUILT_BY_PLAYER",
+        "argument_types": [
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 24,
+        "name": "NAMED_CREATED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 25,
+        "name": "TEAM_CREATED",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 26,
+        "name": "PLAYER_HAS_CREDITS",
+        "argument_types": [
+          0,
+          6,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 27,
+        "name": "NAMED_DISCOVERED",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 28,
+        "name": "TEAM_DISCOVERED",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 29,
+        "name": "MISSION_ATTEMPTS",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 30,
+        "name": "NAMED_OWNED_BY_PLAYER",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 31,
+        "name": "TEAM_OWNED_BY_PLAYER",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 32,
+        "name": "PLAYER_HAS_N_OR_FEWER_BUILDINGS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 33,
+        "name": "PLAYER_HAS_POWER",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 34,
+        "name": "NAMED_REACHED_WAYPOINTS_END",
+        "argument_types": [
+          14,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 35,
+        "name": "TEAM_REACHED_WAYPOINTS_END",
+        "argument_types": [
+          3,
+          24
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 36,
+        "name": "BANNER_PRESSED",
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 37,
+        "name": "NAMED_SELECTED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 38,
+        "name": "NAMED_ENTERED_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 39,
+        "name": "NAMED_EXITED_AREA",
+        "argument_types": [
+          14,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 40,
+        "name": "TEAM_ENTERED_AREA_ENTIRELY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 41,
+        "name": "TEAM_ENTERED_AREA_PARTIALLY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 42,
+        "name": "TEAM_EXITED_AREA_ENTIRELY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 43,
+        "name": "TEAM_EXITED_AREA_PARTIALLY",
+        "argument_types": [
+          3,
+          9,
+          37
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 44,
+        "name": "MULTIPLAYER_ALLIED_VICTORY",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 45,
+        "name": "MULTIPLAYER_ALLIED_DEFEAT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 46,
+        "name": "MULTIPLAYER_PLAYER_DEFEAT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 47,
+        "name": "PLAYER_HAS_NO_POWER",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 48,
+        "name": "HAS_FINISHED_VIDEO",
+        "argument_types": [
+          23
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 49,
+        "name": "HAS_FINISHED_SPEECH",
+        "argument_types": [
+          21
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 50,
+        "name": "HAS_FINISHED_AUDIO",
+        "argument_types": [
+          12
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 51,
+        "name": "BUILDING_ENTERED_BY_PLAYER",
+        "argument_types": [
+          11,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 52,
+        "name": "ENEMY_SIGHTED",
+        "argument_types": [
+          14,
+          19,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 53,
+        "name": "UNIT_HEALTH",
+        "argument_types": [
+          14,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 54,
+        "name": "BRIDGE_REPAIRED",
+        "argument_types": [
+          26
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 55,
+        "name": "BRIDGE_BROKEN",
+        "argument_types": [
+          26
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 56,
+        "name": "NAMED_DYING",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 57,
+        "name": "NAMED_TOTALLY_DEAD",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 58,
+        "name": "PLAYER_HAS_OBJECT_COMPARISON",
+        "argument_types": [
+          11,
+          6,
+          0,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 61,
+        "name": "PLAYER_TRIGGERED_SPECIAL_POWER",
+        "argument_types": [
+          11,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 62,
+        "name": "PLAYER_COMPLETED_SPECIAL_POWER",
+        "argument_types": [
+          11,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 63,
+        "name": "PLAYER_MIDWAY_SPECIAL_POWER",
+        "argument_types": [
+          11,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 64,
+        "name": "PLAYER_TRIGGERED_SPECIAL_POWER_FROM_NAMED",
+        "argument_types": [
+          11,
+          31,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 65,
+        "name": "PLAYER_COMPLETED_SPECIAL_POWER_FROM_NAMED",
+        "argument_types": [
+          11,
+          31,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 66,
+        "name": "PLAYER_MIDWAY_SPECIAL_POWER_FROM_NAMED",
+        "argument_types": [
+          11,
+          31,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 69,
+        "name": "PLAYER_BUILT_UPGRADE",
+        "argument_types": [
+          11,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 70,
+        "name": "PLAYER_BUILT_UPGRADE_FROM_NAMED",
+        "argument_types": [
+          11,
+          33,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 71,
+        "name": "PLAYER_DESTROYED_N_BUILDINGS_PLAYER",
+        "argument_types": [
+          11,
+          0,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 74,
+        "name": "PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA",
+        "argument_types": [
+          11,
+          6,
+          0,
+          61,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 75,
+        "name": "PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA",
+        "argument_types": [
+          11,
+          6,
+          0,
+          27,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 76,
+        "name": "UNIT_EMPTIED",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 77,
+        "name": "TYPE_SIGHTED",
+        "argument_types": [
+          14,
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 78,
+        "name": "NAMED_BUILDING_IS_EMPTY",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 79,
+        "name": "PLAYER_HAS_N_OR_FEWER_FACTION_BUILDINGS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 80,
+        "name": "UNIT_HAS_OBJECT_STATUS",
+        "argument_types": [
+          14,
+          41
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 81,
+        "name": "TEAM_ALL_HAS_OBJECT_STATUS",
+        "argument_types": [
+          3,
+          41
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 82,
+        "name": "TEAM_SOME_HAVE_OBJECT_STATUS",
+        "argument_types": [
+          3,
+          41
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 83,
+        "name": "PLAYER_POWER_COMPARE_PERCENT",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 84,
+        "name": "PLAYER_EXCESS_POWER_COMPARE_VALUE",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 85,
+        "name": "SKIRMISH_SPECIAL_POWER_READY",
+        "argument_types": [
+          11,
+          31
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 86,
+        "name": "SKIRMISH_VALUE_IN_AREA",
+        "argument_types": [
+          11,
+          6,
+          1,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 87,
+        "name": "SKIRMISH_PLAYER_FACTION",
+        "argument_types": [
+          11,
+          47
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 88,
+        "name": "SKIRMISH_SUPPLIES_VALUE_WITHIN_DISTANCE",
+        "argument_types": [
+          11,
+          1,
+          9,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 89,
+        "name": "SKIRMISH_COMMAND_BUTTON_READY_ALL",
+        "argument_types": [
+          11,
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 90,
+        "name": "SKIRMISH_COMMAND_BUTTON_READY_PARTIAL",
+        "argument_types": [
+          11,
+          3,
+          42
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 91,
+        "name": "SKIRMISH_UNOWNED_FACTION_UNIT_EXISTS",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 92,
+        "name": "SKIRMISH_PLAYER_HAS_PREREQUISITE_TO_BUILD",
+        "argument_types": [
+          11,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 93,
+        "name": "SKIRMISH_PLAYER_HAS_COMPARISON_GARRISONED",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 94,
+        "name": "SKIRMISH_PLAYER_HAS_COMPARISON_CAPTURED_UNITS",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 95,
+        "name": "SKIRMISH_NAMED_AREA_EXIST",
+        "argument_types": [
+          11,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 96,
+        "name": "SKIRMISH_PLAYER_HAS_UNITS_IN_AREA",
+        "argument_types": [
+          11,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 97,
+        "name": "SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER",
+        "argument_types": [
+          11,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 98,
+        "name": "SKIRMISH_PLAYER_IS_OUTSIDE_AREA",
+        "argument_types": [
+          11,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 99,
+        "name": "SKIRMISH_PLAYER_HAS_DISCOVERED_PLAYER",
+        "argument_types": [
+          11,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 100,
+        "name": "PLAYER_ACQUIRED_SCIENCE",
+        "argument_types": [
+          11,
+          32
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 101,
+        "name": "PLAYER_HAS_SCIENCEPURCHASEPOINTS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 102,
+        "name": "PLAYER_CAN_PURCHASE_SCIENCE",
+        "argument_types": [
+          11,
+          32
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 103,
+        "name": "MUSIC_TRACK_HAS_COMPLETED",
+        "argument_types": [
+          22,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 104,
+        "name": "PLAYER_LOST_OBJECT_TYPE",
+        "argument_types": [
+          11,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 105,
+        "name": "SUPPLY_SOURCE_SAFE",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 106,
+        "name": "SUPPLY_SOURCE_ATTACKED",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 107,
+        "name": "START_POSITION_IS",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 108,
+        "name": "ZONE_FOCUS_MORE_THAN",
+        "argument_types": [
+          10,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 109,
+        "name": "IS_SEIGE_ATTACHED_TO_WALL",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 110,
+        "name": "PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA_WITH_UPGRADE",
+        "argument_types": [
+          11,
+          6,
+          0,
+          61,
+          9,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 111,
+        "name": "COUNTER_COUNTER",
+        "target_only_00_raw": 3,
+        "argument_types": [
+          4,
+          6,
+          4
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 112,
+        "name": "COUNTER_SECONDS",
+        "argument_types": [
+          4,
+          6,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 113,
+        "name": "DISTANCE_BETWEEN_OBJ",
+        "argument_types": [
+          14,
+          14,
+          6,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 114,
+        "name": "DISTANCE_BETWEEN_TEAM",
+        "argument_types": [
+          3,
+          3,
+          6,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 115,
+        "name": "UNIT_THREAT_LEVEL",
+        "argument_types": [
+          14,
+          6,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 116,
+        "name": "TEAM_THREAT_LEVEL",
+        "argument_types": [
+          3,
+          6,
+          1,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 117,
+        "name": "UNIT_HAS_GAINED_LEVEL",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 118,
+        "name": "UNIT_IS_AT_LEVEL",
+        "argument_types": [
+          14,
+          10
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 119,
+        "name": "UNIT_HAS_NUM_SKILL_POINTS",
+        "argument_types": [
+          14,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 120,
+        "name": "CAMERA_HIT_SPECIFIC_SPLINE_WAYPOINT",
+        "argument_types": [
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 121,
+        "name": "NAMED_BASE_UNPACKABLE_FOR_PLAYER",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 123,
+        "name": "TEAM_IS_LED_BY_UNIT",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 124,
+        "name": "PLAYER_COMPARE_LIGHT_POINTS",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 125,
+        "name": "HAS_COMMAND_POINTS_TO_BUILD_TEAM",
+        "argument_types": [
+          11,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 126,
+        "name": "HAS_COMMAND_POINTS_TO_BUILD_UNIT",
+        "argument_types": [
+          11,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 127,
+        "name": "CAN_BUILD_AT_BASE",
+        "argument_types": [
+          11,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 128,
+        "name": "PLAYER_HAS_KILLED_KINDOF_UNITS",
+        "argument_types": [
+          11,
+          0,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 129,
+        "name": "PLAYER_HAS_KILLED_TYPE_UNITS",
+        "argument_types": [
+          11,
+          0,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 130,
+        "name": "NAMED_DESTROYED_BY_OBJECTTYPE",
+        "argument_types": [
+          14,
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 131,
+        "name": "PLAYER_HAS_N_OR_FEWER_BASES",
+        "argument_types": [
+          11,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 132,
+        "name": "CAMERA_ENTERED_AREA",
+        "argument_types": [
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 133,
+        "name": "ENEMY_SIGHTED_BY_TEAM",
+        "argument_types": [
+          3,
+          19,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 134,
+        "name": "COMPARISON_TREES_IN_TRIGGER_AREA",
+        "argument_types": [
+          6,
+          0,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 135,
+        "name": "GATE_IS_OPEN",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 136,
+        "name": "UNIT_CAN_PATH_TO_WAYPOINT",
+        "argument_types": [
+          14,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 137,
+        "name": "UNIT_CAN_PATH_TO_OBJECT",
+        "argument_types": [
+          14,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 138,
+        "name": "UNIT_CAN_PATH_INTO_PLAYERS_NEAREST_BASE",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 139,
+        "name": "TEAM_CAN_PATH_TO_WAYPOINT",
+        "argument_types": [
+          3,
+          7
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 140,
+        "name": "TEAM_CAN_PATH_TO_OBJECT",
+        "argument_types": [
+          3,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 141,
+        "name": "TEAM_CAN_PATH_INTO_PLAYERS_NEAREST_BASE",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 142,
+        "name": "MUSIC_IS_PLAYING_FROM_SCRIPT",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 143,
+        "name": "TEAM_HAS_CUSTOM_STATE",
+        "argument_types": [
+          3,
+          18
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 144,
+        "name": "UNIT_COMPARE_RANK",
+        "argument_types": [
+          14,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 145,
+        "name": "PLAYER_COMPARE_RANK",
+        "argument_types": [
+          11,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 146,
+        "name": "PLAYER_HAS_OBJECT_OF_VETERANCY",
+        "argument_types": [
+          11,
+          61,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 147,
+        "name": "OBJECT_OF_TYPE_OR_LIST_INSIDE_REFD_BASE",
+        "argument_types": [
+          61,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 148,
+        "name": "TEAM_ENTERED_REFD_BASE_ENTIRELY",
+        "argument_types": [
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 149,
+        "name": "TEAM_ENTERED_REFD_BASE_PARTIALLY",
+        "argument_types": [
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 150,
+        "name": "TEAM_EXITED_REFD_BASE_ENTIRELY",
+        "argument_types": [
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 151,
+        "name": "TEAM_EXITED_REFD_BASE_PARTIALLY",
+        "argument_types": [
+          3,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 152,
+        "name": "TEAM_ENTERED_NEAREST_BASE_ENTIRELY",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 153,
+        "name": "TEAM_ENTERED_NEAREST_BASE_PARTIALLY",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 154,
+        "name": "TEAM_EXITED_NEAREST_BASE_ENTIRELY",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 155,
+        "name": "TEAM_EXITED_NEAREST_BASE_PARTIALLY",
+        "argument_types": [
+          3,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 156,
+        "name": "NAMED_ENTERED_REFD_BASE",
+        "argument_types": [
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 157,
+        "name": "NAMED_EXITED_REFD_BASE",
+        "argument_types": [
+          14,
+          54
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 158,
+        "name": "NAMED_ENTERED_NEAREST_BASE",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 159,
+        "name": "NAMED_EXITED_NEAREST_BASE",
+        "argument_types": [
+          14,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 160,
+        "name": "PLAYER_HAS_NUMBER_OBJECTS_WITH_MODELCONDITION",
+        "argument_types": [
+          11,
+          58,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 161,
+        "name": "PLAYER_HAS_NUMBER_UNITS_DISTANCE_FROM_OBJECT",
+        "argument_types": [
+          11,
+          6,
+          0,
+          1,
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 162,
+        "name": "UNIT_HAS_PASSENGER",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 163,
+        "name": "UNIT_IS_ATTACKED_AND_CANNOT_RETALIATE",
+        "argument_types": [
+          14
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 164,
+        "name": "TEAM_IS_ATTACKED_AND_CANNOT_RETALIATE_ANY",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 165,
+        "name": "TEAM_IS_ATTACKED_AND_CANNOT_RETALIATE_ALL",
+        "argument_types": [
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 166,
+        "name": "IS_GAME_IN_SKIRMISH_OR_MULTIPLAYER",
+        "argument_types": [
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 167,
+        "name": "REGION_CAMPS_SHOULD_UNPACK",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 168,
+        "name": "COMPARE_NUM_PLAYERS_IN_GAME",
+        "argument_types": [
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 169,
+        "name": "CAN_BUILD_OBJECTTYPE_AT_BASE",
+        "argument_types": [
+          11,
+          14,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 170,
+        "name": "TEAM_HAS_FEWER_THAN_X_UNITS_WITH_KINDOF",
+        "argument_types": [
+          3,
+          0,
+          27
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 171,
+        "name": "SKIRMISH_FIRE_SPECIAL_POWER_ON_TEAM",
+        "argument_types": [
+          11,
+          31,
+          3
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 172,
+        "name": "NAMED_RANK_LEVEL",
+        "argument_types": [
+          14,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 173,
+        "name": "PLAYER_HAS_REACHED_LEVEL_CAP",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 174,
+        "name": "EVAL_TEAM_HEALTH",
+        "argument_types": [
+          3,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 175,
+        "name": "IS_UNIT_WEBBED",
+        "argument_types": [
+          14,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 176,
+        "name": "ANY_HERO_REACHED_RANK",
+        "argument_types": [
+          11,
+          0,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 177,
+        "name": "NUM_UNITS_LEVELED_UP",
+        "argument_types": [
+          11,
+          0,
+          8
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 178,
+        "name": "PLAYER_HAS_NUM_UNITS_WITH_UPGRADE",
+        "argument_types": [
+          11,
+          0,
+          33
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 179,
+        "name": "PLAYER_HAS_NUM_UNITS_LOADED_WITH_OBJECT",
+        "argument_types": [
+          11,
+          0,
+          15,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 180,
+        "name": "UNIT_HAS_TOGGLED_WEAPON",
+        "argument_types": [
+          11,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 181,
+        "name": "ANY_UNITS_USING_BLOODTHIRSTY",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 182,
+        "name": "UNIT_USING_AUTOPICKUP",
+        "argument_types": [
+          11,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 183,
+        "name": "UNIT_IN_ALT_FORMATION",
+        "argument_types": [
+          11,
+          15
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 184,
+        "name": "IS_AREA_ON_FIRE",
+        "argument_types": [
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 185,
+        "name": "LIVING_WORLD_IS_REGION_REF_BOUND",
+        "target_only_00_raw": 2,
+        "argument_types": [
+          71
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 186,
+        "name": "HAS_EVA_EVENT_PLAYED_IN_LAST_N_SECONDS",
+        "argument_types": [
+          76,
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 187,
+        "name": "IS_NUM_OF_UNITS_BELONGING_TO_PLAYER_NEAR_EVA_EVENT_LAST_PLAYED_LOCATION_COMPARISON_INT",
+        "argument_types": [
+          11,
+          1,
+          76,
+          6,
+          0
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 188,
+        "name": "PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA_COMPLETELY_BUILT",
+        "argument_types": [
+          11,
+          6,
+          0,
+          61,
+          9
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 189,
+        "name": "CAMERA_SCROLL_DISTANCE",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 190,
+        "name": "CAMERA_ROTATE_DISTANCE",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 191,
+        "name": "CAMERA_ZOOM_DISTANCE",
+        "argument_types": [
+          1
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 192,
+        "name": "CAMERA_RESET",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 193,
+        "name": "UNIT_USING_STANCE",
+        "argument_types": [
+          14,
+          68
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 194,
+        "name": "PLAYER_ISSUED_FORMATION_ORDER",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 195,
+        "name": "HAS_DELAYED_CARRYOVER_UNIT_OF_TYPE",
+        "argument_types": [
+          61,
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 196,
+        "name": "TOGGLE_STANCE_SUBMENU_IS_OPEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 197,
+        "name": "SPELL_STORE_IS_OPEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 198,
+        "name": "OBJECTIVES_SCREEN_IS_OPEN",
+        "argument_types": [],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 199,
+        "name": "PLAYER_IS_IN_PLANNING_MODE",
+        "argument_types": [
+          11
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 200,
+        "name": "TYPE_SELECTED",
+        "argument_types": [
+          61
+        ],
+        "unresolved_parameters": []
+      },
+      {
+        "opcode": 201,
+        "name": "IS_GAME_MODE_ACTIVE",
+        "argument_types": [
+          10
+        ],
+        "unresolved_parameters": []
+      }
+    ]
+  },
+  "native_reconciliation": {
+    "resolved_defaults": [
+      {
+        "kind": "action",
+        "opcode": 129,
+        "name": "CAMERA_BW_MODE_END",
+        "source_types": [
+          null
+        ],
+        "native_types": [
+          0
+        ]
+      },
+      {
+        "kind": "action",
+        "opcode": 138,
+        "name": "CAMERA_MOTION_BLUR_FOLLOW",
+        "source_types": [
+          null
+        ],
+        "native_types": [
+          0
+        ]
+      },
+      {
+        "kind": "action",
+        "opcode": 223,
+        "name": "SOUND_ENABLE_ALL",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 226,
+        "name": "AUDIO_RESTORE_VOLUME_ALL_TYPE",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 324,
+        "name": "SOUND_REMOVE_ALL_DISABLED",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 366,
+        "name": "LIVING_WORLD_EXIT_TO_REGION_VIEW",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 367,
+        "name": "TOGGLE_AVI_CAPTURE",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 496,
+        "name": "MAP_EXIT",
+        "source_types": null,
+        "native_types": []
+      },
+      {
+        "kind": "action",
+        "opcode": 594,
+        "name": "SELECT_BUILDER_BUTTON_FLASH",
+        "source_types": [
+          null
+        ],
+        "native_types": [
+          0
+        ]
+      }
+    ],
+    "snapshot_sha256": "4ef0253f71c3f0103f23082acd1aa9cded7dc88a4262087d85a7ce36eb288f9e",
+    "semantics": "Signature shape verified in memory; action behavior not established by table reads"
+  },
+  "source_revision": "33f02e4222f3ac9c284d9b71cf5e7438799988bb",
+  "source_repository": "https://github.com/Open-BFME/Open-BFME-2"
+}

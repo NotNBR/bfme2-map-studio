@@ -1,0 +1,20 @@
+[profiles.master]
+width = 1920
+height = 1080
+crf = 18
+audio_kbps = 192
+preset = "fast"
+
+[profiles.mobile]
+width = 1280
+height = 720
+video_kbps = 900
+audio_kbps = 80
+max_bytes = 10485760
+preset = "slow"
+
+[profiles.under20mb]
+video_kbps = 1850
+audio_kbps = 128
+max_bytes = 20000000
+preset = "slow"

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "id": "ithilien_authoring_demo",
+  "seed": 1729,
+  "description": "Small tool verification pass on a COPY of stock Ithilien. Not the completed large map.",
+  "exclude_rects": [[650, 1930, 1030, 2310], [1940, 300, 2370, 750]],
+  "operations": [
+    {"op": "scatter", "template": "TreeEvergreen03", "count": 24, "rect": [100, 100, 2900, 3400], "spacing": 35, "max_slope": 0.35},
+    {"op": "scatter", "template": "DarkRockGrey02", "count": 10, "rect": [100, 100, 2900, 3400], "spacing": 30, "max_slope": 0.45}
+  ]
+}

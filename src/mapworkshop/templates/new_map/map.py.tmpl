@@ -1,0 +1,54 @@
+"""{{TITLE}}: an empty map, ready to shape. Change it and save; `mw dev {{ID}}`
+rebuilds it and the viewer reloads.
+
+build(b) makes the map: a level grass plane with the player starts, sky and
+lighting. Shape it in the marked places below. Positions are map units, 10
+per terrain cell: x runs east and y north from the playable area's
+south-west corner, as the viewer's marks do. The other projects in maps/
+show complete maps: terrain, rivers, bridges, woods and settlements.
+"""
+import math
+
+import numpy as np
+
+from mapworkshop.mapkit.blank import create, set_heights, set_materials, starts, terrain_cell_sizes
+from mapworkshop.mapkit.weather import add_sky, apply_weather, ini_block
+
+WIDTH, HEIGHT = {{WIDTH}}, {{HEIGHT}}   # playable size in cells
+BORDER = 30                    # cells of unplayable border around it
+GROUND = 150.0                 # ground height
+# Title, description, players and weather are in map.toml (b.project).
+
+# Terrain textures by index; any name from the game's terrain.ini works.
+PALETTE = ['GrassMediumType40']
+
+
+def start_positions(players):
+    """Player starts on a ring around the centre."""
+    cx, cy = WIDTH*5, HEIGHT*5
+    rx, ry = WIDTH*10*.36, HEIGHT*10*.36
+    return [(cx + rx*math.cos(a), cy + ry*math.sin(a))
+            for a in (math.pi/2 + 2*math.pi*i/players for i in range(players))]
+
+
+def build(b):
+    m = create(WIDTH, HEIGHT, BORDER, title=b.project.title, description=b.project.description,
+               player_count=b.project.players)
+    rows, cols = HEIGHT + 2*BORDER, WIDTH + 2*BORDER
+    y, x = (np.mgrid[0:rows, 0:cols] - BORDER)*10.0   # map position of every height sample
+
+    # Heights: one value per sample, e.g. z += 80*np.exp(-((x-3000)**2 + (y-3000)**2)/600**2) for a hill.
+    z = np.full((rows, cols), GROUND)
+    set_heights(m, z)
+
+    # Textures: an index into PALETTE per cell.
+    labels = np.zeros((rows, cols), int)
+    set_materials(m, PALETTE, labels, cell_sizes=terrain_cell_sizes(PALETTE), corner_blends=True)
+
+    # Objects: mapworkshop.mapkit.blank.add_object(m, 'TreeEvergreen01', x, y, angle) for each one.
+    # Water: mapworkshop.mapkit.blank.water_plane(m, 'Lake', 140.0) floods everything below 140.
+
+    starts(m, start_positions(b.project.players))
+    add_sky(m, b.project.weather, WIDTH*10, HEIGHT*10, BORDER*10)
+    apply_weather(m, b.project.weather)   # lighting and weather sound; sun=dict(diffuse=...) sets your own sun
+    b.save(m, ini=ini_block(b.project.weather))

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bfme2-map-workshop"
+version = "0.1.0"
+description = "Build, view and mark Battle for Middle-earth II maps from code, rendered like the game"
+requires-python = ">=3.11"
+license = {file = "LICENSE.txt"}
+dependencies = ["numpy==2.5.3", "Pillow==12.3.0"]
+
+[project.optional-dependencies]
+render = ["moderngl==5.13.0", "glfw==2.10.2"]
+video = ["imageio-ffmpeg==0.6.0"]
+
+[project.scripts]
+mw = "mapworkshop.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["mapworkshop*", "maps*", "misc*"]
+exclude = ["*.tests", "*.tests.*", "*.__pycache__*"]
+
+[tool.setuptools.package-data]
+"mapworkshop.mapkit" = ["data/*.json"]
+"mapworkshop.video" = ["profiles.toml"]
+"mapworkshop.templates" = ["new_map/*.tmpl"]

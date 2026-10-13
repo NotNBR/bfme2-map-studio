@@ -1,0 +1,6 @@
+id = "bramble-hollow"
+title = "Bramble Hollow"
+native_name = "map mp bramble hollow"
+players = 2
+description = "A cozy Shire valley: wooden bridges over a deep brook and creek, a millpond and a little hamlet between two players."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

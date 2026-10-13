@@ -1,0 +1,6 @@
+id = "ithilien-frontier"
+title = "Ithilien Frontier"
+native_name = "map mp bfmexbar ithilien frontier"
+players = 2
+description = "A vast wooded frontier of Gondor, ancient ruins and four river crossings."
+# Built from the stock map "map wor ithilien" (local/game/maps).

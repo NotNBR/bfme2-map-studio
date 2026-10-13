@@ -1,0 +1,77 @@
+# bfme2-map-workshop
+
+Build **Battle for Middle-earth II** maps from code, see them rendered like the
+game while you work, and point at places on them for an AI agent.
+
+![The viewer on the Greywater Marches, with two marks and their panel](docs/images/viewer.jpg)
+
+- **Maps as code.** A map is a folder with a `map.toml` and a `map.py`: heights,
+  textures, water, objects and sky, in Python. Every build is reproducible and
+  kept.
+- **A live viewer.** The game's own textures, models and shaders, rendered on your
+  GPU. It reloads whenever the map is rebuilt, so `mw dev` turns saving a file
+  into seeing the result.
+- **Marks for agents.** Pin, circle, frame or draw around a place, press **Copy
+  for agent** and ask for "a forest in mark 2". The marks come with their map
+  coordinates and the objects inside them.
+- **Into the game.** `mw play` installs the map into BFME2's maps folder and starts
+  the game.
+
+## Start
+
+You need BFME2 (1.06), [Python 3.11+](https://www.python.org/downloads/) and an
+OpenGL 4.3 graphics card.
+
+1. Double-click **`Install.cmd`**. It finds the game, sets everything up and adds
+   **Map Workshop** to the Start menu.
+2. Double-click **`Map Workshop.cmd`** to open the viewer.
+
+```
+mw new "Misty Vale"     start a map
+mw dev misty-vale       build it, open the viewer, rebuild on every save
+mw play misty-vale      play it in BFME2
+```
+
+More in [Getting started](docs/getting-started.md).
+
+## The maps
+
+| Map | Players | |
+|---|---|---|
+| [The Greywater Marches](maps/greywater_marches/README.md) | 6 | Rocky grasslands, mountain passes and branching rivers |
+| [Eight Kingdoms](maps/eight_kingdoms/README.md) | 8 | Eight realms around a ruined citadel, 24 stone bridges |
+| [The Crown of Cardolan](maps/crown_of_cardolan/README.md) | 8 | A fallen Arnorian hill-city, barrows and old woodland |
+| [The Ashen March](maps/ashen_march/README.md) | 2 | A ruined Gondorian watch on the edge of Mordor |
+| [Ithilien Frontier](maps/ithilien_frontier/README.md) | 2 | A wooded Gondorian frontier with four river crossings |
+| [Bramble Hollow](maps/bramble_hollow/README.md) | 2 | A cozy Shire valley: a millpond hamlet and two wooden bridges |
+
+## Documentation
+
+- [Making maps](docs/making-maps.md): projects, builds and the toolkit
+- [The viewer](docs/viewer.md): navigation, live reload, marks for agents
+- [Rendering](docs/rendering.md): headless renders and what is reproduced of the game
+- [Map workflow](docs/map-workflow.md): designing a map from composition to detail
+- [Mapping reference](docs/reference/mapping/README.md): the native map format
+
+Agents start with [AGENTS.md](AGENTS.md).
+
+## Layout
+
+| Folder | |
+|---|---|
+| `maps/` | the map projects |
+| `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `video`, and the `mw` command |
+| `docs/` | guides, reference and research |
+| `misc/` | things made with the workshop, such as the viewer trailer |
+| `local/` | ignored: the environment, the game data, builds, marks and renders |
+
+`mw test` runs the tests and the repository checks.
+
+## License
+
+Code is GPL-3.0-only; see [LICENSE.txt](LICENSE.txt) and the
+[third-party notices](docs/reference/licenses/README.md). The game and its assets
+are not included: you supply your own copy of BFME2, and the workshop only reads
+it. This project is not affiliated with or endorsed by EA or its licensors.
+Built alongside [bfme-workshop](https://github.com/NotNBR/bfme-workshop), with
+help from [openbfme2](https://github.com/Open-BFME/Open-BFME-2).
