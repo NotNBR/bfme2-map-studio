@@ -3,6 +3,8 @@
 Create **Battle for Middle-earth II** maps with Python, preview them in a live
 3D viewer, and mark places on the map for an AI coding agent to edit.
 
+> Built with help from [OpenBFME2](https://github.com/Open-BFME/Open-BFME-2).
+
 ![The viewer on the Greywater Marches, with two marks and their panel](docs/images/viewer.jpg)
 
 - **Maps as code.** A map is a folder with a `map.toml` and a `map.py`: heights,
@@ -90,5 +92,3 @@ Code is GPL-3.0-only; see [LICENSE.txt](LICENSE.txt) and the
 [third-party notices](docs/reference/licenses/README.md). The game and its assets
 are not included: you supply your own copy of BFME2, and Map Studio only reads
 it. This project is not affiliated with or endorsed by EA or its licensors.
-Built alongside [bfme-workshop](https://github.com/NotNBR/bfme-workshop), with
-help from [openbfme2](https://github.com/Open-BFME/Open-BFME-2).
