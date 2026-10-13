@@ -5,7 +5,12 @@ Create **Battle for Middle-earth II** maps with Python, preview them in a live
 
 > Built with help from [OpenBFME2](https://github.com/Open-BFME/Open-BFME-2).
 
-![The viewer on the Greywater Marches, with two marks and their panel](docs/images/viewer.jpg)
+https://github.com/user-attachments/assets/cc486383-fd9f-493d-bc89-0c6fc610a626
+
+Map Studio showcase · 82 seconds · 8 MB preview ·
+[1080p MP4 (19.5 MB)](docs/media/viewer-trailer.mp4)
+
+Explore a map, mark areas for an agent, and see edits reload in the viewer.
 
 - **Maps as code.** A map is a folder with a `map.toml` and a `map.py`: heights,
   textures, water, objects and sky, in Python. Every build is reproducible and
