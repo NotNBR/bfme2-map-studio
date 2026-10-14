@@ -171,4 +171,12 @@ def launch():
     exe = game/'lotrbfme2.exe'
     if not exe.exists():
         raise RuntimeError(f'No lotrbfme2.exe in {game}')
-    return subprocess.Popen([str(exe)], cwd=game)
+    try:
+        return subprocess.Popen([str(exe)], cwd=game)
+    except OSError as error:
+        if getattr(error, 'winerror', None) != 740:
+            raise
+        # The exe asks for administrator rights: start it through the shell,
+        # which shows Windows' elevation prompt.
+        os.startfile(str(exe), cwd=str(game))
+        return None
