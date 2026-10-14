@@ -226,6 +226,10 @@ made on first use from the installed BFME2, which must be version 1.06:
   game, its options and saved games are untouched;
 - `logs/`: the launcher logs.
 
+Every start skips the five seconds the game spends on its EA title logo after
+loading: the runtime's mod folder carries the game's INI that defines that
+image, without it, and the game shows the logo only when the image exists.
+
 The launcher ([native/debugger.py](../src/mapworkshop/native/debugger.py),
 ported from openbfme2's test harness) runs the game as its debugger. That is
 how it starts the game in a skirmish (it finishes the setup the skirmish menu
@@ -263,7 +267,11 @@ the `d3d9.dll` of [DXVK](https://github.com/doitsujin/dxvk), which runs
 Direct3D 9 on Vulkan. The first headless run downloads that DXVK release
 (18 MB) and checks it against its published SHA-256. Its frames match native
 Direct3D 9 to about 2 levels in 255 on average, at Medium and at High with
-water reflections; test games and `--show` keep native Direct3D 9.
+water reflections; test games and `--show` keep native Direct3D 9. A
+`dxvk.conf` there turns DXVK's graphics pipeline libraries off: with them the
+loading screen waited on shader compilation, about 5 seconds per start. Either
+way a skirmish is playable about 12 seconds after the start (Brightwater Fold
+at Medium; most of it the game compressing the terrain textures).
 
 With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
 goes into the game's user maps folder

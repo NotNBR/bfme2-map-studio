@@ -107,8 +107,25 @@ class RuntimeTests(unittest.TestCase):
             self.assertTrue(os.path.samefile(game/'game.dat', headless/'game.dat'))
             self.assertTrue(os.path.samefile(game/'data'/'W3D.big', headless/'data'/'W3D.big'))
             self.assertEqual((headless/'d3d9.dll').read_bytes(), b'dxvk')
+            self.assertIn('enableGraphicsPipelineLibrary = False', (headless/'dxvk.conf').read_text())
             self.assertFalse((headless/'old'/'gone.txt').exists())
             self.assertFalse((game/'d3d9.dll').exists())                 # test games keep native Direct3D 9
+
+    def test_title_logo_is_left_out_of_the_mod_copy_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data, mod = Path(folder)/'game', Path(folder)/'mod'
+            source = data/runtime.TITLE_LOGO_INI
+            source.parent.mkdir(parents=True)
+            text = ('MappedImage Before\n  Texture = a.tga\nEnd\n\nMappedImage TitleScreenLogo\n  Texture = load_w_EA.tga\n'
+                    'End\n\nMappedImage After\n  Texture = b.tga\nEnd\n')
+            source.write_text(text, encoding='latin1')
+            with mock.patch.object(runtime, 'GAME_DATA', data), mock.patch.object(runtime, 'MOD', mod):
+                target = runtime.skip_title_logo()
+            copy = target.read_text(encoding='latin1')
+            self.assertNotIn('TitleScreenLogo', copy)
+            self.assertIn('MappedImage Before', copy)
+            self.assertIn('MappedImage After', copy)
+            self.assertEqual(source.read_text(encoding='latin1'), text)     # the extracted data is untouched
 
     def test_install_copies_the_build_and_replaces_its_cache_entry(self):
         with tempfile.TemporaryDirectory() as folder:

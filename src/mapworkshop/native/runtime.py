@@ -35,7 +35,7 @@ import struct
 import subprocess
 from pathlib import Path
 
-from mapworkshop.config import RUNTIME, game_dir
+from mapworkshop.config import GAME_DATA, RUNTIME, game_dir
 from mapworkshop.native import debugger
 
 GAME, MOD, APPDATA, LOGS = RUNTIME/'game', RUNTIME/'mod', RUNTIME/'appdata', RUNTIME/'logs'
@@ -114,9 +114,37 @@ def prepare(progress=print):
         made += 1
     for folder in (MOD/'maps', LOGS):
         folder.mkdir(parents=True, exist_ok=True)
+    skip_title_logo()
     record.write_text(json.dumps(dict(source=str(source), game_dat=[stat.st_size, int(stat.st_mtime)]), indent=2),
                       encoding='utf-8')
     return GAME
+
+
+TITLE_LOGO_INI = 'data/ini/mappedimages/handcreated/handcreatedmappedimages.ini'
+
+
+def skip_title_logo():
+    """Every start, after loading, the game shows the TitleScreenLogo image
+    for a fixed five seconds (Open-BFME-2 GameClientDrawableTOC.cpp,
+    0x0023958B: `while (beginTime + 5000 > timeGetTime())`), unless no such
+    image is defined. The runtime's mod folder gets a copy of the INI that
+    defines it, from the extracted game data, without that entry: files in
+    -mod take precedence over the game's archives. Only the runtime sees it."""
+    source = GAME_DATA/TITLE_LOGO_INI
+    if not source.exists():
+        return None
+    text = re.sub(r'(?ms)^MappedImage TitleScreenLogo\s*\n.*?^End\s*\n', '', source.read_text(encoding='latin1'))
+    target = MOD/TITLE_LOGO_INI
+    if not target.exists() or target.read_text(encoding='latin1') != text:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding='latin1')
+    return target
+
+
+# DXVK's settings for headless runs. Its graphics pipeline libraries (on by
+# default where the driver has them) made the loading screen wait on shader
+# compilation: 17 s to gameplay instead of 11.7 s (Brightwater Fold, AMD).
+DXVK_CONF = '# mapworkshop.native.runtime\ndxvk.enableGraphicsPipelineLibrary = False\n'
 
 
 def dxvk(progress=print, download=None):
@@ -167,11 +195,15 @@ def prepare_headless(progress=print, download=None):
         except OSError:
             shutil.copy2(path, target)
     for path in list(HEADLESS_GAME.rglob('*')):
-        if path.is_file() and path.relative_to(HEADLESS_GAME) not in wanted and path.name.lower() != 'd3d9.dll':
+        if path.is_file() and path.relative_to(HEADLESS_GAME) not in wanted \
+                and path.name.lower() not in ('d3d9.dll', 'dxvk.conf'):
             path.unlink()          # gone from game/ (or a log DXVK wrote before logging was off)
     target = HEADLESS_GAME/'d3d9.dll'
     if not target.exists() or target.read_bytes() != dll.read_bytes():
         shutil.copy2(dll, target)
+    conf = HEADLESS_GAME/'dxvk.conf'                   # DXVK reads it from the game's working folder
+    if not conf.exists() or conf.read_text(encoding='utf-8') != DXVK_CONF:
+        conf.write_text(DXVK_CONF, encoding='utf-8')
     return HEADLESS_GAME
 
 
