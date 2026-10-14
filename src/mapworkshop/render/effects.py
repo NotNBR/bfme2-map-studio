@@ -430,9 +430,17 @@ def prepare_system(s):
         radial=rng(velocity, 'radial'), normal=rng(velocity, 'normal')), None
 
 
+def _whole_frames(d, n):
+    """n, or the last whole frame where the damping d is negative: such a
+    damping flips the sign every frame, so d^n is only real at whole frames
+    (some systems have VelocityDamping = -0.1 0.5)."""
+    return np.where(d < 0, np.floor(n), n)
+
+
 def _geometric(d, n):
     """sum_{k=0}^{n-1} d^k for damping d and (fractional) frame count n."""
     d = np.asarray(d, np.float64)
+    n = _whole_frames(d, n)
     near = np.abs(1 - d) < 1e-6
     return np.where(near, n, (1 - np.power(d, n))/np.where(near, 1.0, 1 - d))
 
@@ -443,7 +451,7 @@ def motion(p0, v0, damping, gravity, drift, n):
     moves by the velocity plus the drift. Closed form, so n may be fractional."""
     d = np.asarray(damping, np.float64)[:, None]
     g = np.array([0.0, 0.0, gravity])
-    n = np.asarray(n, np.float64)[:, None]
+    n = _whole_frames(d, np.asarray(n, np.float64)[:, None])
     dn = np.power(d, n)
     near = np.abs(1 - d) < 1e-6
     safe = np.where(near, 1.0, 1 - d)

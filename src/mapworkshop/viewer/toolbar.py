@@ -287,7 +287,8 @@ class Toolbar:
         """Draw the open menu, if any, below its button and over everything
         else: call it last. It fits the window, scrolling if it must."""
         if not self.open_menu:
-            self.menu_rect, self.menu_boxes = None, []
+            # Forget the cached menu, so reopening the same one lays it out again.
+            self.menu_rect, self.menu_boxes, self.menu_key = None, [], None
             return
         width, height = size
         if self.open_menu[0] != self.menu_for:

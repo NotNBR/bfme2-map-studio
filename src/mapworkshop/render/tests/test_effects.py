@@ -96,13 +96,20 @@ class MotionTests(unittest.TestCase):
     def test_closed_form_matches_particle_update(self):
         p0, v0 = np.array([[1.0, 2.0, 3.0]]), np.array([[0.5, -0.2, 0.3]])
         drift, gravity = np.array([0.0, 0.1, 0.64]), 0.008
-        for damping in (0.95, 1.0):
+        for damping in (0.95, 1.0, -0.1):
             pos, vel = p0[0].copy(), v0[0].copy()
             for n in range(1, 41):
                 vel = (vel + (0, 0, gravity))*damping
                 pos = pos + vel + drift
                 got = motion(p0, v0, [damping], gravity, drift, [n])[0]
                 np.testing.assert_allclose(got, pos, rtol=1e-9, atol=1e-9)
+
+    def test_negative_damping_holds_the_last_whole_frame(self):
+        p0, v0 = np.zeros((2, 3)), np.ones((2, 3))
+        drift = np.zeros(3)
+        got = motion(p0, v0, [-0.1, -0.1], 0.0, drift, [2.5, 2.0])
+        self.assertTrue(np.isfinite(got).all())
+        np.testing.assert_allclose(got[0], got[1])
 
 
 class SystemTests(unittest.TestCase):
