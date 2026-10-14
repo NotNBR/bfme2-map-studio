@@ -39,6 +39,28 @@ them on, e.g. `create(..., title=b.project.title, description=b.project.descript
 player_count=b.project.players)`, instead of repeating them. Other keys are free
 for the build to read, as Eight Kingdoms does for its size and seed.
 
+### Map properties
+
+A `[properties]` table sets map-wide properties over what the build writes;
+the viewer's **Properties** window writes it
+([mapkit/properties.py](../src/mapworkshop/mapkit/properties.py) lists them):
+
+```toml
+[properties.world]                      # WorldInfo, by the game's key names
+cameraMaxHeight = 25000.0
+[properties.environment]                # the EnvironmentData chunk
+deep_water_alpha = 0.9
+[properties.ini.WaterTransparency]      # fields of a map.ini block
+ReflectionOn = true
+[properties.ini.Weather]
+HardwareFogColor = [120, 130, 150]      # colours [r, g, b], pairs [x, y]
+```
+
+The build applies them after `map.py` has run, to the `.map` and `map.ini` it
+wrote, and lists the values they changed. Fix a value in `map.py` instead
+when the code depends on it (the water level, say), and keep `[properties]`
+for settings the code leaves alone.
+
 ## The build
 
 `map.py` defines `build(b)`. `b` is the build (`mapworkshop.project.Build`):

@@ -255,6 +255,7 @@ def build(project, args=(), progress=print):
             _legacy(module, b)
         if not b.map_file.exists():
             raise RuntimeError(f'{project.id}: the build wrote no {b.map_file.name}')
+        set_properties = _apply_properties(project, b)
     except BaseException as error:
         record.update(status='failed', error=f'{type(error).__name__}: {error}', seconds=round(time.time() - started, 1))
         (work/'build.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
@@ -272,11 +273,92 @@ def build(project, args=(), progress=print):
     _prune(project)
     remember(project)
     progress(f'Built {project.title} in {record["seconds"]:.0f} s: {project.build_dir}')
+    if set_properties:
+        progress('Map properties from map.toml over the build\'s own:')
+        for line in set_properties:
+            progress('  ' + line)
     if since:
         progress(f'Changes since the build of {since} (`mw diff {project.id}`):')
     for line in changes or ():
         progress('  ' + line)
     return project.build_dir
+
+
+def _apply_properties(project, b):
+    """Set map.toml's [properties] (mapkit.properties) on the built map and its
+    map.ini; returns what they changed, as lines."""
+    from mapworkshop.formats.map import Map
+    from mapworkshop.mapkit import properties
+    overrides = properties.flatten(project.config.get('properties'))
+    if not overrides:
+        return []
+    m = Map(b.map_file.read_bytes())
+    ini_path = b.out/'map.ini'
+    ini = ini_path.read_text(encoding='ascii') if ini_path.exists() else ''
+    ini, changes = properties.apply(m, ini, overrides)
+    b.map_file.write_bytes(m.encode())
+    ini_path.write_text(ini, encoding='ascii')
+    return changes
+
+
+PROPERTIES_NOTE = "# Map properties set in the viewer's Properties dialog; the build applies them over the map's own."
+
+
+def _toml(value):
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, (list, tuple)):
+        return '[' + ', '.join(_toml(v) for v in value) + ']'
+    if isinstance(value, float):
+        text = repr(value)
+        return text if any(c in text for c in '.en') else text + '.0'
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def save_properties(project, overrides, settings=None):
+    """Write map-property overrides ({(where, key): value}, mapkit.properties)
+    as map.toml's [properties] tables, at its end, and top-level settings
+    ({'title': ...}) in place, keeping the rest of the file and its comments.
+    Returns the project as read back from the new file."""
+    import re
+    from mapworkshop.mapkit import properties
+    path = project.folder/'map.toml'
+    kept, skip = [], False
+    for line in path.read_text(encoding='utf-8').splitlines():
+        s = line.strip()
+        if s.startswith('['):
+            skip = s.strip('[]').split('.')[0].strip().strip('"') == 'properties'
+        if not skip and s != PROPERTIES_NOTE:
+            kept.append(line)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    first_table = next((i for i, line in enumerate(kept) if line.strip().startswith('[')), len(kept))
+    for key, value in (settings or {}).items():
+        pattern = re.compile(rf'^(\s*{re.escape(key)}\s*=\s*)("(?:[^"\\]|\\.)*"|\'[^\']*\'|[^#\s]+)(.*)$')
+        for i in range(first_table):
+            found = pattern.match(kept[i])
+            if found:
+                kept[i] = found.group(1) + _toml(value) + found.group(3)
+                break
+        else:
+            kept.insert(first_table, f'{key} = {_toml(value)}')
+            first_table += 1
+    tables = properties.nest(overrides)
+    if tables:
+        kept += ['', PROPERTIES_NOTE]
+        for section in [s for s in tables if s != 'ini'] + (['ini'] if 'ini' in tables else []):
+            groups = [(f'ini.{block}', fields) for block, fields in tables['ini'].items()] if section == 'ini' \
+                else [(section, tables[section])]
+            for name, fields in groups:
+                kept.append(f'[properties.{name}]')
+                kept += [f'{key} = {_toml(value)}' for key, value in fields.items()]
+    text = '\n'.join(kept) + '\n'
+    config = tomllib.loads(text)
+    properties.flatten(config.get('properties'))      # refuse anything the build would refuse
+    path.write_text(text, encoding='utf-8', newline='\n')
+    return Project(project.folder, config)
 
 
 def _changes(project, work):

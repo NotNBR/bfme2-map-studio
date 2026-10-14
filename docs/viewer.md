@@ -67,6 +67,15 @@ capture. The default CLI and viewer always use the local calculation.
   folder** opens the current project's source folder; **Browse...** opens any
   `.map` file. The menu opens at the current map; a menu taller than the window
   scrolls with the wheel or its arrow strips.
+- **Properties** opens a window with the map's map-wide settings, in tabs:
+  the project's title, description and weather preset; the camera limits;
+  WorldInfo flags; the environment (water alpha, macro and cloud textures);
+  water reflections; fog, clouds, snow and lightning. Each field shows the
+  map's value, or in grey the game's default where `map.ini` leaves it out.
+  For a project, **Save and build** writes the changed fields into `map.toml`
+  as [properties](making-maps.md#map-properties) and rebuilds; a field set
+  there is marked `map.toml` and has a **Reset** button that hands it back to
+  `map.py`. One of the game's maps, or a loose `.map` file, is shown read-only.
 - **Build** rebuilds the current project in the background, also while the
   first load is still running or after it failed. The status bar shows the
   build's progress, and the scene reloads when the build is done. A failed

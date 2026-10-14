@@ -24,6 +24,10 @@ Keyboard
 
 Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
+  Properties the map's map-wide settings in a window: camera, WorldInfo flags,
+             environment, water and weather (mapkit.properties). For a project,
+             Save and build writes them into map.toml and rebuilds; a game map
+             is shown read-only
   Build      rebuild the current project; the scene reloads when it is done and
              a failed build shows its error in the status bar
   Test In-Game  start BFME2 straight in a skirmish on the current project (mw play)
@@ -237,7 +241,7 @@ def main(argv=None):
     out_dir = RENDERS
     watched = [source, source.parent/'map.ini']
     toolbar = Toolbar(ctx, [
-        dict(kind='dropdown', id='map', label='Map'),
+        dict(kind='dropdown', id='map', label='Map'), dict(kind='button', id='properties', label='Properties'),
         dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
         dict(kind='gap'),
         dict(kind='dropdown', id='lod', label='Detail'),
@@ -463,6 +467,8 @@ def main(argv=None):
                 start_build()
             elif action == 'play':
                 play()
+            elif action == 'properties':
+                open_properties()
             elif scene['renderer'] is None:
                 return
             elif action == 'delete':
@@ -510,6 +516,23 @@ def main(argv=None):
                     print('\n'.join(lines[start:]))
                 set_status('built - reloading' + (f': {changes[0][:110]}' if changes else '...'), 6 if changes else 3)
         threading.Thread(target=work, daemon=True).start()
+
+    def open_properties():
+        """The Properties window (viewer.properties) for the map shown: editable
+        for a project, read-only for a game map. Saving rebuilds the project."""
+        from mapworkshop.viewer.properties import PropertiesDialog
+        dialog = state.get('properties')
+        if dialog is not None and dialog.is_open:
+            dialog.lift()
+            return
+        r = scene['renderer']
+        assets = r.assets if r is not None else GameAssets()
+        ini_texts = dict(Weather=assets.ini_text('weather.ini'), WaterTransparency=assets.ini_text('water.ini'))
+
+        def saved(updated):
+            state['properties_saved'] = updated
+        state['properties'] = PropertiesDialog(state['source'], owners.get(state['source']), ini_texts, saved)
+        state['properties'].open()
 
     def play():
         """Test In-Game: BFME2 straight in a skirmish on the current project
@@ -1187,6 +1210,12 @@ def main(argv=None):
             if state['reload']:
                 state['reload'] = False
                 start_load()
+            if state.get('properties_saved'):
+                # The Properties window wrote map.toml: rebuild with it.
+                updated = state.pop('properties_saved')
+                owners[updated.map_file.resolve()] = updated
+                set_status('map properties saved to map.toml - building', 4)
+                start_build()
             advance_load()
             advance_walkability()
             now = time.perf_counter()
