@@ -289,7 +289,9 @@ def create(width=840,height=950,border=30,title='The Ashen March',elevation=100,
     add_section(m,'HeightMapData',5,dict(border=border,borders=[(width,height)],
                                          elevations=np.full((h,w),round(elevation/.0390625))))
     add_chunk(m,'BlendTileData',18,b'');set_materials(m,['DirtMordor04'],np.zeros((h,w),dtype='u2'))
-    add_section(m,'WorldInfo',1,[('cameraMaxHeight',2,20000.),('cameraPitchAngle',2,37.5),('cameraYawAngle',2,0.),
+    # cameraMaxHeight 300, as every stock map: the game's camera starts at this
+    # height, and far higher (20,000) it sees nothing but black past its draw range.
+    add_section(m,'WorldInfo',1,[('cameraMaxHeight',2,300.),('cameraPitchAngle',2,37.5),('cameraYawAngle',2,0.),
             ('cameraScrollSpeedScalar',2,1.),('isLivingWorldScriptHolder',0,0),('weather',1,0),
             ('compression',1,0),('mapName',3,title),('mapDescription',3,description),
             ('cameraGroundMinHeight',2,0.),('cameraGroundMaxHeight',2,1400.),('isScenarioMultiplayer',0,0),

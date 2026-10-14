@@ -70,7 +70,7 @@ class MapDiffTests(unittest.TestCase):
                         field_of_view=.75, unknown=0.)]
         sections.write(after, 'NamedCameras', cameras)
         text = '\n'.join(lines(compare(before, after)))
-        self.assertIn("WorldInfo: cameraMaxHeight: 20000 -> 30000; mapDescription: 'A vale.' -> 'A wet vale.'", text)
+        self.assertIn("WorldInfo: cameraMaxHeight: 300 -> 30000; mapDescription: 'A vale.' -> 'A wet vale.'", text)
         self.assertIn("StandingWaterAreas: ['Lake'].water_height: 140 -> 150", text)
         self.assertIn('NamedCameras: [0]: (none) -> ', text)
 
