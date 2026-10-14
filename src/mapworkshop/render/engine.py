@@ -21,6 +21,8 @@ from mapworkshop.render.terrain import TerrainData
 from mapworkshop.render.w3d import ModelCache, chunks, fx_constants
 
 ARRAY_SIZE = 512
+# WaterShader.fx techniques with a GLSL port: the water shaders' `technique` uniform.
+WATER_TECHNIQUES = {'BumpSpecular': 0, 'BumpSpecular_M': 1, 'PCA_L': 2}
 SKIP_TEMPLATES = ('*waypoints', 'amb_', 'animalwanderpoint', 'waterripplespawn')
 
 
@@ -750,7 +752,9 @@ class MapRenderer:
                 area.get('shader') or '', self.water_level, lambda n: self.assets.model_key(n) is not None)[0]
             self.report['water']['areas'][-1]['technique'] = fx.get('__technique_name__')
             name = fx.get('__technique_name__')
-            if name not in ('BumpSpecular', 'BumpSpecular_M'):
+            technique = WATER_TECHNIQUES.get(name)
+            if technique is None:
+                technique = 0
                 self.report['water']['areas'][-1]['approximated'] = 'drawn with the BumpSpecular port'
             vec = lambda name, default: tuple(fx.get(name, default))
             one = lambda name, default: float(fx.get(name, (default,))[0])
@@ -782,10 +786,12 @@ class MapRenderer:
                              wave_scale_uv=vec('WaveUVScale', (7.0, 7.0))[:2],
                              wind_angle=one('WindAngle', 0.0),
                              scroll_speed=one('WindSpeed', 0.02)+one('WaveSpeed', 0.0),
+                             bump_speed=one('WindSpeed', 0.02)+one('BumpSpeed', 0.0),
                              wave_angle=one('WaveAngle', 0.2),
                              bump_scale=one('BumpScale', 0.2),
-                             technique=int(name == 'BumpSpecular_M'),
-                             diffuse=tuple(2*dimming*diffuse[i] for i in range(3)),
+                             technique=technique,
+                             # PCA_L's preshader leaves out the factor 2.
+                             diffuse=tuple((1 if technique == 2 else 2)*dimming*diffuse[i] for i in range(3)),
                              light0_dir=tuple(lights[0][0]),
                              light0_color=tuple((2.0 if self.overbright else 1.0)*c for c in lights[0][1]),
                              specular_dir=specular_dir,

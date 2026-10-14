@@ -1264,7 +1264,9 @@ def build(b):
     add_sky(m, b.project.weather, WIDTH*10, HEIGHT*10, BORDER*10)
     apply_weather(m, b.project.weather, sun=SUN, fill=FILL)
     walking = fairness(t, s.solids, sites)
-    ini = ini_block(b.project.weather)+f'WaterTransparency\n  ReflectionPlaneZ = {WATER:g}\n  ReflectionOn = No\nEnd\n'
+    # Reflections on: at WaterLOD High the river's model (wtr_Riv03) takes 80% of
+    # its colour from the reflection, which is black without them.
+    ini = ini_block(b.project.weather)+f'WaterTransparency\n  ReflectionPlaneZ = {WATER:g}\n  ReflectionOn = Yes\nEnd\n'
     b.save(m, ini=ini)
     b.report.update(seed=SEED, starts=STARTS, fords=t['fords'], sites=sites, gollum=gollum,
                     sounds=[e[0] for e in emitters], walking=walking, layers=dict(s.counts),

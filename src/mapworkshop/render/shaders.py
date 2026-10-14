@@ -28,7 +28,9 @@ normal. BumpSpecular: env x 2 x Dimming x MaterialDiffuse x N.L plus Blinn
 specular, x light colour, lerped to the (black) reflection by
 ReflectionStrength. BumpSpecular_M: env x 2 x Dimming x MaterialDiffuse x
 light colour x (N.L + N.H^exp). Both add the wave product; alpha from water
-depth: clamp(depth / (DWA^2 x MaxAlphaDepth)) x DWA.
+depth: clamp(depth / (DWA^2 x MaxAlphaDepth)) x DWA. PCA_L (vs 140, ps 141,
+the Low water): env offset by one bump sample (texbem) x Dimming x
+MaterialDiffuse, plus 0.1 x one wave sample; unlit, same alpha.
 
 Objects (OBJECT_VS/OBJECT_FS, `technique` uniform). The light environment
 is the object ambient plus the object lights LightEnvironmentClass::Add_Light
@@ -321,10 +323,11 @@ uniform float wave_angle;
 uniform vec2 bump_scale_uv;
 uniform vec2 env_scale_uv;
 uniform vec2 wave_scale_uv;
-uniform int technique;              // 0 BumpSpecular, 1 BumpSpecular_M
+uniform int technique;              // 0 BumpSpecular, 1 BumpSpecular_M, 2 PCA_L
 uniform float time;                 // Sas Time, seconds
 uniform float scroll_speed;         // WindSpeed + WaveSpeed
-in vec4 in_vertex;                  // x, y, water z, terrain height below
+uniform float bump_speed;           // WindSpeed + BumpSpeed (PCA_L's bump frame)
+in vec4 in_vertex;                 // x, y, water z, terrain height below
 out vec3 v_world;
 out float v_alpha;
 out vec4 v_bump;                    // oT0: xy and the swizzled second sample
@@ -346,12 +349,22 @@ void main() {
     vec2 pb = p + time * scroll_speed * vec2(cb, sb);
     vec2 ra = vec2(pa.x*ca + pa.y*sa, pa.y*ca - pa.x*sa);
     vec2 rb = vec2(pb.x*cb + pb.y*sb, pb.y*cb - pb.x*sb);
-    // BumpSpecular stores the second frame swizzled (oT0.zw = rb.yx x scale.xy,
-    // read back as .wz); BumpSpecular_M passes it straight (oT1, oT5).
-    v_bump = technique == 1 ? vec4(ra * bump_scale_uv, (rb * bump_scale_uv).yx)
-                            : vec4(ra * bump_scale_uv, rb.y * bump_scale_uv.x, rb.x * bump_scale_uv.y);
-    v_wave = technique == 1 ? vec4(ra * wave_scale_uv, (rb * wave_scale_uv).yx)
-                            : vec4(ra * wave_scale_uv, rb.y * wave_scale_uv.x, rb.x * wave_scale_uv.y);
+    if (technique == 2) {
+        // PCA_L (vs object 140): one frame, at WindAngle - WaveAngle/2. The
+        // bump scrolls by Time x (WindSpeed + BumpSpeed) and the wave by
+        // Time x (WindSpeed + WaveSpeed), both before the rotation.
+        vec2 pc = p + time * bump_speed * vec2(ca, sa);
+        v_bump = vec4(vec2(pc.x*ca + pc.y*sa, pc.y*ca - pc.x*sa) * bump_scale_uv, 0.0, 0.0);
+        v_wave = vec4(ra * wave_scale_uv, 0.0, 0.0);
+    } else {
+        // BumpSpecular stores the second frame swizzled (oT0.zw = rb.yx x scale.xy,
+        // read back as .wz); BumpSpecular_M passes it straight (oT1, oT5).
+        v_bump = technique == 1 ? vec4(ra * bump_scale_uv, (rb * bump_scale_uv).yx)
+                                : vec4(ra * bump_scale_uv, rb.y * bump_scale_uv.x, rb.x * bump_scale_uv.y);
+        v_wave = technique == 1 ? vec4(ra * wave_scale_uv, (rb * wave_scale_uv).yx)
+                                : vec4(ra * wave_scale_uv, rb.y * wave_scale_uv.x, rb.x * wave_scale_uv.y);
+    }
+    // PCA_L adds the World z axis' xy (0 for level water) before the scale.
     v_env = p * env_scale_uv;
     gl_Position = view_projection * vec4(v_world, 1.0);
 }
@@ -362,8 +375,8 @@ WATER_FS = """
 uniform sampler2D bump_tex;
 uniform sampler2D env_tex;
 uniform sampler2D wave_tex;
-uniform int technique;              // 0 BumpSpecular, 1 BumpSpecular_M
-uniform vec3 diffuse;               // 2 x DimmingFactor x MaterialColorDiffuse
+uniform int technique;              // 0 BumpSpecular, 1 BumpSpecular_M, 2 PCA_L
+uniform vec3 diffuse;               // 2 x DimmingFactor x MaterialColorDiffuse (PCA_L: 1 x)
 uniform vec3 eye;                   // ViewI translation
 uniform vec3 light0_dir;            // DirectionalLight[0].Direction, towards the light
 uniform vec3 light0_color;          // DirectionalLight[0].Color (x2 when overbright)
@@ -430,6 +443,21 @@ vec4 walk_tint(vec4 c) {
 
 void main() {
     if (show_border == 0 && (any(lessThan(v_world.xy, vec2(0.0))) || any(greaterThan(v_world.xy, playable)))) discard;
+    if (technique == 2) {
+        // PCA_L (ps object 141, ps_1_1): texbem moves the env lookup by
+        // BUMPENVMAT (0.05 on the diagonal) x the bump texel's red and green,
+        // unsigned as the texture stores them; colour = env x oD0 + 0.1 x one
+        // wave sample. oD0 is DimmingFactor x MaterialColorDiffuse (times the
+        // World z axis' z^4, 1 for level water). No lights, no reflection and
+        // no fog: the pass sets FogEnable false and the shader has none.
+        vec2 du = texture(bump_tex, v_bump.xy).rg * 0.05;
+        vec3 cp = texture(env_tex, v_env + du).rgb * clamp(diffuse, 0.0, 1.0);
+        if (has_wave != 0)
+            cp += 0.1 * texture(wave_tex, v_wave.xy).rgb;
+        if (use_shadows == 2) cp *= mix(shadow_color, vec3(1.0), lit_fraction(v_world));
+        frag = walk_tint(vec4(clamp(cp, 0.0, 1.0), v_alpha));
+        return;
+    }
     vec3 b = texture(bump_tex, v_bump.wz).rgb + texture(bump_tex, v_bump.xy).rgb;
     vec3 n = 2.0*b + vec3(0.0, 0.0, 1.0) - 2.0;     // + oT7, the world up axis
     n.xy *= bump_scale;

@@ -183,8 +183,12 @@ switches the terrain between the High and Medium techniques, as
   reflection texture by ReflectionStrength. With `ReflectionOn = No` (the
   retail default) the `WaterDraw.ReflectionTexture` callback binds a black
   texture. Lights are `Sas.DirectionalLight[0..1]`: the object lights, towards
-  the light, colours doubled under overbright. Other techniques (for example
-  `PCA_L` at Low) are drawn with the BumpSpecular port and flagged
+  the light, colours doubled under overbright. `PCA_L` (Low) is unlit and
+  takes no reflection, despite its name: the env texture, its lookup moved by
+  0.05 x one bump sample (texbem), x DimmingFactor x MaterialDiffuse, plus 0.1
+  x one wave sample, in one frame at WindAngle - WaveAngle/2; the pass has
+  fog off. Other techniques (`PCA_M`, `PCA`, `PCA_U`, which read the engine's
+  `PCAWater` bases) are drawn with the BumpSpecular port and flagged
   `approximated` in the render report.
 - Underwater terrain: as in `getStaticDiffuse` (0x0006B4CC), the terrain
   vertex colour under a standing-water area is multiplied by the area's depth
@@ -337,8 +341,8 @@ Animation (the viewer's clock, or `render --time SECONDS` for stills; time 0 by 
 
 Open questions, approximated for now:
 
-- Water techniques other than BumpSpecular and BumpSpecular_M (PCA, the
-  default technique) are not ported.
+- Water techniques other than BumpSpecular, BumpSpecular_M and PCA_L (the
+  other PCA techniques, the default technique) are not ported.
 - Terrain: the composited tile textures are 16-bit (format 25) or DXT1 in
   game; the renderer samples the source textures at the same texel density
   without that quantization. What the composited normal texture holds for
@@ -357,13 +361,18 @@ Open questions, approximated for now:
 - Shroud, point lights, tree fading near units and push-aside are not drawn.
 - ShaderMaterialReplacement at High and normalmapped.fx `Default` (High) are
   not ported (see Objects above).
-- Water at High looks very dark on Greywater, and that follows the matched
-  code: `wtr_Riv03` lerps 80% (ReflectionStrength 0.8) towards
-  `WaterDraw.ReflectionTexture`, which is a black texture unless
-  GlobalData+0x5E (set by GameLOD ApplyPreset), the water object and the
-  map's WaterTransparency `ReflectionOn` are all set (callback 0x00080168);
-  the map has `ReflectionOn = No`. No native High capture exists to confirm
-  it. `ShowSoftWaterEdge` (GlobalData+0x84) is only read by
+- Water reflections are not drawn: the reflection texture is always black.
+  At High, `wtr_Riv03` lerps 80% (ReflectionStrength 0.8) from a dark teal
+  surface towards `WaterDraw.ReflectionTexture` (the lerp read from
+  PSBumpSpecular), so its water is nearly black without one. The game binds
+  black too unless GlobalData+0x5E (ApplyPreset sets it to WaterLOD >= High),
+  the water object (always created by W3DTerrainVisual::init) and
+  WaterTransparency `ReflectionOn` (offset 0x50 in its field table) are all
+  set (callback 0x00080168; the reflection camera, 0x0007FD89, is added under
+  the same two settings), so maps with `ReflectionOn = No` (Greywater, Bramble
+  Hollow) have near-black water at High in game as well. Brightwater Fold
+  sets `ReflectionOn = Yes`, whose High water these previews still draw black.
+  `ShowSoftWaterEdge` (GlobalData+0x84) is only read by
   W3DShaderManager::startRenderToTexture (0x00075BD8), to keep destination
   alpha during screen-filter passes; standing water's shoreline fade is the
   per-vertex depth alpha. Greywater has no river areas (empty `RiverAreas`).
