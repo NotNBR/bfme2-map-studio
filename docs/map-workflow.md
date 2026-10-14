@@ -352,7 +352,7 @@ local/workspaces/<name>/    hand-edit workspaces for a single .map file
 | Asset placement | `blank.add_object` with names from the game's INIs | Check template names and real model footprints |
 | Water, roads, starts, sky | `formats.water`, `mapkit.roads`, `blank.starts`, `weather.add_sky` | Scripts decode, but opcode semantics remain incomplete |
 | Builds and review | `mw build`, `mw dev`, the viewer, `mw render`, `mw graphics` | The viewer is a preview; check gameplay in the game |
-| Playing | `mw play` starts BFME2 straight in a skirmish on the map (bfme-workshop's runtime); `--normal-game` installs into the game's user maps instead | Online play is untested |
+| Playing | `mw play` starts BFME2 straight in a skirmish on the map (an isolated copy of the game in `local/runtime`); `--normal-game` installs into the game's user maps instead; `mw capture` takes screenshots in the game | Online play is untested |
 | Hand edits of one file | `mw workspace inspect, checkout, apply, checkpoint, diff, handoff` | Recipes change a copy; keep the evidence with checkpoints |
 | Format and rule coverage | `mapkit.checks` and the mapping reference | A successful decode does not establish every field's meaning |
 

@@ -85,7 +85,7 @@ Agents start with [AGENTS.md](AGENTS.md).
 | Folder | |
 |---|---|
 | `maps/` | the map projects |
-| `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `video`, and the `mw` command |
+| `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `video`, `native` (the game runtime: test games, the pathfinding grid, screenshots) and the `mw` command |
 | `docs/` | guides, reference and research |
 | `misc/` | things made with the workshop, such as the viewer trailer |
 | `local/` | ignored: the environment, the game data, builds, marks and renders |

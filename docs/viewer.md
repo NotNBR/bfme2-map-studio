@@ -56,8 +56,8 @@ aid, not proof that a particular unit can follow a route.
 
 `mw walkable <map> --compare` compares against an existing native capture
 without launching anything. For explicit verification, `--native` reads and
-reports the game's grid from a short skirmish (about a minute, through
-[bfme-workshop](https://github.com/NotNBR/bfme-workshop)'s native runtime).
+reports the game's grid from a short skirmish (about 15 seconds, on the game
+runtime described under [testing in-game](making-maps.md#testing-in-game)).
 Native captures are tied to the map file's hash; a changed build needs a new
 capture. The default CLI and viewer always use the local calculation.
 
@@ -84,9 +84,9 @@ capture. The default CLI and viewer always use the local calculation.
 - **Test In-Game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
   ([making maps](making-maps.md#testing-in-game)). The status bar says when
-  the skirmish is playable and when the game has closed. Without
-  bfme-workshop, or for one of the game's own maps, it starts the normal game
-  at its menu.
+  the skirmish is playable and when the game has closed. When the game is
+  not BFME2 1.06, or for one of the game's own maps, it starts the normal
+  game at its menu.
 - **Detail**: Low, Medium or High, as `--lod`.
 - **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**, **Haze**,
   **Rain**, **Snow** and **Dusk** apply the

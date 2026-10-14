@@ -165,28 +165,52 @@ Python process:
 ## Testing in-game
 
 `mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a
-skirmish on the current build, without going through the menus. It uses
-[bfme-workshop](https://github.com/NotNBR/bfme-workshop)'s isolated runtime
-(a checkout next to this one, or `mw config bfme_workshop <folder>`), as
-`mw walkable --native` does: the build is copied into that runtime's mod and
-registered in its map cache, and the game opens in a 1600 x 1200 window, you
-against an easy AI, with bfme-workshop's strategic camera. The runtime has its
-own profile, so your normal game, its options and saved games are untouched,
-and it needs no administrator rights.
+skirmish on the current build, without going through the menus: the game opens
+in a 1600 x 1200 window, you against an easy AI, at Medium detail
+(`--graphics Low|Medium|High|UltraHigh` for another). It runs an isolated copy
+of the game in `local/runtime/` ([native/runtime.py](../src/mapworkshop/native/runtime.py)),
+made on first use from the installed BFME2, which must be version 1.06:
 
-The launcher runs the game as its debugger, so it learns from the game itself,
-not from a timer, when the skirmish is ready: a breakpoint at the end of the
-game's new-game pass, after the map is loaded and the players placed, reports
-it. `mw play` returns at that moment ("playable in BFME2, 13 s after the
-start"), or with the launcher's last line if the game ends before then; the
-viewer's status bar shows the start, then "playable", then "closed" when the
-game ends. Retail BFME2 ignores its window's close button and Alt+F4; the
-launcher catches that close request and ends the game, so closing the window
-works. The launcher log, with each of these events, is in
-`local/cache/play/<map>.log`.
+- `game/`: the install's archives and movies as hard links (no extra disk), the
+  rest (about 30 MB) as copies, so nothing a run writes reaches the install;
+- `mod/maps/`: the builds installed for test games and their map-cache entries
+  (the game starts with `-mod` on this folder);
+- `appdata/`: the profile the game is given instead of yours, so your normal
+  game, its options and saved games are untouched;
+- `logs/`: the launcher logs.
 
-Without a prepared bfme-workshop runtime, or with `mw play --normal-game`, the
-build goes into the game's user maps folder
+The launcher ([native/debugger.py](../src/mapworkshop/native/debugger.py),
+ported from openbfme2's test harness) runs the game as its debugger. That is
+how it starts the game in a skirmish (it finishes the setup the skirmish menu
+would do), keeps it on the sandbox profile and away from focus stalls, and
+learns from the game itself, not from a timer, when the skirmish is ready: a
+breakpoint at the end of the game's new-game pass, after the map is loaded and
+the players placed, reports it. `mw play` returns at that moment ("playable in
+BFME2, 12 s after the start"), or with the launcher's last line if the game
+ends before then; the viewer's status bar shows the start, then "playable",
+then "closed" when the game ends. Retail BFME2 ignores its window's close
+button and Alt+F4; the launcher catches that close request and ends the game,
+so closing the window works. The launcher log is
+`local/runtime/logs/play-<map>.log`. It needs no administrator rights.
+
+The same runtime serves two other tools, each ending the game as soon as it
+has what it came for:
+
+- `mw walkable <map> --native` reads the game's pathfinding grid at logic
+  frame 10 (about 15 seconds; see [the viewer](viewer.md#walkable-areas)).
+- `mw capture <map> --shot NAME X Y HEIGHT [--shot ...] [--graphics High]`
+  saves screenshots rendered by the game, HUD included, into
+  `local/renders/game/<map>/` (about 20 seconds for a few shots). The camera
+  looks at the ground at X, Y from HEIGHT (the game's own camera; 300 is its
+  usual zoom). A small DLL loaded into the game
+  ([native/capture/capture.cpp](../src/mapworkshop/native/capture/capture.cpp),
+  committed built; `python -m mapworkshop.native.capture build` rebuilds it
+  with Visual C++ .NET 2003, setting `msvc71`) places the camera and copies
+  the frame. Use it for what the renderer does not show, such as the water
+  reflections at High.
+
+With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
+goes into the game's user maps folder
 (`%APPDATA%\My Battle for Middle-earth(tm) II Files\Maps`) and BFME2 starts at
 its menu; pick the map under Skirmish. `mw build --install` copies it there
 too.

@@ -536,8 +536,8 @@ def main(argv=None):
 
     def play():
         """Test In-Game: BFME2 straight in a skirmish on the current project
-        (native.play), or, without bfme-workshop or for a game map, the
-        normal game at its menu."""
+        (native.play), or, when that cannot run (no BFME2 1.06) or for a game
+        map, the normal game at its menu."""
         owner = owners.get(state['source'])
 
         def normal_game(note=''):
@@ -550,9 +550,9 @@ def main(argv=None):
             try:
                 from mapworkshop import native
                 try:
-                    native.workshop()
-                except RuntimeError:
-                    normal_game('no bfme-workshop runtime: ')
+                    native.ready(progress=lambda line: set_status(line[:140], 600))
+                except RuntimeError as error:
+                    normal_game(f'{error}: ')
                     return
                 # Each step holds the status until the next: the game says
                 # when the skirmish is playable and when it has closed.

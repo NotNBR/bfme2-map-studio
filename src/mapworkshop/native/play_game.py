@@ -1,28 +1,26 @@
-"""Start a skirmish on a map that you play, say when it is playable, and let
-its window close.
+"""Start a skirmish on a project that you play, say when it is playable, and
+let its window close.
 
-Run by mapworkshop.native.play under bfme-workshop's Python; it imports
-bfme-workshop's packages, never mapworkshop's:
+    python -m mapworkshop.native.play_game PROJECT LOG [--graphics Medium]
 
-  play_game.py MAP_ID LOG               e.g. 'maps\\map mp bridge lab.map'
-
-Runs host.launch on the map (--window --strategic): you against an easy AI.
-The launcher debugs the game, so breakpoints in it report what the game does,
-as it does it (no polling):
+Started by mapworkshop.native.play, which reads its output; it stays running
+as the game's debugger until the game closes. Being the debugger, it learns
+what the game does from breakpoints, as it happens (no polling):
 
 - loaded: the new-game pass (GameLogic 0x248558, Open-BFME-2
   GameLogicInit.cpp) has loaded the map, placed the players and re-enabled
   the window's close item, in skirmish mode. Its next frame is gameplay.
 - closed: the game has exited, by its window, a crash or the menus.
 
-Each is a line `mapworkshop: <event> <seconds since start>` on the output,
-which goes both to the log and to the caller (mapworkshop.native reads it).
+Each is a line `mapworkshop: <event> <seconds since start>`, written both to
+the log and to the caller.
 
 Retail BFME2's window procedure ignores WM_CLOSE (WinMain.cpp: the case just
-returns 0), so neither the window's X nor Alt+F4, which the system turns into
-WM_CLOSE, ends the game. A breakpoint in that procedure sees the message: at
-WM_CLOSE the game is terminated, which the launcher takes as its normal exit.
+returns 0), so neither the window's X nor Alt+F4 ends the game. A breakpoint
+in that procedure sees the message: at WM_CLOSE the game is ended.
 """
+import argparse
+import json
 import sys
 
 # In WndProc (RVA 0x179F), `cmp ebx, 0x10` at 0x198A starts the arm for
@@ -31,12 +29,10 @@ import sys
 CLOSE_ARM = 0x198A
 WM_CLOSE = 0x10
 # The new-game pass destroying its close-item guard (0x0023C85E), after its
-# last load stage: the map is loaded. The pass also loads the menu's shell
-# map, so only the skirmish's counts.
+# last load stage. The pass also loads the menu's shell map, so only the
+# skirmish's counts.
 NEW_GAME_DONE = 0x248767
-SKIRMISH = 2                    # GameLogic's mode (+0x110) in a skirmish
-
-map_id, log = sys.argv[1], sys.argv[2]
+WEEK = 7*24*3600
 
 
 class Tee:
@@ -62,59 +58,43 @@ class Tee:
         pass
 
 
-sys.stdout = sys.stderr = Tee(log, sys.__stdout__)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('project')
+    parser.add_argument('log')
+    parser.add_argument('--graphics', default='Medium')
+    args = parser.parse_args(argv)
+    sys.stdout = sys.stderr = Tee(args.log, sys.__stdout__)
+    from mapworkshop import project
+    from mapworkshop.native import debugger, runtime
 
+    def event(game, name):
+        print(f'mapworkshop: {name} {game.seconds()}', flush=True)
 
-def event(game, name):
-    print(f'mapworkshop: {name} {game.seconds()}', flush=True)
+    def close(game, tid, ctx):
+        if ctx.ebx == WM_CLOSE:
+            print('mapworkshop: the window was closed; ending the game', flush=True)
+            game.stop('closed')
+        return True
 
-
-def hooked(smoke):
-    original = smoke.Game
-    smoke.RVA['mapworkshopWindowClose'] = CLOSE_ARM
-    smoke.RVA['mapworkshopNewGameDone'] = NEW_GAME_DONE
-
-    class PlayGame(original):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.on('mapworkshopWindowClose', self.close)
-            self.on('mapworkshopNewGameDone', self.loaded)
-
-        def run(self, *args, **kwargs):
-            result = super().run(*args, **kwargs)
-            if self.t0 is not None:
-                event(self, 'closed')
-            return result
-
-        @staticmethod
-        def close(game, tid, ctx):
-            if ctx.ebx == WM_CLOSE:
-                print('mapworkshop: the window was closed; ending the game', flush=True)
-                game.k.TerminateProcess(game.hproc, 0)
+    def loaded(game, tid, ctx):
+        if game.logic()[1] != debugger.SKIRMISH:
             return True
+        event(game, 'loaded')
+        return False
 
-        @staticmethod
-        def loaded(game, tid, ctx):
-            if game.logic()[1] != SKIRMISH:
-                return True
-            event(game, 'loaded')
-            return False
-
-    smoke.Game = PlayGame
-
-
-# host.launch registers the camera on every launch, after the scenario hooks
-# and before it creates the game: wrap that registration to add ours.
-import strategic.camera as camera
-register = camera.register
-
-
-def register_hooked(smoke, *args, **kwargs):
-    register(smoke, *args, **kwargs)
-    hooked(smoke)
+    game = runtime.start(project.find(args.project), args.graphics)
+    game.on(CLOSE_ARM, close)
+    game.on(NEW_GAME_DONE, loaded)
+    print(f'mapworkshop: starting {game.args}', flush=True)
+    try:
+        result = game.run(WEEK)
+    finally:
+        if game.t0 is not None:
+            event(game, 'closed')
+    print(json.dumps(result, default=str), flush=True)
+    return 0 if result['stopped'] in ('closed', 'exit') else 1
 
 
-camera.register = register_hooked
-import host.launch
-sys.argv = ['host.launch', '--map', map_id, '--window', '--strategic']
-raise SystemExit(host.launch.main())
+if __name__ == '__main__':
+    raise SystemExit(main())

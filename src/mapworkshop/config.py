@@ -40,6 +40,7 @@ MARKS = LOCAL/'marks'
 RENDERS = LOCAL/'renders'
 VIDEOS = LOCAL/'videos'
 CACHE = LOCAL/'cache'
+RUNTIME = LOCAL/'runtime'          # the isolated game mw play and the native tools start (native.runtime)
 # Where BFME2 looks for its user's own maps.
 USER_MAPS = Path(os.environ.get('APPDATA', '~')).expanduser()/'My Battle for Middle-earth(tm) II Files'/'Maps'
 

@@ -22,6 +22,7 @@ USAGE = """
   mw history [MAP]           earlier builds
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
+  mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself (--graphics High)
   mw rivers [MAP] [--json]   which way each river strip flows
   mw item TEMPLATE           render one object on its own (--heading, --elevation, --rotation, --top)
   mw items PATTERN...        a labelled collage of objects: "*bridge*", --from-map MAP [--layer L]
@@ -56,6 +57,8 @@ def parser():
     s.add_argument('--rebuild', action='store_true', help='Build before installing')
     s.add_argument('--normal-game', action='store_true',
                    help="Install into your own game's user maps and start it at the menu instead")
+    s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
+                   help='Detail level of the test game (default Medium)')
     s = sub.add_parser('history', help='Earlier builds of a map')
     s.add_argument('map', nargs='?')
     s = sub.add_parser('config', help='Show or change settings')
@@ -64,10 +67,18 @@ def parser():
     sub.add_parser('test', help='Run the tests and repository checks')
     s = sub.add_parser('walkable', help='Estimate walking routes without starting the game')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
-    s.add_argument('--native', action='store_true', help="Read the grid from the game first (bfme-workshop's runtime; about a minute)")
+    s.add_argument('--native', action='store_true', help='Read the grid from the game first (starts it on the map; about 20 seconds)')
     s.add_argument('--compare', action='store_true', help='Compare the local estimate with a saved native grid; does not launch the game')
     s.add_argument('--image', type=Path, help='Also write the overlay as a top-view PNG, one pixel per 10-unit cell')
     s.add_argument('--json', action='store_true', help='Print the cut-off areas as JSON')
+    s = sub.add_parser('capture', help='Screenshots from the game itself: start it on the map and save camera views')
+    s.add_argument('map', nargs='?', help='Map project (default: the last map)')
+    s.add_argument('--shot', nargs=4, action='append', required=True, metavar=('NAME', 'X', 'Y', 'HEIGHT'),
+                   help='A view: the camera looks at the ground at X, Y (map units) from HEIGHT (the game camera; 300 is its usual zoom)')
+    s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
+                   help='Detail level (default Medium)')
+    s.add_argument('--out', type=Path, help='Folder for the PNGs (default local/renders/game/<map>)')
+    s.add_argument('--settle', type=int, default=30, help='Rendered frames to wait after moving the camera (30)')
     s = sub.add_parser('rivers', help='Which way each river strip flows')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
@@ -211,12 +222,12 @@ def cmd_play(args, extra):
     if not args.normal_game:
         from mapworkshop import native
         try:
-            native.workshop()
+            native.ready(progress=say)
         except RuntimeError as error:
             say(f'{error}\nStarting your normal game instead.')
         else:
             try:
-                process, seconds = native.play(p, progress=say)
+                process, seconds = native.play(p, graphics=args.graphics, progress=say)
             except RuntimeError as error:
                 say(str(error))
                 return 1
@@ -264,6 +275,27 @@ def cmd_diff(args):
     else:
         say(f'From {before}\n  to {after}\n')
         say('\n'.join(mapdiff.lines(result, args.limit)))
+    return 0
+
+
+def cmd_capture(args):
+    """Screenshots of a project's current build, rendered by the game."""
+    from mapworkshop import native, project
+    from mapworkshop.config import RENDERS
+    from mapworkshop.native.capture import capture
+    p = project.find(args.map)
+    if not p.map_file.exists():
+        raise LookupError(f'No build of {p.title}: run `mw build {p.id}`')
+    try:
+        shots = [(name, float(x), float(y), float(height)) for name, x, y, height in args.shot]
+    except ValueError:
+        raise LookupError('--shot takes a name and three numbers: NAME X Y HEIGHT') from None
+    if len({s[0] for s in shots}) != len(shots):
+        raise LookupError('Shot names must be unique')
+    native.ready(progress=say)
+    out = args.out or RENDERS/'game'/p.id
+    report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say)
+    say(f'{len(report["shots"])} screenshot(s) in {out} ({report["seconds"]:.0f} s); capture.json has the details.')
     return 0
 
 
@@ -424,7 +456,7 @@ def main(argv=None):
     if extra and extra[0] == '--':
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
-                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers)
+                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, capture=cmd_capture)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:
         if args.command in commands:

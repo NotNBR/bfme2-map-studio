@@ -28,4 +28,6 @@
 Reference and research pages record measured behavior and what remains
 uncertain. Much of it was measured in the game with
 [bfme-workshop](https://github.com/NotNBR/bfme-workshop)'s native host and
-capture tools, which this repository does not include.
+capture tools. This repository now has its own game runtime for test games,
+the pathfinding grid and screenshots (`mw play`, `mw walkable --native`,
+`mw capture`; see [testing in-game](making-maps.md#testing-in-game)).

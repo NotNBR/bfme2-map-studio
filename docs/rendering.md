@@ -370,8 +370,11 @@ Open questions, approximated for now:
   WaterTransparency `ReflectionOn` (offset 0x50 in its field table) are all
   set (callback 0x00080168; the reflection camera, 0x0007FD89, is added under
   the same two settings), so maps with `ReflectionOn = No` (Greywater, Bramble
-  Hollow) have near-black water at High in game as well. Brightwater Fold
-  sets `ReflectionOn = Yes`, whose High water these previews still draw black.
+  Hollow) have near-black water at High in game as well. Game screenshots
+  (`mw capture --graphics High`, 14 October 2026) confirm both: Brightwater
+  Fold at High is near-black with `ReflectionOn = No`, as these previews draw
+  it, and a bright, sky-blue reflecting river with `ReflectionOn = Yes`, which
+  the map now sets and these previews still draw black.
   `ShowSoftWaterEdge` (GlobalData+0x84) is only read by
   W3DShaderManager::startRenderToTexture (0x00075BD8), to keep destination
   alpha during screen-filter passes; standing water's shoreline fade is the

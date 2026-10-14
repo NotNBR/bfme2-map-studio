@@ -69,7 +69,11 @@ viewer's **Copy for agent** button copies.
    After changing rivers, add `--flow` to a render to see which way each strip
    flows and where strips join.
    `--compare` checks against an existing native capture without starting the
-   game. Use `--native` only for an explicit game verification (about a minute).
+   game. Use `--native` only for an explicit game verification (about 15 s).
+   `mw capture <map> --shot NAME X Y HEIGHT [--graphics High]` saves screenshots
+   rendered by the game itself (about 20 s; a game window opens). Like
+   `--native`, use it only when the user wants the game's own view, for example
+   to check something the renderer cannot show (water reflections at High).
 
 [Making maps](docs/making-maps.md) documents projects, the build and the
 toolkit; [the viewer](docs/viewer.md) documents marks.

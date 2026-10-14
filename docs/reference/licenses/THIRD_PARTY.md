@@ -59,10 +59,12 @@ The engine is downloaded as a separate ignored runtime. Its GPL source and licen
 
 ## openbfme2 and BFME II
 
-[openbfme2 (Open-BFME-2)](https://github.com/Open-BFME/Open-BFME-2) supplies reconstruction, symbols and file-layout references under its GPLv3 license. Runtime launch helpers are imported from a separate user-supplied checkout; its license notices remain with that dependency. The original-host build requires a user-supplied BFME II installation and copies it only into ignored runtime files. No retail installation or extracted game assets are distributed here.
+[openbfme2 (Open-BFME-2)](https://github.com/Open-BFME/Open-BFME-2) supplies reconstruction, symbols and file-layout references under its GPLv3 license. No retail installation or extracted game assets are distributed here; the game runtime (`local/runtime/`) is made from a user-supplied BFME II installation and stays in ignored files.
 
-`mods/strategic/native/strategic.cpp` uses the recovered BFME2 1.06 camera/object layouts, symbols and Drawable::draw visibility semantics. Runtime helpers are imported from openbfme2 without modifying its checkout. The compiler is the existing MSVC 7.1 toolchain in its reference checkout; the compiler is not redistributed by this project. Direct3D9 interface slots were cross-checked against the locally installed mingw-w64 `d3d9.h` declarations; that header is not copied into the project.
+`src/mapworkshop/native/debugger.py` and `src/mapworkshop/native/runtime.py` are ported, trimmed and modified from openbfme2's test harness, `tools/game_smoke.py` and `tools/boot_smoke.py` (GPL-3.0): the Win32 debugger loop, breakpoint and remote-call handling, the version, profile and focus redirections and their x86 stubs, and the skirmish slot setup, with the BFME2 1.06 addresses they use. The game addresses in `native/play_game.py`, `native/pathgrid.py` and `native/capture/` come from Open-BFME-2's matched sources.
+
+`src/mapworkshop/native/capture/capture.cpp` is taken from bfme-workshop's strategic extension (GPL-3.0-only; same author): its hook trampoline, the camera placement of its photo mode and its D3D9 render-target readback. Direct3D9 interface slots were cross-checked there against mingw-w64's `d3d9.h`, which is not copied. `capture.dll` is built with the MSVC 7.1 toolchain of openbfme2's reference checkout; the compiler is not redistributed by this project.
 
 ## Python dependencies
 
-Python dependencies are declared in `pyproject.toml`: Capstone, pefile, NumPy and Pillow, with imageio-ffmpeg for video. They are installed separately and retain the license notices included in their distributions. Legacy requirement files remain for compatibility.
+Python dependencies are declared in `pyproject.toml`: NumPy and Pillow, with moderngl and glfw for rendering and imageio-ffmpeg for video. They are installed separately and retain the license notices included in their distributions.
