@@ -10,8 +10,10 @@
 // This DLL redirects game.dat's two import slots for those functions. Called
 // from updateFlatDXT1 while the map loads, the pair becomes a job: worker
 // threads run the same two D3DX calls with the same input on a staging copy
-// of the texture in D3DPOOL_SCRATCH (CPU memory: workers never touch the
-// game's Direct3D device), and the main thread copies the finished levels
+// of the texture in D3DPOOL_SCRATCH, made on a Direct3D device of this
+// DLL's own (multithreaded, on a window that is never shown), so workers never
+// touch the game's device, which is not thread-safe: DXVK crashed on
+// Greywater Marches when they did. The main thread copies the finished levels
 // into the game's texture. Same functions, same input, so the same bytes.
 // Finished jobs are copied in at the next hook call, the rest when the
 // launcher calls mwFlush at the end of the map load; from then on, and for
@@ -62,6 +64,8 @@ struct Locked { int pitch; void *bits; };
 typedef HRESULT (__stdcall *LockFn)(void*, U32, Locked*, const RECT*, U32);   // LockRect (19)
 typedef HRESULT (__stdcall *UnlockFn)(void*, U32);                            // UnlockRect (20)
 typedef HRESULT (__stdcall *CreateTextureFn)(void*, U32, U32, U32, U32, U32, U32, void**, void*);   // device (23)
+typedef HRESULT (__stdcall *GetDirect3DFn)(void*, void**);                    // IDirect3DDevice9::GetDirect3D (6)
+typedef HRESULT (__stdcall *CreateDeviceFn)(void*, U32, U32, HWND, U32, U32*, void**);   // IDirect3D9::CreateDevice (16)
 // D3DSURFACE_DESC: Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height.
 enum { FORMAT, TYPE, USAGE, POOL, WIDTH = 6, HEIGHT = 7 };
 static const U32 POOL_MANAGED = 1, POOL_SCRATCH = 3;
@@ -81,6 +85,26 @@ static HANDLE queued, slots, idle;          // jobs to take; free queue slots; n
 static Job *todo, *finished;
 static volatile LONG outstanding;
 static Job *pending;                        // compression seen, mipmaps not yet: one texture at a time
+static void *ownDevice;                     // the staging textures' device
+static HWND ownWindow;
+
+// The device the staging textures are made on: created once, from the game's
+// own Direct3D object, windowed on a window of ours that is never shown, with
+// D3DCREATE_MULTITHREADED. 0 when it cannot be made (then nothing is deferred).
+static void *stagingDevice(void *gameDevice) {
+    if (ownDevice || mwLoading.lastError == 0xDEADD3D9) return ownDevice;
+    void *d3d = 0;
+    if (FAILED(((GetDirect3DFn)vt(gameDevice)[6])(gameDevice, &d3d)) || !d3d) { mwLoading.lastError = 0xDEADD3D9; return 0; }
+    ownWindow = CreateWindowExA(0, "STATIC", "mapworkshop loading", WS_POPUP, 0, 0, 16, 16, 0, 0, 0, 0);
+    // D3DPRESENT_PARAMETERS: 16 x 16 back buffer, D3DSWAPEFFECT_DISCARD, windowed.
+    U32 params[14] = {16, 16, 0, 1, 0, 0, 1, (U32)ownWindow, 1, 0, 0, 0, 0, 0};
+    HRESULT made = ((CreateDeviceFn)vt(d3d)[16])(d3d, 0, 1, ownWindow,     // D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL
+                                                 0x20 | 0x4 | 0x2,          // software vertex processing, multithreaded, FPU preserve
+                                                 params, &ownDevice);
+    release(d3d);
+    if (FAILED(made)) { ownDevice = 0; mwLoading.lastError = 0xDEADD3D9; }
+    return ownDevice;
+}
 
 static void push(Job **list, Job *job) {
     EnterCriticalSection(&lock);
@@ -210,13 +234,14 @@ static HRESULT __stdcall filterTextureHook(void *texture, const void *palette, U
         return filterTexture(texture, palette, level, filter);
     pending = 0;
     U32 desc[8], levels = ((LevelCountFn)vt(texture)[13])(texture);
-    void *device = 0, *staging = 0;
+    void *gameDevice = 0, *device = 0, *staging = 0;
     HRESULT made = ((LevelDescFn)vt(texture)[17])(texture, 0, desc);
-    if (SUCCEEDED(made)) made = ((GetDeviceFn)vt(texture)[3])(texture, &device);
+    if (SUCCEEDED(made)) made = ((GetDeviceFn)vt(texture)[3])(texture, &gameDevice);
     if (SUCCEEDED(made)) {
-        made = ((CreateTextureFn)vt(device)[23])(device, desc[WIDTH], desc[HEIGHT], levels, 0, desc[FORMAT],
-                                                POOL_SCRATCH, &staging, 0);
-        release(device);
+        device = stagingDevice(gameDevice);
+        release(gameDevice);
+        made = device ? ((CreateTextureFn)vt(device)[23])(device, desc[WIDTH], desc[HEIGHT], levels, 0, desc[FORMAT],
+                                                          POOL_SCRATCH, &staging, 0) : E_FAIL;
     }
     if (FAILED(made) || !staging) {             // no staging copy: the game's own order, on this thread
         HRESULT result = runNow(job, texture);
@@ -244,6 +269,8 @@ extern "C" __declspec(dllexport) U32 __cdecl mwFlush() {
         while (outstanding > 0) { WaitForSingleObject(idle, 50); drain(); }
     if (mwLoading.workers) drain();
     mwLoading.active = 0;
+    if (ownDevice) { release(ownDevice); ownDevice = 0; }
+    if (ownWindow) { DestroyWindow(ownWindow); ownWindow = 0; }
     return mwLoading.copied;
 }
 

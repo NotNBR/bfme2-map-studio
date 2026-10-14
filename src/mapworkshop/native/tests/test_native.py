@@ -17,7 +17,7 @@ class PETests(unittest.TestCase):
     def test_loading_dll_exports_and_imports(self):
         pe = PE(msvc.dll('loading'))
         self.assertEqual(set(pe.exports()), {'mwLoading', 'mwFlush'})
-        self.assertEqual({dll for dll, _ in pe.imports()}, {'kernel32.dll', 'msvcr71.dll'})
+        self.assertEqual({dll for dll, _ in pe.imports()}, {'kernel32.dll', 'msvcr71.dll', 'user32.dll'})
 
     def test_capture_dll_exports_and_imports(self):
         pe = PE(msvc.dll('capture'))

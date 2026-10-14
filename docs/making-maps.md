@@ -281,8 +281,10 @@ Every runtime start loads
 [native/loading/loading.cpp](../src/mapworkshop/native/loading/loading.cpp)
 into the game, which hands those two D3DX calls to worker threads (one fewer
 than the processor count, up to 15) while the map loads: each texture gets the
-same calls with the same input, on a CPU-only staging copy, and the game's main
-thread copies the finished textures in; the launcher waits for the last ones
+same calls with the same input, on a CPU-only staging copy made on a Direct3D
+device of the DLL's own (multithreaded, on a window that is never shown, so the
+workers never touch the game's device, which is not thread-safe), and the
+game's main thread copies the finished textures in; the launcher waits for the last ones
 when the new-game pass ends, before the first frame. The terrain comes out the
 same: screenshots with and without it differ only where things move (water,
 trees, the HUD). Any other caller, a texture outside Direct3D's managed pool,
@@ -294,9 +296,13 @@ or the game after loading gets the game's own synchronous calls.
 | Without the title logo | 12.2 s | 20.7 s |
 | With loading.dll as well | 4.5 s | 9.0 s |
 
+Larger maps gain more. The Greywater Marches (1,350 x 900 cells, 5,340
+terrain textures) reaches gameplay in 9.2 s instead of 49 s (headless 11 s),
+and two screenshots take 13 s instead of 54.
+
 `runtime.start(..., fast=False)` loads the map as the game alone does, for
-comparisons. Larger maps gain more; the rest of the load (about 2 s to the
-engine, 2 s of map) stays on the main thread.
+comparisons. The rest of the load (about 2 s to the engine, 2 s of map on
+Brightwater Fold) stays on the main thread.
 
 With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
 goes into the game's user maps folder

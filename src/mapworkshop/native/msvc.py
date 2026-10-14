@@ -41,7 +41,7 @@ def build(name):
     work.mkdir(parents=True, exist_ok=True)
     subprocess.run([str(vc/'bin/cl.exe'), '/nologo', '/O2', '/MD', '/LD', str(DLLS[name]),
                     '/Fe' + str(work/f'{name}.dll'), '/Fo' + str(work/f'{name}.obj'),
-                    '/link', '/MACHINE:X86', 'kernel32.lib'], env=env, cwd=work, check=True)
+                    '/link', '/MACHINE:X86', 'kernel32.lib', 'user32.lib'], env=env, cwd=work, check=True)
     shutil.copy2(work/f'{name}.dll', dll(name))
     return dll(name)
 
