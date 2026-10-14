@@ -72,11 +72,13 @@ RIDGE_HEIGHT = 500
 # through a gorge it cuts in the hills and the ridge. Only on this bank: it
 # is not turned onto the other. Where it crosses the bank lane it gets a
 # shallow ford and a footbridge, like the brook's.
-# A footbridge slung across the creek's gorge high on the ridge, between
-# the viewer's pins 1 and 2: both ends of its deck, which sags SPAN_SAG at
-# the middle. It stands in the border, so it is scenery only.
-SPAN_ENDS = [(-72, 2928), (-68, 3446)]
-SPAN_SAG = 36
+# A dead tree fallen across the creek's gorge high on the ridge (between the
+# viewer's pins 1 and 2), wedged between the walls where the gorge is about
+# 270 wide: its base point, the angle across the gorge (radians) and its
+# scale (TreeFallDead01 is 90 long, so about 290). It stands in the border,
+# so it is scenery only.
+GORGE_LOG = (-70, 3188, 290)
+GORGE_LOG_ANGLE, GORGE_LOG_SCALE = 1.18, 3.2
 CREEK = [(2245, 2798), (2186, 2831), (2116, 2838), (2045, 2829), (1973, 2811), (1908, 2787), (1843, 2763),
          (1777, 2743), (1715, 2717), (1650, 2689), (1583, 2668), (1516, 2656), (1446, 2673), (1377, 2699),
          (1309, 2704), (1242, 2718), (1168, 2721), (1098, 2733), (1033, 2747), (972, 2778), (907, 2818),
@@ -947,70 +949,13 @@ def bridges(s, t):
         s.counts['Bridges'] += 1
 
 
-def suspension_bridge(s, t):
-    """The rope bridge over the gorge, built from pieces since the game has
-    no hanging bridge and objects cannot tilt:
-
-    - the deck: Erebor's rickety slat walkways, stepped into a sag;
-    - hand ropes: a chain fence along each side, one bay to a deck piece,
-      each drooping between its posts as a rope does;
-    - main cables: smaller chain bays draped from each tower's top down to
-      the hand rope at mid-span;
-    - a scaffold tower either side of each end, a log-block anchor behind
-      it, and timber and a short fence at each landing.
-
-    Both landings are levelled to one height."""
-    (ax, ay), (bx, by) = SPAN_ENDS
-    axis = math.atan2(by-ay, bx-ax)
-    ux, uy = math.cos(axis), math.sin(axis)
-    span = math.dist(*SPAN_ENDS)
-    landing = float(np.mean([s.ground(*e)[0] for e in SPAN_ENDS]))
-    for ex, ey in SPAN_ENDS:
-        blend = 1-smooth(35, 105, np.hypot(t['x']-ex, t['y']-ey))
-        t['z'] = t['z']*(1-blend)+landing*blend
-
-    def at(f, side=0., along=0.):
-        """The point a fraction f along the span, `side` to its left and `along` past it."""
-        return ax+(bx-ax)*f-uy*side+ux*along, ay+(by-ay)*f+ux*side+uy*along
-
-    def deck(f):
-        return landing-SPAN_SAG*math.sin(math.pi*min(max(f, 0), 1))
-
-    def place(template, x, y, angle, z, scale=1.):
-        extra = [('objectPrototypeScale', 2, round(scale, 3))] if scale != 1 else []
-        add_object(s.m, template, x, y, angle, layer='SuspensionBridge', z=z-s.ground(x, y)[0], extra=extra)
-        s.counts['SuspensionBridge'] += 1
-
-    # The deck. EreborBridge's slats run along local y at its base's height,
-    # centred 12 along local x.
-    pieces, half_width = 5, 20
-    for i in range(pieces):
-        f = (i+.5)/pieces
-        place('EreborBridge', *at(f, side=-12), axis-math.pi/2, deck(f))
-    # ChainFence: posts 48 apart along local x, the chain hanging 3-8 above the base.
-    chain = 44
-    rail = span/pieces/chain                        # hand-rope bays fill each deck piece
-    cable = rail/2
-    top = landing+80                                # where the main cables leave the towers
-    for side in (-1, 1):
-        for i in range(pieces):
-            f = (i+.5)/pieces
-            place('ChainFence', *at(f, side*half_width), axis, deck(f), rail)
-        bays = 2*pieces
-        for i in range(bays):
-            f = (i+.5)/bays
-            hand = deck(f)+6*rail                    # the hand rope's height
-            drop = (1-math.sin(math.pi*f))**1.5      # 1 at the towers, 0 at mid-span
-            height = hand+(top-hand)*drop
-            if height-hand > 10:
-                place('ChainFence', *at(f, side*(half_width+2)), axis, height-6*cable, cable)
-    # Towers, anchors and landings, at each end.
-    for f, back in ((0, -1), (1, 1)):
-        for side in (-1, 1):
-            place('IsengardScaffolding05', *at(f, side*(half_width+10), back*6), axis, landing)
-            place('LogBlock02', *at(f, side*(half_width+14), back*60), axis, landing)
-            place('ShireFence05', *at(f, side*(half_width+6), back*34), axis, landing)
-        place('TimberPile01', *at(f, half_width+52, back*40), axis+.4*back, landing)
+def gorge_log(s):
+    """A dead tree fallen across the gorge, wedged between its walls about
+    halfway down where they close in. Its trunk runs along local x."""
+    x, y, z = GORGE_LOG
+    add_object(s.m, 'TreeFallDead01', x, y, GORGE_LOG_ANGLE, layer='GorgeLog', z=z-s.ground(x, y)[0],
+               extra=[('objectPrototypeScale', 2, GORGE_LOG_SCALE)])
+    s.counts['GorgeLog'] += 1
 
 
 def millpond(s, t):
@@ -1188,7 +1133,7 @@ def build(b):
     s = Scenery(m, t, GameAssets())
     print('Building the hamlet...', flush=True)
     bridges(s, t)
-    suspension_bridge(s, t)
+    gorge_log(s)
     millpond(s, t)
     lower_hamlet(s)              # before the hamlet's scattered props, so they make room for it
     hamlet(s, t)
