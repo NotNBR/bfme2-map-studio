@@ -82,6 +82,11 @@ Building blocks, in `src/mapworkshop/`:
   (`add_bridge`; `bridge_type` for a map's own type), walkable; only models
   with left/span/right pieces work, which it checks
   ([spanned bridges](reference/mapping/navigation/roads-and-bridges.md#spanned-bridges)).
+- `mapkit.walls`: the game's chainable walls (`wall_line` lays segments, hubs,
+  gates and towers along a path for a faction's kit; `place_wall` adds them
+  with an owner; `ground_rise` finds pieces on uneven ground) and castle sites
+  (`castle_site`, a CastleFlag that unpacks the capturing faction's castle;
+  `castle_layout` reads one) ([walls and castles](reference/mapping/navigation/walls-and-castles.md)).
 - `mapkit.vegetation`: keeps trees and shrubs past the game's 1,200 / 2,000
   buffer limits visible as full models.
 - `mapkit.weather`: weather presets with the map's own sun and fill

@@ -82,6 +82,38 @@ End
         self.assertEqual([s['type'] for s in value['shapes']], ['BOX', 'CYLINDER'])
         self.assertEqual(pathing.template_data(a.templates, 'House')['shapes'][0]['major'], 20)
 
+    def test_statements_inside_draw_blocks_do_not_nest(self):
+        """ParticleSysBone lines, script calls and BeginScript regions inside a
+        Draw block are statements, not blocks: the object's own KindOf and
+        Geometry after it still count (the retail Men wall kit is written so).
+        Numbers read as the game reads them: '8.0CA' is 8."""
+        a = assets('''
+Draw = W3DScriptedModelDraw Tag
+  ModelConditionState = BUILD_PLACEMENT_CURSOR
+    Model = Wall_CUR
+    ParticleSysBone = None TorchFire
+    ParticleSysBone FireBone SmallFire FollowBone:Yes
+    CurDrawableShowSubObject("ModuleTag_DrawFloor")
+  End
+  IdleAnimationState
+    BeginScript
+      if CurDrawableModelcondition("DAMAGED") then
+        CurDrawableHideSubObject("Banner")
+      end
+    EndScript
+  End
+End
+KindOf = STRUCTURE IMMOBILE WALL_SEGMENT
+Geometry = BOX
+GeometryMajorRadius = 8.0CA
+GeometryMinorRadius = 20
+GeometryOffset = X:177.0+ Y:0 Z:0
+''', 'Wall')
+        value = pathing.template_data(a.templates, 'Wall')
+        self.assertEqual(value['kinds'], {'STRUCTURE', 'IMMOBILE', 'WALL_SEGMENT'})
+        self.assertEqual([(s['type'], s['major'], s['minor'], s['offset']) for s in value['shapes']],
+                         [('BOX', 8.0, 20.0, (177.0, 0.0, 0.0))])
+
     def test_rotation_offset_and_small_or_raised_structures(self):
         m = create(64, 64, 3)
         add_object(m, 'House', 200, 200, angle=math.pi/2)

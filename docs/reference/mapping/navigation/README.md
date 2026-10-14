@@ -12,6 +12,8 @@ orders, bridge destruction, or every locomotor's behavior.
 The [roads and bridges experiment](roads-and-bridges.md) extends these
 corridors with original road endpoint pairs and walkable object bridges,
 including a raised-bridge negative control and deck-height trajectory checks.
+[Walls and castles](walls-and-castles.md) covers the chainable wall kits and
+castle sites.
 
 ## Flat corridors
 
