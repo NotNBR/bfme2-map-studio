@@ -69,7 +69,7 @@ def parser():
     sub.add_parser('test', help='Run the tests and repository checks')
     s = sub.add_parser('walkable', help='Estimate walking routes without starting the game')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
-    s.add_argument('--native', action='store_true', help='Read the grid from the game first (starts it on the map; about 20 seconds)')
+    s.add_argument('--native', action='store_true', help='Read the grid from the game first (starts it on the map; about 7 seconds)')
     s.add_argument('--compare', action='store_true', help='Compare the local estimate with a saved native grid; does not launch the game')
     s.add_argument('--image', type=Path, help='Also write the overlay as a top-view PNG, one pixel per 10-unit cell')
     s.add_argument('--json', action='store_true', help='Print the cut-off areas as JSON')

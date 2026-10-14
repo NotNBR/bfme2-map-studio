@@ -2,7 +2,7 @@
 BFME2 renders them, HUD included.
 
 capture() starts a skirmish on the map and loads capture.dll into the game
-(LoadLibraryA, called on the game's main thread from GameEngine::update).
+(debugger.Game.inject: LoadLibraryA on the game's main thread).
 The DLL places the tactical camera and copies the D3D9 render target on
 request (see capture.cpp). By default the game runs headless: on a hidden
 desktop, rendering through DXVK (native.runtime). The launcher reveals the
@@ -11,51 +11,19 @@ map, then for each shot
 height, waits `settle` rendered frames for the view to stream in, and saves
 the frame. The game is ended after the last shot.
 
-capture.dll is committed; `python -m mapworkshop.native.capture build`
-rebuilds it from capture.cpp with Visual C++ .NET 2003 (setting `msvc71`,
-default openbfme2-untouched's toolchain next to this checkout).
+capture.dll is committed; `python -m mapworkshop.native.msvc` rebuilds it
+from capture.cpp (native.msvc).
 """
 import json
-import shutil
 import struct
-import subprocess
 import time
-import os
 from pathlib import Path
-
-from mapworkshop.config import ROOT, setting
-
-HERE = Path(__file__).parent
-DLL = HERE/'capture.dll'
-TOOLCHAIN = ROOT.parent/'openbfme2/openbfme2-untouched/reference/open-bfme-1/inputs/toolchains/vs2003' \
-    / 'Program Files/Microsoft Visual Studio .NET 2003'
 
 # Retail game.dat 1.06 (RVAs), from Open-BFME-2 and bfme-workshop.
 GAME_ENGINE_UPDATE = 0x225DA9   # once per engine frame, on the main thread
-LOAD_LIBRARY_SLOT = 0x7BA1F4    # game.dat's import slot of LoadLibraryA
 REVEAL_MAP = 0x739790           # PartitionManager::revealMapForPlayer(player index), thiscall
 THE_PARTITION_MANAGER = 0x9FE74C
 THE_PLAYER_LIST = 0x9FEEE8      # PlayerList*: +0x10 local player; Player +0x54 its index
-
-
-def build():
-    """Compile capture.cpp into capture.dll (32-bit, MSVC 7.1, msvcr71 as the game uses)."""
-    root = Path(setting('msvc71') or TOOLCHAIN)
-    vc = root/'Vc7'
-    if not (vc/'bin/cl.exe').is_file():
-        raise RuntimeError(f'No Visual C++ .NET 2003 in {root}; set its folder with `mw config msvc71 <folder>`')
-    # The compiler's own msvcr71.dll and msvcp71.dll sit two folders up.
-    env = dict(os.environ, PATH=os.pathsep.join(map(str, [vc/'bin', root/'Common7/IDE', root.parents[1]]))
-               + os.pathsep + os.environ['PATH'],
-               INCLUDE=os.pathsep.join(map(str, [vc/'include', vc/'PlatformSDK/Include'])),
-               LIB=os.pathsep.join(map(str, [vc/'lib', vc/'PlatformSDK/Lib'])))
-    work = ROOT/'local/cache/capture-build'
-    work.mkdir(parents=True, exist_ok=True)
-    subprocess.run([str(vc/'bin/cl.exe'), '/nologo', '/O2', '/MD', '/LD', str(HERE/'capture.cpp'),
-                    '/Fe' + str(work/'capture.dll'), '/Fo' + str(work/'capture.obj'),
-                    '/link', '/MACHINE:X86', 'kernel32.lib'], env=env, cwd=work, check=True)
-    shutil.copy2(work/'capture.dll', DLL)
-    return DLL
 
 
 def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240, headless=True):
@@ -64,30 +32,17 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     (the default) runs the game unseen, through DXVK (native.runtime); False
     shows its window and uses native Direct3D 9."""
     from PIL import Image, ImageStat
-    from mapworkshop.native import debugger, runtime
-    from mapworkshop.native.pe import PE
+    from mapworkshop.native import debugger, msvc, runtime
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     game = runtime.start(project, graphics, headless=headless, progress=progress)
-    dll = runtime.RUNTIME/'capture.dll'                    # a copy, so a rebuild never finds it in use
-    if not dll.exists() or dll.read_bytes() != DLL.read_bytes():
-        shutil.copy2(DLL, dll)
-    exports = PE(dll).exports()
     state = dict(module=None, shot=0, step='load', done=[])
 
-    def load(game, tid, ctx):
-        path = str(dll.resolve()).encode('mbcs') + b'\0'
-        memory = game.alloc(len(path))
-        game.write(memory, path)
-
-        def loaded(game, results):
-            if not results[0]:
-                raise RuntimeError('BFME2 could not load capture.dll')
-            state['module'] = {name: results[0] + rva for name, rva in exports.items()}
-            if not game.u32(state['module']['mwInstalled']):
-                raise RuntimeError('capture.dll did not install its hooks (not BFME2 1.06?)')
-        return {'call': game.u32(game.base + LOAD_LIBRARY_SLOT), 'args': [memory], 'done': loaded}
-    game.on(GAME_ENGINE_UPDATE, load)
+    def loaded(game, exports):
+        if not game.u32(exports['mwInstalled']):
+            raise RuntimeError('capture.dll did not install its hooks (not BFME2 1.06?)')
+        state['module'] = exports
+    game.inject(runtime.staged(msvc.dll('capture')), loaded)
 
     def reveal(game, tid, ctx):
         player = game.u32(game.u32(game.base + THE_PLAYER_LIST) + 0x10)
@@ -137,6 +92,8 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     report = dict(map=project.id, graphics=graphics, headless=headless, shots=state['done'], seconds=round(time.time() - started, 1),
                   run=result)
     (out/'capture.json').write_text(json.dumps(report, indent=2, default=str) + '\n', encoding='utf-8')
+    if len(state['done']) != len(shots) and not result.get('injected', {}).get('capture.dll', True):
+        raise RuntimeError('BFME2 could not load capture.dll')
     if len(state['done']) != len(shots):
         raise RuntimeError(f'The game ended after {len(state["done"])} of {len(shots)} shots: '
                            + debugger.describe(result))

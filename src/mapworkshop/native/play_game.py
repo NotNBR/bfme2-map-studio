@@ -28,10 +28,6 @@ import sys
 # (WM_ERASEBKGND, WM_ACTIVATEAPP, ...), so the breakpoint costs nothing.
 CLOSE_ARM = 0x198A
 WM_CLOSE = 0x10
-# The new-game pass destroying its close-item guard (0x0023C85E), after its
-# last load stage. The pass also loads the menu's shell map, so only the
-# skirmish's counts.
-NEW_GAME_DONE = 0x248767
 WEEK = 7*24*3600
 
 
@@ -85,7 +81,7 @@ def main(argv=None):
 
     game = runtime.start(project.find(args.project), args.graphics)
     game.on(CLOSE_ARM, close)
-    game.on(NEW_GAME_DONE, loaded)
+    game.on(runtime.NEW_GAME_DONE, loaded)       # also loads the menu's shell map: only the skirmish's counts
     print(f'mapworkshop: starting {game.args}', flush=True)
     try:
         result = game.run(WEEK)

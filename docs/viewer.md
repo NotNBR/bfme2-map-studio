@@ -56,7 +56,7 @@ aid, not proof that a particular unit can follow a route.
 
 `mw walkable <map> --compare` compares against an existing native capture
 without launching anything. For explicit verification, `--native` reads and
-reports the game's grid from a short skirmish (about 15 seconds, on the game
+reports the game's grid from a short skirmish (about 7 seconds, on the game
 runtime described under [testing in-game](making-maps.md#testing-in-game)).
 Native captures are tied to the map file's hash; a changed build needs a new
 capture. The default CLI and viewer always use the local calculation.

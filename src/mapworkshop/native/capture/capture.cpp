@@ -8,7 +8,7 @@
 //    buffer the launcher reads back, and counts rendered frames.
 // Taken from bfme-workshop's strategic extension (photo mode 2 and
 // captureFrame); its camera tilt, symbols and other hooks are left out.
-// Build: python -m mapworkshop.native.capture build (MSVC 7.1).
+// Build: python -m mapworkshop.native.msvc (MSVC 7.1).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string.h>

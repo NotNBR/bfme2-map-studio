@@ -237,7 +237,7 @@ would do), keeps it on the sandbox profile and away from focus stalls, and
 learns from the game itself, not from a timer, when the skirmish is ready: a
 breakpoint at the end of the game's new-game pass, after the map is loaded and
 the players placed, reports it. `mw play` returns at that moment ("playable in
-BFME2, 12 s after the start"), or with the launcher's last line if the game
+BFME2, 5 s after the start"), or with the launcher's last line if the game
 ends before then; the viewer's status bar shows the start, then "playable",
 then "closed" when the game ends. Retail BFME2 ignores its window's close
 button and Alt+F4; the launcher catches that close request and ends the game,
@@ -249,15 +249,15 @@ on a hidden desktop of its own, so no window appears and your focus stays where
 it is, and it ends as soon as the tool has what it came for.
 
 - `mw walkable <map> --native` reads the game's pathfinding grid at logic
-  frame 10 (about 15 seconds; see [the viewer](viewer.md#walkable-areas)).
+  frame 10 (about 7 seconds; see [the viewer](viewer.md#walkable-areas)).
 - `mw capture <map> --shot NAME X Y HEIGHT [--shot ...] [--graphics High]`
   saves screenshots rendered by the game, HUD included, into
-  `local/renders/game/<map>/` (about 25 seconds for a few shots). The camera
+  `local/renders/game/<map>/` (about 10 seconds for a few shots). The camera
   looks at the ground at X, Y from HEIGHT (the game's own camera; 300 is its
   usual zoom). A small DLL loaded into the game
   ([native/capture/capture.cpp](../src/mapworkshop/native/capture/capture.cpp),
-  committed built; `python -m mapworkshop.native.capture build` rebuilds it
-  with Visual C++ .NET 2003, setting `msvc71`) places the camera and copies
+  committed built; `python -m mapworkshop.native.msvc` rebuilds it with
+  Visual C++ .NET 2003, setting `msvc71`) places the camera and copies
   the frame. Use it for what the renderer does not show, such as the water
   reflections at High. `--show` runs it in a visible window instead.
 
@@ -269,9 +269,34 @@ Direct3D 9 on Vulkan. The first headless run downloads that DXVK release
 Direct3D 9 to about 2 levels in 255 on average, at Medium and at High with
 water reflections; test games and `--show` keep native Direct3D 9. A
 `dxvk.conf` there turns DXVK's graphics pipeline libraries off: with them the
-loading screen waited on shader compilation, about 5 seconds per start. Either
-way a skirmish is playable about 12 seconds after the start (Brightwater Fold
-at Medium; most of it the game compressing the terrain textures).
+loading screen waited on shader compilation, about 5 seconds per start.
+
+### Faster map loading
+
+Most of a map's loading time is the game building its terrain textures: for
+each one it composites the terrain on the CPU, then Microsoft's D3DX library
+compresses it to DXT1 and builds its mipmaps, one texture after another on one
+core (about 8.5 of 10 seconds on Brightwater Fold at Medium; 1,156 textures).
+Every runtime start loads
+[native/loading/loading.cpp](../src/mapworkshop/native/loading/loading.cpp)
+into the game, which hands those two D3DX calls to worker threads (one fewer
+than the processor count, up to 15) while the map loads: each texture gets the
+same calls with the same input, on a CPU-only staging copy, and the game's main
+thread copies the finished textures in; the launcher waits for the last ones
+when the new-game pass ends, before the first frame. The terrain comes out the
+same: screenshots with and without it differ only where things move (water,
+trees, the HUD). Any other caller, a texture outside Direct3D's managed pool,
+or the game after loading gets the game's own synchronous calls.
+
+| Brightwater Fold, Medium | Gameplay after | Three screenshots |
+| --- | --- | --- |
+| Before (title logo, one core) | 17.0 s (headless 22.5 s) | about 30 s |
+| Without the title logo | 12.2 s | 20.7 s |
+| With loading.dll as well | 4.5 s | 9.0 s |
+
+`runtime.start(..., fast=False)` loads the map as the game alone does, for
+comparisons. Larger maps gain more; the rest of the load (about 2 s to the
+engine, 2 s of map) stays on the main thread.
 
 With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
 goes into the game's user maps folder

@@ -14,7 +14,11 @@
 
 prepare() builds or refreshes it from the configured install (`mw setup`),
 which must be BFME2 1.06: the breakpoints are at its addresses. start()
-starts a skirmish on an installed map, you against an easy AI.
+starts a skirmish on an installed map, you against an easy AI, and by
+default loads it faster: loading.dll (native/loading/loading.cpp) runs the
+terrain textures' D3DX compression on worker threads, with the same calls and
+input as the game, so the same result (Brightwater Fold at Medium: gameplay
+4.5 s after the start instead of 12).
 
 Headless runs (start(..., headless=True): the pathfinding read and
 screenshots) put the game on a hidden desktop of its own
@@ -60,6 +64,9 @@ WIDTH, HEIGHT = 1600, 1200
 
 # Retail game.dat 1.06 (RVAs), from Open-BFME-2 / openbfme2's game_smoke.
 FILE_SLOTS_SET = 0x2300DC       # GameEngine::init's -file branch, just after setSlot(0, "Test")
+# The new-game pass destroying its close-item guard (0x0023C85E), after its
+# last load stage: the map is loaded; the next frame is gameplay.
+NEW_GAME_DONE = 0x248767
 THE_GAME_INFO, THE_SKIRMISH_GAME_INFO = 0xA02EEC, 0xA02EF0
 SLOTS_OFF, SLOT_STATE, SLOT_TEMPLATE = 0x18, 4, 0x18
 TEMPLATE_RANDOM, EASY_AI = -1, 2
@@ -286,10 +293,37 @@ def skirmish_setup(game, tid, ctx):
     return False
 
 
-def start(project, graphics='Medium', headless=False, progress=print):
+def staged(dll):
+    """A copy of a committed DLL in the runtime, which the game loads: a
+    rebuild of the original never finds it in use."""
+    target = RUNTIME/Path(dll).name
+    if not target.exists() or target.read_bytes() != Path(dll).read_bytes():
+        shutil.copy2(dll, target)
+    return target
+
+
+def fast_loading(game):
+    """Load loading.dll (native/loading: the terrain textures' D3DX work on
+    worker threads) and flush it when the new-game pass has loaded the
+    skirmish's map, before its first frame."""
+    from mapworkshop.native import msvc
+    exports = {}
+    game.inject(staged(msvc.dll('loading')), lambda game, found: exports.update(found))
+
+    def flush(game, tid, ctx):
+        if game.logic()[1] != debugger.SKIRMISH:     # the pass also runs for the menu's shell map
+            return True
+        if not exports:                              # loading.dll did not load: nothing to flush
+            return False
+        return {'call': exports['mwFlush'], 'done': lambda game, results: game.res.update(fast_loading=results[0])}
+    game.on(NEW_GAME_DONE, flush)
+
+
+def start(project, graphics='Medium', headless=False, progress=print, fast=True):
     """A Game set up to start a skirmish on the project's current build at
     this detail level (not yet running: add breakpoints, then game.run()).
-    `headless`: on a hidden desktop, with DXVK (see the module notes)."""
+    `headless`: on a hidden desktop, with DXVK (see the module notes).
+    `fast`: with fast_loading (False loads the map as the game alone does)."""
     running = debugger.running_games()
     if running:
         raise RuntimeError(f'BFME2 is already running ({running[0][1]}); close it first')
@@ -302,4 +336,6 @@ def start(project, graphics='Medium', headless=False, progress=print):
     game = debugger.Game(folder, args, APPDATA)
     game.headless = headless
     game.on(FILE_SLOTS_SET, skirmish_setup)
+    if fast:
+        fast_loading(game)
     return game

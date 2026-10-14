@@ -48,6 +48,8 @@ THE_GAME_LOGIC = 0x9FE78C                       # GameLogic*: +0x40 logic frame,
 FRAME_OFF, MODE_OFF = 0x40, 0x110
 SKIRMISH = 2                                    # the game mode of a skirmish
 DEBUG_EXITS = (0x3AAA3, 0x3B0DC)                # `push 1; call exit` after an assertion / crash report
+GAME_ENGINE_UPDATE = 0x225DA9                   # GameEngine::update, once per engine frame, main thread
+LOAD_LIBRARY_SLOT = 0x7BA1F4                    # game.dat's import slot of LoadLibraryA
 
 CSIDL_APPDATA, CSIDL_MYPICTURES = 0x1A, 0x27
 # WndProc's WM_ACTIVATEAPP arm (retail 0x19A5): `cmp ebx, 1Ch; jne default`,
@@ -137,6 +139,39 @@ def hidden_desktop():
     return handle, (station.value or 'WinSta0') + '\\' + name
 
 
+def combine(handlers):
+    """One breakpoint handler that runs several: each keeps running while it
+    returns True (or a remote call with 'keep'); their remote calls run as
+    one stub, each 'done' getting its own calls' results."""
+    if len(handlers) == 1:
+        return handlers[0]
+    live = list(handlers)
+
+    def handler(game, tid, ctx):
+        kept, requests = [], []
+        for each in list(live):
+            result = each(game, tid, ctx)
+            if isinstance(result, dict):
+                requests.append(result)
+                if result.get('keep'):
+                    kept.append(each)
+            elif result:
+                kept.append(each)
+        live[:] = kept
+        if not requests:
+            return bool(live)
+        parts = [request.get('calls') or [request] for request in requests]
+
+        def done(game, results):
+            at = 0
+            for request, part in zip(requests, parts):
+                if request.get('done'):
+                    request['done'](game, results[at:at + len(part)])
+                at += len(part)
+        return {'calls': [call for part in parts for call in part], 'keep': bool(live), 'done': done}
+    return handler
+
+
 def describe(result):
     """A run's end in a few words: how it stopped, and where it faulted."""
     words = [str(result.get('stopped'))]
@@ -199,7 +234,8 @@ class Game:
     def __init__(self, game_dir, args, appdata):
         self.game_dir, self.args, self.appdata = Path(game_dir), args, Path(appdata)
         self.k = kernel32()
-        self.handlers = {}            # rva -> handler, armed at the loader breakpoint
+        self.handlers = {}            # rva -> [handlers], armed at the loader breakpoint
+        self.injections = []          # (DLL path, done) for inject()
         self.bps = {}                 # va -> (original byte, handler)
         self.stepping = {}            # tid -> va to re-arm after its single step
         self.calls = {}               # stub int3 va -> (saved context, breakpoint va, keep, done, results, n)
@@ -256,17 +292,45 @@ class Game:
 
     # breakpoints ------------------------------------------------------------
     def on(self, rva, handler):
-        """Break at image RVA `rva` from the start (armed at the loader breakpoint)."""
-        self.handlers[rva] = handler
+        """Break at image RVA `rva` from the start (armed at the loader
+        breakpoint). Several handlers at one address all run (combine)."""
+        self.handlers.setdefault(rva, []).append(handler)
 
     def arm(self, rva, handler):
         """Break at image RVA `rva` from now on (from a tick or a handler)."""
         self._arm(self.base + rva, handler)
 
     def _arm(self, va, handler):
+        if va in self.bps:                       # already armed: keep its original byte, run both
+            orig, existing = self.bps[va]
+            self.bps[va] = (orig, combine([existing, handler]))
+            return
         orig = self.read(va, 1)
         if orig and self.write(va, b'\xCC', code=True):
             self.bps[va] = (orig, handler)
+
+    def inject(self, path, done=None):
+        """Load a DLL into the game, on its main thread at the first engine
+        frame (LoadLibraryA from a remote call); then done(game, {export:
+        address}). Whether each DLL loaded is in res['injected']."""
+        if not self.injections:
+            self.on(GAME_ENGINE_UPDATE, Game._inject)
+        self.injections.append((Path(path), done))
+
+    def _inject(self, tid, ctx):
+        calls = []
+        for path, _ in self.injections:
+            name = str(path.resolve()).encode('mbcs') + b'\0'
+            memory = self.alloc(len(name))
+            self.write(memory, name)
+            calls.append({'call': self.u32(self.base + LOAD_LIBRARY_SLOT), 'args': [memory]})
+
+        def loaded(game, modules):
+            for (path, done), module in zip(game.injections, modules):
+                game.res.setdefault('injected', {})[path.name] = bool(module)
+                if module and done:
+                    done(game, {name: module + rva for name, rva in PE(path).exports().items()})
+        return {'calls': calls, 'done': loaded}
 
     def _context(self, tid, flags=CONTEXT_CONTROL_INTEGER):
         h = self.k.OpenThread(0x1FFFFF, False, tid)
@@ -397,8 +461,8 @@ class Game:
         self.res['lies']['focus'] = bool(self.focus_va)
         for rva in DEBUG_EXITS:
             self._arm(self.base + rva, Game._debug_exit)
-        for rva, handler in self.handlers.items():
-            self._arm(self.base + rva, handler)
+        for rva, handlers in self.handlers.items():
+            self._arm(self.base + rva, combine(handlers))
 
     def _debug_exit(self, tid, ctx):
         """The game's own assertion or crash report is about to exit(1): keep

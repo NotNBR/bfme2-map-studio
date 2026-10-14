@@ -9,13 +9,18 @@ from unittest import mock
 
 from mapworkshop.mapkit.blank import create, starts
 from mapworkshop.native import debugger, runtime
-from mapworkshop.native.capture import DLL
+from mapworkshop.native import msvc
 from mapworkshop.native.pe import PE
 
 
 class PETests(unittest.TestCase):
+    def test_loading_dll_exports_and_imports(self):
+        pe = PE(msvc.dll('loading'))
+        self.assertEqual(set(pe.exports()), {'mwLoading', 'mwFlush'})
+        self.assertEqual({dll for dll, _ in pe.imports()}, {'kernel32.dll', 'msvcr71.dll'})
+
     def test_capture_dll_exports_and_imports(self):
-        pe = PE(DLL)
+        pe = PE(msvc.dll('capture'))
         self.assertEqual(set(pe.exports()), {'mwCapture', 'mwPhoto', 'mwInstalled'})
         dlls = {dll for dll, _ in pe.imports()}
         self.assertEqual(dlls, {'kernel32.dll', 'msvcr71.dll'})     # the game ships msvcr71
@@ -41,6 +46,19 @@ class StubTests(unittest.TestCase):
         blob = debugger.version_stubs(0x30000)
         self.assertEqual(blob[:6], bytes.fromhex('B8 05 01 28 0A C3'))
         self.assertEqual(struct.unpack_from('<5I', blob, 0x100), (156, 5, 1, 2600, 2))
+
+    def test_combined_handlers_merge_their_remote_calls(self):
+        seen = []
+        first = lambda game, tid, ctx: {'call': 1, 'done': lambda g, r: seen.append(('first', r))}
+        second = lambda game, tid, ctx: True
+        third = lambda game, tid, ctx: {'calls': [{'call': 2}, {'call': 3}], 'done': lambda g, r: seen.append(('third', r))}
+        handler = debugger.combine([first, second, third])
+        request = handler(None, 0, None)
+        self.assertEqual([c['call'] for c in request['calls']], [1, 2, 3])
+        self.assertTrue(request['keep'])                    # the second still wants the breakpoint
+        request['done'](None, [10, 20, 30])
+        self.assertEqual(seen, [('first', [10]), ('third', [20, 30])])
+        self.assertTrue(handler(None, 0, None))             # only the second is left
 
     def test_describe(self):
         self.assertEqual(debugger.describe(dict(stopped='exit', exit_code=0x29A, fault='image+0xe10d8')),
