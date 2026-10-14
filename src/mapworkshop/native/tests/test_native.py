@@ -71,6 +71,45 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.set_options('Ultra')
 
+    def test_dxvk_is_checked_against_its_digest_and_only_the_32_bit_dll_kept(self):
+        import hashlib, io, tarfile
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode='w:gz') as archive:
+            for name, data in ((f'dxvk-{runtime.DXVK_VERSION}/x32/d3d9.dll', b'32-bit'),
+                               (f'dxvk-{runtime.DXVK_VERSION}/x64/d3d9.dll', b'64-bit')):
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+        blob = buffer.getvalue()
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(runtime, 'RUNTIME', Path(folder)):
+            with self.assertRaises(RuntimeError):                  # not the published file
+                runtime.dxvk(progress=lambda _: None, download=lambda url: blob)
+            with mock.patch.object(runtime, 'DXVK_SHA256', hashlib.sha256(blob).hexdigest()):
+                dll = runtime.dxvk(progress=lambda _: None, download=lambda url: blob)
+            self.assertEqual(dll.read_bytes(), b'32-bit')
+            self.assertEqual(runtime.dxvk(download=lambda url: 1/0), dll)      # kept: no second download
+
+    def test_headless_folder_links_the_runtime_and_adds_dxvk(self):
+        import os
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            game, headless, dll = root/'game', root/'game-headless', root/'d3d9.dll'
+            (game/'data').mkdir(parents=True)
+            (game/'game.dat').write_bytes(b'game')
+            (game/'data'/'W3D.big').write_bytes(b'archive')
+            dll.write_bytes(b'dxvk')
+            (headless/'old').mkdir(parents=True)
+            (headless/'old'/'gone.txt').write_text('stale')
+            with mock.patch.object(runtime, 'GAME', game), mock.patch.object(runtime, 'HEADLESS_GAME', headless), \
+                    mock.patch.object(runtime, 'prepare', lambda progress=None: game), \
+                    mock.patch.object(runtime, 'dxvk', lambda progress=None, download=None: dll):
+                runtime.prepare_headless()
+            self.assertTrue(os.path.samefile(game/'game.dat', headless/'game.dat'))
+            self.assertTrue(os.path.samefile(game/'data'/'W3D.big', headless/'data'/'W3D.big'))
+            self.assertEqual((headless/'d3d9.dll').read_bytes(), b'dxvk')
+            self.assertFalse((headless/'old'/'gone.txt').exists())
+            self.assertFalse((game/'d3d9.dll').exists())                 # test games keep native Direct3D 9
+
     def test_install_copies_the_build_and_replaces_its_cache_entry(self):
         with tempfile.TemporaryDirectory() as folder:
             build = Path(folder)/'build'

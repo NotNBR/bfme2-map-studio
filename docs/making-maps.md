@@ -240,21 +240,30 @@ button and Alt+F4; the launcher catches that close request and ends the game,
 so closing the window works. The launcher log is
 `local/runtime/logs/play-<map>.log`. It needs no administrator rights.
 
-The same runtime serves two other tools, each ending the game as soon as it
-has what it came for:
+The same runtime serves two other tools. They run headless: the game starts
+on a hidden desktop of its own, so no window appears and your focus stays where
+it is, and it ends as soon as the tool has what it came for.
 
 - `mw walkable <map> --native` reads the game's pathfinding grid at logic
   frame 10 (about 15 seconds; see [the viewer](viewer.md#walkable-areas)).
 - `mw capture <map> --shot NAME X Y HEIGHT [--shot ...] [--graphics High]`
   saves screenshots rendered by the game, HUD included, into
-  `local/renders/game/<map>/` (about 20 seconds for a few shots). The camera
+  `local/renders/game/<map>/` (about 25 seconds for a few shots). The camera
   looks at the ground at X, Y from HEIGHT (the game's own camera; 300 is its
   usual zoom). A small DLL loaded into the game
   ([native/capture/capture.cpp](../src/mapworkshop/native/capture/capture.cpp),
   committed built; `python -m mapworkshop.native.capture build` rebuilds it
   with Visual C++ .NET 2003, setting `msvc71`) places the camera and copies
   the frame. Use it for what the renderer does not show, such as the water
-  reflections at High.
+  reflections at High. `--show` runs it in a visible window instead.
+
+Direct3D 9 does not render on a desktop that is not shown, so headless runs
+start `local/runtime/game-headless/`: hard links to the runtime's files plus
+the `d3d9.dll` of [DXVK](https://github.com/doitsujin/dxvk), which runs
+Direct3D 9 on Vulkan. The first headless run downloads that DXVK release
+(18 MB) and checks it against its published SHA-256. Its frames match native
+Direct3D 9 to about 2 levels in 255 on average, at Medium and at High with
+water reflections; test games and `--show` keep native Direct3D 9.
 
 With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
 goes into the game's user maps folder

@@ -22,7 +22,7 @@ USAGE = """
   mw history [MAP]           earlier builds
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
-  mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself (--graphics High)
+  mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself, headless (--graphics High, --show)
   mw rivers [MAP] [--json]   which way each river strip flows
   mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
                              (--textures, --roads, --sounds, --effects: those instead)
@@ -81,6 +81,8 @@ def parser():
                    help='Detail level (default Medium)')
     s.add_argument('--out', type=Path, help='Folder for the PNGs (default local/renders/game/<map>)')
     s.add_argument('--settle', type=int, default=30, help='Rendered frames to wait after moving the camera (30)')
+    s.add_argument('--show', action='store_true',
+                   help='Show the game window and use native Direct3D 9 (default: headless, through DXVK)')
     s = sub.add_parser('rivers', help='Which way each river strip flows')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
@@ -297,7 +299,7 @@ def cmd_capture(args):
         raise LookupError('Shot names must be unique')
     native.ready(progress=say)
     out = args.out or RENDERS/'game'/p.id
-    report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say)
+    report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say, headless=not args.show)
     say(f'{len(report["shots"])} screenshot(s) in {out} ({report["seconds"]:.0f} s); capture.json has the details.')
     return 0
 

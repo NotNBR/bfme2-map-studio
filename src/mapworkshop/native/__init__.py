@@ -12,8 +12,12 @@ no administrator rights.
   until the game closes.
 - pathfind(): the pathfinding grid (mw walkable --native), kept next to the
   build as pathfind.npz and pathfind.json with the map's hash
-  (mapkit.walkable).
+  (mapkit.walkable). Headless.
 - capture(): screenshots from the game's render target (native.capture).
+  Headless unless asked to show the game.
+
+Headless runs put the game on a hidden desktop and render through DXVK, so
+no window appears and your focus stays put (native.runtime).
 """
 import hashlib
 import json
@@ -40,7 +44,7 @@ def pathfind(project, progress=print):
     from mapworkshop.native import pathgrid
     ready(progress)
     progress(f'Starting a skirmish on {project.title} to read its pathfinding grid...')
-    arrays, info = pathgrid.run(runtime.start(project, graphics='Low'))
+    arrays, info = pathgrid.run(runtime.start(project, graphics='Low', headless=True, progress=progress))
     info['map'] = f'maps\\{project.native_name}.map'
     info['map_sha256'] = hashlib.sha256(project.map_file.read_bytes()).hexdigest()
     np.savez_compressed(project.build_dir/'pathfind.npz', **arrays)

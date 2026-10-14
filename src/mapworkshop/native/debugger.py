@@ -118,6 +118,25 @@ def running_games():
     return out
 
 
+def hidden_desktop():
+    """(handle, 'station\\desktop') of a new desktop in this session's window
+    station that is never switched to: a game started on it is invisible and
+    never takes your focus. Direct3D 9 does not render on a desktop that is
+    not the active one (its device stays lost), so headless runs use DXVK's
+    d3d9.dll (runtime.HEADLESS_GAME), which renders through Vulkan."""
+    u = ctypes.WinDLL('user32', use_last_error=True)
+    u.CreateDesktopW.restype = u.GetProcessWindowStation.restype = wt.HANDLE
+    u.CreateDesktopW.argtypes = [wt.LPCWSTR, wt.LPCWSTR, ctypes.c_void_p, wt.DWORD, wt.DWORD, ctypes.c_void_p]
+    u.GetUserObjectInformationW.argtypes = [wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD, ctypes.POINTER(wt.DWORD)]
+    station = ctypes.create_unicode_buffer(256)
+    u.GetUserObjectInformationW(u.GetProcessWindowStation(), 2, station, ctypes.sizeof(station), None)  # UOI_NAME
+    name = f'mapworkshop-{os.getpid()}'
+    handle = u.CreateDesktopW(name, None, None, 0, 0x10000000, None)           # GENERIC_ALL
+    if not handle:
+        raise RuntimeError(f'Cannot create a hidden desktop (Windows error {ctypes.get_last_error()})')
+    return handle, (station.value or 'WinSta0') + '\\' + name
+
+
 def describe(result):
     """A run's end in a few words: how it stopped, and where it faulted."""
     words = [str(result.get('stopped'))]
@@ -191,6 +210,7 @@ class Game:
         self.stub = None
         self.focus_va = None
         self.stopped = None
+        self.headless = False         # run on a hidden desktop of its own (see hidden_desktop)
         self.t0 = None
         self.res = {'first_chance': [], 'lies': {}}
 
@@ -436,6 +456,9 @@ class Game:
         k = self.k
         si, pi = STARTUPINFO(), PROCESS_INFORMATION()
         si.cb = ctypes.sizeof(si)
+        desktop = hidden_desktop() if self.headless else None
+        if desktop:
+            si.d = desktop[1]
         os.environ['_NO_DEBUG_HEAP'] = '1'            # inherited by the launcher and game.dat
         cmd = ctypes.create_unicode_buffer(f'"{self.game_dir.resolve()/"lotrbfme2.exe"}" {self.args}')
         if not k.CreateProcessW(None, cmd, None, None, False, DEBUG_PROCESS, None, str(self.game_dir.resolve()),
@@ -525,6 +548,8 @@ class Game:
         finally:
             res['stopped'] = self.stopped
             self.terminate()
+            if desktop:
+                ctypes.WinDLL('user32').CloseDesktop(wt.HANDLE(desktop[0]))
             k.CloseHandle(pi.hThread)
             k.CloseHandle(pi.hProcess)
         return res

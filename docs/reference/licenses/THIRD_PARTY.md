@@ -65,6 +65,10 @@ The engine is downloaded as a separate ignored runtime. Its GPL source and licen
 
 `src/mapworkshop/native/capture/capture.cpp` is taken from bfme-workshop's strategic extension (GPL-3.0-only; same author): its hook trampoline, the camera placement of its photo mode and its D3D9 render-target readback. Direct3D9 interface slots were cross-checked there against mingw-w64's `d3d9.h`, which is not copied. `capture.dll` is built with the MSVC 7.1 toolchain of openbfme2's reference checkout; the compiler is not redistributed by this project.
 
+## DXVK
+
+Headless game runs use the 32-bit `d3d9.dll` of [DXVK](https://github.com/doitsujin/dxvk) (zlib licence), Direct3D 9 on Vulkan, by Philip Rebohle and contributors. It is not distributed here: `src/mapworkshop/native/runtime.py` downloads the pinned release into the ignored `local/runtime/dxvk/` and checks its SHA-256.
+
 ## Python dependencies
 
 Python dependencies are declared in `pyproject.toml`: NumPy and Pillow, with moderngl and glfw for rendering and imageio-ffmpeg for video. They are installed separately and retain the license notices included in their distributions.

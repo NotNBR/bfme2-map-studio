@@ -77,7 +77,7 @@ viewer's **Copy for agent** button copies.
    `--compare` checks against an existing native capture without starting the
    game. Use `--native` only for an explicit game verification (about 15 s).
    `mw capture <map> --shot NAME X Y HEIGHT [--graphics High]` saves screenshots
-   rendered by the game itself (about 20 s; a game window opens). Like
+   rendered by the game itself (about 25 s; it runs headless, unseen). Like
    `--native`, use it only when the user wants the game's own view, for example
    to check something the renderer cannot show (water reflections at High).
 

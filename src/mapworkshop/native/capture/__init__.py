@@ -4,7 +4,9 @@ BFME2 renders them, HUD included.
 capture() starts a skirmish on the map and loads capture.dll into the game
 (LoadLibraryA, called on the game's main thread from GameEngine::update).
 The DLL places the tactical camera and copies the D3D9 render target on
-request (see capture.cpp). The launcher reveals the map, then for each shot
+request (see capture.cpp). By default the game runs headless: on a hidden
+desktop, rendering through DXVK (native.runtime). The launcher reveals the
+map, then for each shot
 (name, x, y, height) points the camera at the ground below x, y from that
 height, waits `settle` rendered frames for the view to stream in, and saves
 the frame. The game is ended after the last shot.
@@ -56,15 +58,17 @@ def build():
     return DLL
 
 
-def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240):
+def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240, headless=True):
     """Save each shot (name, x, y, height) of the project's current build as
-    out/<name>.png; returns a report of the shots and the run."""
+    out/<name>.png; returns a report of the shots and the run. `headless`
+    (the default) runs the game unseen, through DXVK (native.runtime); False
+    shows its window and uses native Direct3D 9."""
     from PIL import Image, ImageStat
     from mapworkshop.native import debugger, runtime
     from mapworkshop.native.pe import PE
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    game = runtime.start(project, graphics)
+    game = runtime.start(project, graphics, headless=headless, progress=progress)
     dll = runtime.RUNTIME/'capture.dll'                    # a copy, so a rebuild never finds it in use
     if not dll.exists() or dll.read_bytes() != DLL.read_bytes():
         shutil.copy2(DLL, dll)
@@ -126,10 +130,11 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             state['step'] = 'move'
         return None
 
-    progress(f'Starting {project.title} at {graphics} detail for {len(shots)} screenshot(s)...')
+    progress(f'Starting {project.title} at {graphics} detail' + (' (headless)' if headless else '')
+             + f' for {len(shots)} screenshot(s)...')
     started = time.time()
     result = game.run(timeout, tick, tick_every=0.05)
-    report = dict(map=project.id, graphics=graphics, shots=state['done'], seconds=round(time.time() - started, 1),
+    report = dict(map=project.id, graphics=graphics, headless=headless, shots=state['done'], seconds=round(time.time() - started, 1),
                   run=result)
     (out/'capture.json').write_text(json.dumps(report, indent=2, default=str) + '\n', encoding='utf-8')
     if len(state['done']) != len(shots):
