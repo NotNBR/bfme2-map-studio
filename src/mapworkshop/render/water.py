@@ -87,6 +87,22 @@ def transparency(ini_text, map_ini_text=''):
     return values['transparentwaterdepth'], values['transparentwaterminopacity']
 
 
+def reflection(ini_text, map_ini_text=''):
+    """(ReflectionOn, ReflectionPlaneZ) of the WaterTransparency block, map.ini
+    over water.ini; retail water.ini sets No and 59."""
+    on, plane = False, 59.0
+    for text in (ini_text, map_ini_text):
+        block = re.search(r'(?ims)^\s*WaterTransparency\b(.*?)^\s*End\b', text or '')
+        if not block:
+            continue
+        for key, value in re.findall(r'(?im)^\s*(ReflectionOn|ReflectionPlaneZ)\s*=\s*([-\w.]+)', block.group(1)):
+            if key.lower() == 'reflectionon':
+                on = value.lower() in ('yes', 'true', '1')
+            else:
+                plane = float(value)
+    return on, plane
+
+
 WATER_LODS = ('low', 'medium', 'high', 'ultrahigh')    # GameLOD WaterLOD values 0-3
 LOD_SUFFIXES = ('L', 'M', '', '')                       # 0x00C07F00
 SHADER_LODS = (0, 1, 2, 3)                              # 0x00DBD774

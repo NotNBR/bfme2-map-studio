@@ -185,9 +185,9 @@ switches the terrain between the High and Medium techniques, as
   frames rotated by WindAngle -/+ WaveAngle/2. `BumpSpecular_M`: env texture x
   2 x Dimming x MaterialDiffuse x light colour x (N.L + N.H^exponent), plus
   the wave product. `BumpSpecular`: Blinn specular and N.L, lerped towards the
-  reflection texture by ReflectionStrength. With `ReflectionOn = No` (the
-  retail default) the `WaterDraw.ReflectionTexture` callback binds a black
-  texture. Lights are `Sas.DirectionalLight[0..1]`: the object lights, towards
+  reflection texture by ReflectionStrength; the env and reflection lookups
+  move by ReflectionPerturbation x the bump normal before it is normalized
+  (PSBumpSpecular's r0, about three times the unit normal's xy). Lights are `Sas.DirectionalLight[0..1]`: the object lights, towards
   the light, colours doubled under overbright. `PCA_L` (Low) is unlit and
   takes no reflection, despite its name: the env texture, its lookup moved by
   0.05 x one bump sample (texbem), x DimmingFactor x MaterialDiffuse, plus 0.1
@@ -366,20 +366,29 @@ Open questions, approximated for now:
 - Shroud, point lights, tree fading near units and push-aside are not drawn.
 - ShaderMaterialReplacement at High and normalmapped.fx `Default` (High) are
   not ported (see Objects above).
-- Water reflections are not drawn: the reflection texture is always black.
-  At High, `wtr_Riv03` lerps 80% (ReflectionStrength 0.8) from a dark teal
-  surface towards `WaterDraw.ReflectionTexture` (the lerp read from
-  PSBumpSpecular), so its water is nearly black without one. The game binds
-  black too unless GlobalData+0x5E (ApplyPreset sets it to WaterLOD >= High),
-  the water object (always created by W3DTerrainVisual::init) and
-  WaterTransparency `ReflectionOn` (offset 0x50 in its field table) are all
-  set (callback 0x00080168; the reflection camera, 0x0007FD89, is added under
-  the same two settings), so maps with `ReflectionOn = No` (Greywater, Bramble
-  Hollow) have near-black water at High in game as well. Game screenshots
-  (`mw capture --graphics High`, 14 October 2026) confirm both: Brightwater
-  Fold at High is near-black with `ReflectionOn = No`, as these previews draw
-  it, and a bright, sky-blue reflecting river with `ReflectionOn = Yes`, which
-  the map now sets and these previews still draw black.
+- Water reflections (`BumpSpecular`, WaterLOD High and up): the game binds
+  `WaterDraw.ReflectionTexture` only when GlobalData+0x5E (ApplyPreset sets
+  it to WaterLOD >= High), the water object (always created by
+  W3DTerrainVisual::init) and WaterTransparency `ReflectionOn` (offset 0x50 in
+  its field table; map.ini over water.ini, retail No) are all set (callback
+  0x00080168; the reflection camera, 0x0007FD89, is added under the same two
+  settings); otherwise it binds black. `wtr_Riv03` lerps 80% towards it, so
+  maps with `ReflectionOn = No` (Greywater, Bramble Hollow) have near-black
+  water at High, in game as here. With reflections on, the renderer draws the
+  scene mirrored about `ReflectionPlaneZ` into a texture the size of the view,
+  and the water reads it at the pixel's own screen position, as vs 78 sets
+  `oT2 = ((clip.xy + clip.w) / 2, clip.w)` and the pixel shader divides by
+  it. What that pass draws was read from game screenshots
+  ([Reflection Lab](../maps/reflection_lab/map.py), High, 15 October 2026),
+  not from the code: sky domes, the tree buffer and objects with KindOf
+  `CAN_CAST_REFLECTIONS` (rocks, many ruins and houses), cut at the plane;
+  not the terrain, the shrub buffer or other objects (the lab's towers and
+  bushes). Approximations: the game's reflection texture size and clear
+  colour (black here; sky domes cover it) are not traced, its pass's lighting,
+  fog and shadows neither (objects are lit as in the view, unshadowed), and
+  `ReflectionGuard` is ignored. The lab's game shots show two things not
+  drawn here: a small pale shape on the water that moves between shots and a
+  dark notch at the lake's north-west corner.
   `ShowSoftWaterEdge` (GlobalData+0x84) is only read by
   W3DShaderManager::startRenderToTexture (0x00075BD8), to keep destination
   alpha during screen-filter passes; standing water's shoreline fade is the

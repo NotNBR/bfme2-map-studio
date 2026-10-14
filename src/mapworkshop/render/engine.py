@@ -613,10 +613,16 @@ class MapRenderer:
         ctx.disable(mgl.BLEND)
 
     def _prepare_water(self):
-        from mapworkshop.render.water import build_mesh, transparency, water_level
+        from mapworkshop.render.water import build_mesh, reflection, transparency, water_level
         self.water = []
         self._prepared_water = []
         self.water_level = water_level(self.assets.ini_text('gamelod.ini'), self.options['lod'])
+        # The reflection camera and texture exist only with WaterLOD High or
+        # higher (GlobalData+0x5E) and WaterTransparency ReflectionOn
+        # (callback 0x00080168, camera 0x0007FD89); otherwise the water reads
+        # a black reflection texture.
+        on, plane = reflection(self.assets.ini_text('water.ini'), self.map_ini)
+        self.reflection_plane = plane if on and self.water_level >= 2 else None
         self._prepare_rivers()
         try:
             areas = records(self.map, 'StandingWaterAreas')
@@ -957,7 +963,12 @@ class MapRenderer:
                 if self.assets.texture_key(decal) is None:
                     decal = 'shadow'
             sky = 'SKYBOX' in kinds
-            key = (resolved['model'], resolved['texture'], caster, decal, buffer, bool(resolved.get('prop')), sky)
+            # The water reflection draws the tree buffer and KindOf
+            # CAN_CAST_REFLECTIONS objects (sky domes have it), not the
+            # shrub buffer, the terrain or other objects (Reflection Lab
+            # game screenshots at High, 15 October 2026).
+            reflects = buffer == 'tree' or 'CAN_CAST_REFLECTIONS' in kinds
+            key = (resolved['model'], resolved['texture'], caster, decal, buffer, bool(resolved.get('prop')), sky, reflects)
             groups.setdefault(key, []).append((o['x'], o['y'], z, angle, scale, sway))
             if buffer is None and not resolved.get('prop'):
                 # A drawable in the scene runs its emitters and particle
@@ -993,7 +1004,7 @@ class MapRenderer:
                 if fx.get('__shader__', '').lower() == 'normalmapped.fx':
                     self._effect('normalmapped.fx')
 
-        for index, (model, override, caster, decal, buffer, prop, sky) in enumerate(groups):
+        for index, (model, override, caster, decal, buffer, prop, sky, _) in enumerate(groups):
             self._progress(0.38 + 0.25*index/max(len(groups), 1), f'Preparing models {index+1}/{len(groups)}: {model}')
             names.update((override, decal))
             if buffer is not None:
@@ -1040,11 +1051,12 @@ class MapRenderer:
         self.sky_horizon = None
         self.object_program = ctx.program(vertex_shader=shaders.OBJECT_VS, fragment_shader=shaders.OBJECT_FS)
         self._object_uniforms = frozenset(self.object_program)
+        self.object_program['clip_z'].value = -1e30
         self._object_lighting()
         groups, volumes, objects = self._prepared_objects
         decals = {}
         fx_report = {}
-        for index, ((model, texture_override, caster, decal, buffer, prop, sky), instances) in enumerate(groups.items()):
+        for index, ((model, texture_override, caster, decal, buffer, prop, sky, reflects), instances) in enumerate(groups.items()):
             self._progress(0.80+0.18*index/max(len(groups), 1), f'Uploading objects {index+1}/{len(groups)}: {model}')
             yield
             inst = ctx.buffer(np.array([i[:4] for i in instances], 'f4').tobytes())
@@ -1069,7 +1081,7 @@ class MapRenderer:
                     # Vegetation.IsAlphaBlendEnabled: trees blend (slot 4 of the
                     # tree buffer returns false), shrubs do not.
                     blend=('src_alpha', 'one_minus_src_alpha') if buffer == 'tree' else None,
-                    mode='alphatest', uniforms={}, scaled=True))
+                    mode='alphatest', uniforms={}, scaled=True, reflects=reflects))
                 self.report['objects_drawn'] += len(instances)
                 if decal:
                     # W3DTreeBuffer: one size per tree type, the sum of the model's
@@ -1092,6 +1104,7 @@ class MapRenderer:
                 batch = self._material_batch(part, texture_override, fx_report)
                 batch.update(vao=self._vertex_array(vertices, part['indices'], inst, scales, sway),
                              caster=caster, count=len(instances), vegetation=False, scaled=not prop, sky=sky,
+                             reflects=reflects,
                              camera=part.get('camera', 0), pivot=tuple(float(v) for v in part.get('pivot', (0, 0, 0))),
                              grid=part['material'].get('grid'))
                 self.batches.append(batch)
@@ -1851,6 +1864,7 @@ class MapRenderer:
                 self._shadow_pass(light_vp, light_radius, shadow_size)
             elif self.options['shadows'] == 'volume':
                 volume_count = self._volume_pass(camera, size)
+        reflection = self._reflection_pass(camera, size, time)
         width, height = size
         framebuffer.use()
         ctx.viewport = (0, 0, width, height)
@@ -1956,6 +1970,11 @@ class MapRenderer:
             wp['playable'].value = self.playable
             self._bind_shadow(wp, light_vp, light_depth if light_vp is not None else 1.0, volume_count)
             wp['show_border'].value = int(border)
+            wp['use_reflection'].value = int(reflection is not None)
+            if reflection is not None:
+                reflection.use(12)
+                wp['reflection_tex'].value = 12
+                wp['viewport_size'].value = (float(width), float(height))
             if 'use_walk' in wp:
                 wp['use_walk'].value = int(walk is not None)
                 if walk is not None:
@@ -1983,6 +2002,77 @@ class MapRenderer:
             self._draw_effects(vp, camera, eye, time)
         if self.particles and self.visible['weather']:
             self._draw_particles(vp, camera, eye, time)
+
+    def _reflection_pass(self, camera, size, time):
+        """The water's reflection texture: the scene mirrored about
+        ReflectionPlaneZ, as the main camera sees it. WaterShader's
+        BumpSpecular reads it at the pixel's own screen position (vs 78:
+        oT2 = ((clip.xy + clip.w) / 2, clip.w)), moved by
+        ReflectionPerturbation x the bump normal. It holds the sky domes, the
+        tree buffer and KindOf CAN_CAST_REFLECTIONS objects; the game clears
+        it to black where nothing is drawn (assumed; skies cover it). Returns
+        the texture, or None when the water reads black."""
+        plane = getattr(self, 'reflection_plane', None)
+        if (plane is None or not self.water or not self.visible['water'] or not self.batches
+                or not any(e['uniforms']['technique'] == 0 for e in self.water)):
+            return None
+        ctx, mgl = self.ctx, self.moderngl
+        if getattr(self, 'reflection_size', None) != size:
+            for name in ('reflection_fbo', 'reflection_tex', 'reflection_depth'):
+                if hasattr(self, name):
+                    getattr(self, name).release()
+            self.reflection_size = size
+            self.reflection_tex = ctx.texture(size, 4)
+            self.reflection_tex.repeat_x = self.reflection_tex.repeat_y = False
+            self.reflection_depth = ctx.depth_renderbuffer(size)
+            self.reflection_fbo = ctx.framebuffer([self.reflection_tex], self.reflection_depth)
+        self.reflection_fbo.use()
+        ctx.viewport = (0, 0, *size)
+        self.reflection_fbo.clear(0.0, 0.0, 0.0, 1.0, depth=1.0)
+        if not self.visible['objects']:
+            return self.reflection_tex
+        mirror = np.diag([1.0, 1.0, -1.0, 1.0])
+        mirror[2, 3] = 2.0*plane
+        vp = np.ascontiguousarray((camera['view_projection'] @ mirror).T, dtype='f4').tobytes()
+        eye = np.asarray(camera['eye'], float)*(1, 1, -1) + (0, 0, 2.0*plane)
+        target = np.asarray(camera['target'], float)*(1, 1, -1) + (0, 0, 2.0*plane)
+        eye_t = tuple(float(v) for v in eye)
+        op = self.object_program
+        self._set_fog(op, eye_t)
+        # The mirror turns the winding round: culled faces flip.
+        ctx.front_face = 'cw'
+        sky = [b for b in self.batches if b.get('sky') and b.get('reflects')]
+        if sky:
+            self._draw_sky(sky, vp, eye_t)
+        ctx.enable(mgl.DEPTH_TEST)
+        op['view_projection'].write(vp)
+        op['eye'].value = eye_t
+        back = eye - target
+        op['camera_back'].value = tuple(back/(np.linalg.norm(back) or 1.0))
+        op['time'].value = float(time)
+        op['use_shadows'].value = 0
+        op['use_cloud'].value = int(self.options['clouds'] and self.cloud_tex is not None)
+        if self.cloud_tex:
+            self.cloud_tex.use(5)
+        op['cloud_tex'].value = 5
+        op['clip_z'].value = plane
+        for batch in self._draw_batches:
+            if batch.get('sky') or not batch.get('reflects'):
+                continue
+            if batch['blend'] is not None:
+                ctx.enable(mgl.BLEND)
+                ctx.blend_func = self._blend_func(batch['blend'])
+            ctx.fbo.depth_mask = batch['depth_mask']
+            if batch['cull']:
+                ctx.enable(mgl.CULL_FACE)
+            self._bind_batch(op, batch)
+            batch['vao'].render(mgl.TRIANGLES, instances=batch['count'])
+            ctx.disable(mgl.BLEND)
+            ctx.disable(mgl.CULL_FACE)
+            ctx.fbo.depth_mask = True
+        op['clip_z'].value = -1e30
+        ctx.front_face = 'ccw'
+        return self.reflection_tex
 
     def top_size(self, view, scale=2.0, border=False):
         """Pixel size for a TopView at `scale` pixels per terrain cell."""

@@ -1,0 +1,6 @@
+id = "reflection-lab"
+title = "Reflection Lab"
+native_name = "map mp reflection lab"
+players = 2
+description = "Test map: a still lake with towers, trees and a hill on its shores, to compare water reflections in the renderer and the game."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

@@ -25,8 +25,8 @@ Water: WaterShader.fx BumpSpecular (vs object 78, ps PSBumpSpecular_Array
 76/77 by NumShadows) and BumpSpecular_M (vs 148, ps 149, the Medium water).
 Two bump samples in frames rotated by WindAngle -/+ WaveAngle/2 give the
 normal. BumpSpecular: env x 2 x Dimming x MaterialDiffuse x N.L plus Blinn
-specular, x light colour, lerped to the (black) reflection by
-ReflectionStrength. BumpSpecular_M: env x 2 x Dimming x MaterialDiffuse x
+specular, x light colour, lerped to the reflection (black unless the map
+turns reflections on) by ReflectionStrength. BumpSpecular_M: env x 2 x Dimming x MaterialDiffuse x
 light colour x (N.L + N.H^exp). Both add the wave product; alpha from water
 depth: clamp(depth / (DWA^2 x MaxAlphaDepth)) x DWA. PCA_L (vs 140, ps 141,
 the Low water): env offset by one bump sample (texbem) x Dimming x
@@ -386,6 +386,9 @@ uniform float specular_exponent;
 uniform float bump_scale;
 uniform float reflection_strength;
 uniform float reflection_perturbation;
+uniform sampler2D reflection_tex;   // WaterDraw.ReflectionTexture: the mirrored scene, screen-aligned
+uniform int use_reflection;         // 0: the black texture the game binds without reflections
+uniform vec2 viewport_size;
 uniform float shadow_lightness;
 uniform int has_wave;
 uniform vec2 playable;
@@ -461,6 +464,9 @@ void main() {
     vec3 b = texture(bump_tex, v_bump.wz).rgb + texture(bump_tex, v_bump.xy).rgb;
     vec3 n = 2.0*b + vec3(0.0, 0.0, 1.0) - 2.0;     // + oT7, the world up axis
     n.xy *= bump_scale;
+    // PSBumpSpecular moves the env and reflection lookups by this normal
+    // before it is normalized (r0), about three times the unit one's xy.
+    vec2 perturb = n.xy;
     n *= inversesqrt(dot(n, n) + 1e-10);
     if (technique == 1) {
         // BumpSpecular_M (vs object 148, ps 149): per-vertex half vector from
@@ -490,10 +496,13 @@ void main() {
         float k = s >= 1.0 ? 1.0 : min(s + shadow_lightness, 0.999);
         diff *= k; spec *= k;
     }
-    vec3 env = texture(env_tex, v_env + reflection_perturbation * n.xy).rgb * clamp(diffuse, 0.0, 1.0);
+    vec3 env = texture(env_tex, v_env + reflection_perturbation * perturb).rgb * clamp(diffuse, 0.0, 1.0);
     vec3 surface = env * diff + spec * specular_color;
-    // The reflection texture is black unless map reflections are on.
-    vec3 c = mix(light0_color * surface, vec3(0.0), reflection_strength);
+    // The reflection texture, read at the pixel's screen position (oT2.xy /
+    // oT2.z) moved by the perturbed normal; black unless map reflections are on.
+    vec3 reflected = use_reflection != 0
+        ? texture(reflection_tex, gl_FragCoord.xy / viewport_size + reflection_perturbation * perturb).rgb : vec3(0.0);
+    vec3 c = mix(light0_color * surface, reflected, reflection_strength);
     if (has_wave != 0)
         c += texture(wave_tex, v_wave.xy).rgb * texture(wave_tex, v_wave.wz).rgb;
     c = apply_fog(c, v_world);
@@ -665,6 +674,7 @@ uniform vec2 fx_uv_scale;           // simple.fx TexCoordTransform_0.xy
 uniform vec3 sky_horizon;           // sky domes: rim colour (also the background below)
 uniform vec2 sky_rim;               // sky domes: rim world z, height of the fade (0: none)
 uniform int depth_only;
+uniform float clip_z;               // the water reflection: drop what lies below its plane
 uniform sampler2DShadow shadow_map;
 uniform mat4 light_view_projection;
 uniform vec2 shadow_texel;          // 1 / shadow map size
@@ -712,6 +722,7 @@ vec3 apply_fog(vec3 c, vec3 world) {
     return mix(c, fog_color, f);
 }
 void main() {
+    if (v_world.z < clip_z) discard;
     // W3D stores V from the bottom (verified against native trees and bridges);
     // textures are uploaded top row first, so V is flipped here.
     vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
