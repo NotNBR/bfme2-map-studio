@@ -22,6 +22,9 @@ SHADERS, TEXTURES, PASS, STAGE, FX_SHADERS = 0x29, 0x30, 0x38, 0x48, 0x50
 TANGENTS, BINORMALS = 0x60, 0x61
 HIERARCHY, HLOD = 0x100, 0x700
 HIDDEN, TWO_SIDED, CAST_SHADOW, SKIN = 0x1000, 0x2000, 0x8000, 0x20000
+GEOMETRY_TYPE = 0x00FF0000
+# W3D_MESH_FLAG_GEOMETRY_TYPE_CAMERA_ALIGNED / _CAMERA_ORIENTED -> 1 / 2.
+CAMERA_MODES = {0x00010000: 1, 0x00060000: 2}
 
 
 def chunks(data):
@@ -99,6 +102,7 @@ def classic_shader(shader):
     and the primary gradient (texture x diffuse, MODULATE2X under overbright)."""
     depth_mask, dst, gradient, src, texturing, alpha_test = (shader[1], shader[3], shader[5], shader[7],
                                                              shader[8], shader[12])
+    detail = shader[9]                               # DetailColorFunc: how stage 1 combines
     src_f = SRC_BLEND[src] if src < len(SRC_BLEND) else 'one'
     dst_f = DST_BLEND[dst] if dst < len(DST_BLEND) else 'zero'
     blend = None if (src_f, dst_f) == ('one', 'zero') else (src_f, dst_f)
@@ -109,20 +113,44 @@ def classic_shader(shader):
     else:
         reference = None
     return dict(blend=blend, depth_mask=bool(depth_mask), alpha_ref=reference,
-                gradient=int(gradient), texturing=bool(texturing))
+                gradient=int(gradient), texturing=bool(texturing), detail=int(detail))
 
 
 def vertex_material(payload):
-    """First W3D_CHUNK_VERTEX_MATERIAL_INFO: ambient, diffuse, emissive, opacity."""
+    """First W3D_CHUNK_VERTEX_MATERIAL_INFO: ambient, diffuse, emissive,
+    opacity, and its stage-0 texture mapper (`grid`: frames per row, frames
+    per second and frame count for the Grid mapper, else None)."""
     for kind, chunk in chunks(payload):
         if kind != 0x2b:
             continue
-        info = dict(chunks(chunk)).get(0x2d)
+        parts = dict(chunks(chunk))
+        info = parts.get(0x2d)
         if info and len(info) >= 32:
             rgb = lambda o: tuple(c/255 for c in info[o:o+3])
             return dict(ambient=rgb(4), diffuse=rgb(8), emissive=rgb(16),
-                        opacity=struct.unpack_from('<f', info, 24)[0])
-    return dict(ambient=(1.0, 1.0, 1.0), diffuse=(1.0, 1.0, 1.0), emissive=(0.0, 0.0, 0.0), opacity=1.0)
+                        opacity=struct.unpack_from('<f', info, 24)[0],
+                        grid=grid_mapper(struct.unpack_from('<I', info)[0], parts.get(0x2e, b'')))
+    return dict(ambient=(1.0, 1.0, 1.0), diffuse=(1.0, 1.0, 1.0), emissive=(0.0, 0.0, 0.0), opacity=1.0, grid=None)
+
+
+def grid_mapper(attributes, args):
+    """GridTextureMapperClass (W3DVERTMAT_STAGE0_MAPPING_GRID, 0x00070000):
+    the UVs cover the first frame of a 2^Log2Width square grid, stepped
+    through at FPS frames per second, row by row, wrapping after Last frames
+    (all of them by default). Returns (width, fps, last) or None."""
+    if attributes & 0x00FF0000 != 0x00070000:
+        return None
+    values = {}
+    for line in args.split(b'\0', 1)[0].decode('latin-1').splitlines():
+        key, _, value = line.partition('=')
+        values[key.strip().lower()] = value.strip()
+    try:
+        width = 1 << int(values.get('log2width', '0'))
+        fps = float(values.get('fps', '1'))
+        last = int(values.get('last', width*width))
+    except ValueError:
+        return None
+    return (width, fps, max(1, min(last, width*width)))
 
 
 def post_load_colors(material, dcg, dig, count):
@@ -177,6 +205,7 @@ def parse_mesh(payload):
             textures.append(cstr(dict(chunks(tex)).get(0x32, b'')))
     shaders = [parts[SHADERS][i:i+16] for i in range(0, len(parts.get(SHADERS, b'')), 16)]
     uv = None; tex_ids = None; shader_ids = None; dcg = None; dig = None
+    uv2 = None; detail_ids = None
     if PASS in parts:
         pass_parts = list(chunks(parts[PASS]))
         for kind, chunk in pass_parts:
@@ -197,8 +226,20 @@ def parse_mesh(payload):
                     uv = np.frombuffer(stage[0x4a], '<f4').reshape(-1, 2).astype(np.float32)
                 if 0x49 in stage:
                     tex_ids = np.frombuffer(stage[0x49], '<u4')
+            elif kind == STAGE and uv2 is None:
+                # Texture stage 1: the detail texture and its coordinates.
+                stage = dict(chunks(chunk))
+                if 0x4a in stage:
+                    uv2 = np.frombuffer(stage[0x4a], '<f4').reshape(-1, 2).astype(np.float32)
+                if 0x49 in stage:
+                    detail_ids = np.frombuffer(stage[0x49], '<u4')
     if uv is None or len(uv) != count:
         uv = np.zeros((count, 2), np.float32)
+    detail_texture = ''
+    if uv2 is None or len(uv2) != count:
+        uv2 = uv
+    elif detail_ids is not None and len(detail_ids) and int(detail_ids[0]) < len(textures):
+        detail_texture = textures[int(detail_ids[0])]
     material = vertex_material(parts.get(0x2a, b''))
     colors, sources = post_load_colors(material, dcg, dig, count)
     two_sided = bool(attributes & TWO_SIDED)
@@ -233,7 +274,8 @@ def parse_mesh(payload):
     if INFLUENCES in parts:
         influences = np.frombuffer(parts[INFLUENCES], '<u2').reshape(-1, 4)[:, 0].astype(int)
     return dict(name=name, container=container, attributes=attributes, positions=positions,
-                normals=normals, tangents=tangents, binormals=binormals, uv=uv, colors=colors,
+                normals=normals, tangents=tangents, binormals=binormals, uv=uv, uv2=uv2,
+                detail_texture=detail_texture, colors=colors,
                 dcg=dcg, groups=groups, shaders=shader_list, mode=mode, influences=influences,
                 material=material, sources=sources, fx=fx, two_sided=two_sided,
                 textures=textures, triangles=triangles)
@@ -372,8 +414,16 @@ class ModelCache:
             used.add(id(mesh))
             positions = mesh['positions']; normals = mesh['normals']
             tangents, binormals = mesh['tangents'], mesh['binormals']
+            local = (positions, normals)
+            # The geometry type is a field (W3D_MESH_FLAG_GEOMETRY_TYPE_MASK),
+            # not bits: camera-oriented (0x60000) shares a bit with skin.
+            geometry = mesh['attributes'] & GEOMETRY_TYPE
+            camera = CAMERA_MODES.get(geometry, 0)
+            pivot = np.zeros(3, np.float32)
             if bones is not None:
-                if mesh['attributes'] & SKIN and mesh['influences'] is not None and len(mesh['influences']) == len(positions):
+                if bone is not None and bone < len(bones):
+                    pivot = bones[bone][:3, 3].astype(np.float32)
+                if geometry == SKIN and mesh['influences'] is not None and len(mesh['influences']) == len(positions):
                     index = np.clip(mesh['influences'], 0, len(bones)-1)
                     stack = np.stack(bones)[index]
                     rotate = lambda v: None if v is None else np.einsum('nij,nj->ni', stack[:, :3, :3], v)
@@ -391,7 +441,7 @@ class ModelCache:
                 # top-LOD meshes whose MeshGeometry has CAST_SHADOW (the W3D
                 # attribute 0x8000), hidden ones included.
                 shadow.append(dict(positions=positions.astype(np.float32), indices=mesh['triangles'],
-                                   name=mesh['name'], skin=bool(mesh['attributes'] & SKIN),
+                                   name=mesh['name'], skin=geometry == SKIN,
                                    hidden=bool(mesh['attributes'] & HIDDEN)))
             if mesh['attributes'] & HIDDEN or 'shadow' in mesh['name']:
                 continue
@@ -402,15 +452,23 @@ class ModelCache:
                 mode = ('alphatest' if state['alpha_ref'] == 0x60 else
                         'additive' if state['blend'] == ('one', 'one') else
                         'blend' if state['blend'] else 'opaque')
+                if camera:
+                    # DX8 mesh renderer: an aligned or oriented mesh is drawn
+                    # with Obj_Look_At at its bone's position instead of its
+                    # transform, so it keeps its own axes and turns as a whole.
+                    positions, normals = local
+                    tangents = binormals = None
                 parts.append(dict(positions=positions.astype(np.float32), normals=normals.astype(np.float32),
                                   tangents=None if tangents is None else tangents.astype(np.float32),
                                   binormals=None if binormals is None else binormals.astype(np.float32),
-                                  uv=mesh['uv'], colors=mesh['colors'], indices=triangles, texture=texture,
+                                  uv=mesh['uv'], uv2=mesh['uv2'], detail_texture=mesh['detail_texture'],
+                                  colors=mesh['colors'], indices=triangles, texture=texture,
                                   mode=mode, state=state, material=mesh['material'], sources=mesh['sources'],
-                                  fx=mesh['fx'], two_sided=mesh['two_sided'], name=mesh['name']))
+                                  fx=mesh['fx'], two_sided=mesh['two_sided'], name=mesh['name'],
+                                  camera=camera, pivot=pivot))
         if not parts:
             return None
-        allpos = np.concatenate([p['positions'] for p in parts])
+        allpos = np.concatenate([p['positions'] + (p['pivot'] if p['camera'] else 0) for p in parts])
         bone_matrix = lambda i: bones[i] if bones is not None and i < len(bones) else np.eye(4)
         return dict(parts=parts, bounds=(allpos.min(0), allpos.max(0)), shadow=shadow, collision=collision,
                     bones={} if named is None else {n: m for n, m in zip(*named)},

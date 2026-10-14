@@ -458,6 +458,32 @@ would overwrite.
 The render report lists `effects`: emitters and systems attached, and those
 skipped with the reason.
 
+### Flame and glow meshes
+
+Many lamps also carry flames and glows as meshes. `GPTOWNLAMP5` (the hanging
+lantern `TownLamp5`) has only these, and they work in the prop buffer too.
+
+- **Camera-facing meshes.** W3D geometry type `CAMERA_ORIENTED` (`0x60000`)
+  or `CAMERA_ALIGNED` (`0x10000`). The DX8 mesh renderer draws them with
+  `Obj_Look_At` at the bone's position instead of the mesh transform: local
+  +x points at the camera (oriented) or along the camera's z axis (aligned),
+  and y stays level (dx8renderer.cpp). The geometry type is a field, not
+  bits: `0x60000` shares the skin bit, which the loader used to take for a
+  skin.
+- **Grid mapper.** Stage-0 mapping `0x00070000`
+  (`GridTextureMapperClass`). The UVs cover the first frame of a
+  2<sup>Log2Width</sup> grid, which is stepped at `FPS` frames per second,
+  row by row, up to `Last` frames. The flame sequence `EXFireTorchSeq` is a
+  4 x 4 grid at 15 frames per second.
+- **Detail stage.** `DetailColorFunc` combines texture stage 1, with its own
+  UVs, into stage 0. DETAIL, SCALE, ADD, ADDSIGNED, ADDSIGNED2X and SCALE2X
+  are drawn. `FIREGLOW` multiplies its glow spot by itself (SCALE), which
+  darkens the spot's grey surround to almost black.
+- **Textures used as stored.** Materials that neither alpha blend nor alpha
+  test skip `bleed_alpha`. Additive glows draw the colour under zero alpha,
+  which the bleed would replace with neighbouring atlas art; `FIREGLOW`
+  then showed as a patterned red square.
+
 Approximations:
 
 - Burst delays use the mean of `BurstDelay`.

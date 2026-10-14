@@ -393,9 +393,14 @@ class MapRenderer:
             image = self.assets.image(name)
             self._images[name.lower()] = bleed_alpha(image) if image is not None else None
 
-    def _plain_texture(self, name, fallback=None):
-        self._prepare_image(name)
-        image = self._images.get(name.lower()) if name else None
+    def _plain_texture(self, name, fallback=None, raw=False):
+        """A mipmapped texture. `raw` keeps the colour under transparent
+        texels (additive materials draw it), skipping bleed_alpha."""
+        if raw:
+            image = self.assets.image(name) if name else None
+        else:
+            self._prepare_image(name)
+            image = self._images.get(name.lower()) if name else None
         if image is None:
             return fallback
         texture = self.ctx.texture((image.shape[1], image.shape[0]), 4, np.ascontiguousarray(image).tobytes())
@@ -756,10 +761,10 @@ class MapRenderer:
             self.water.append(entry)
 
     # Objects ----------------------------------------------------------------
-    def _object_texture(self, name):
-        key = name.lower()
+    def _object_texture(self, name, raw=False):
+        key = ('raw:' if raw else '') + name.lower()
         if key not in self.textures:
-            texture = self._plain_texture(name)
+            texture = self._plain_texture(name, raw=raw)
             if texture is None and name:
                 self.report['missing_textures'].append(name)
             self.textures[key] = texture
@@ -785,8 +790,8 @@ class MapRenderer:
         vbo = ctx.buffer(np.ascontiguousarray(vertices, dtype='f4').tobytes())
         ibo = ctx.buffer(np.ascontiguousarray(indices, dtype='u4').tobytes())
         vao = ctx.vertex_array(self.object_program,
-                               [(vbo, '3f 3f 2f 4f 3f 3f', 'in_position', 'in_normal', 'in_uv', 'in_color',
-                                 'in_tangent', 'in_binormal'),
+                               [(vbo, '3f 3f 2f 4f 3f 3f 2f', 'in_position', 'in_normal', 'in_uv', 'in_color',
+                                 'in_tangent', 'in_binormal', 'in_uv2'),
                                 (inst, '4f/i', 'in_place'), (scales, 'f/i', 'in_scale'), (sway, 'f/i', 'in_sway')],
                                index_buffer=ibo, index_element_size=4)
         self._object_resources += [vao, vbo, ibo]
@@ -937,7 +942,7 @@ class MapRenderer:
 
         def textures(model):
             for part in (model or {}).get('parts', []):
-                names.add(part.get('texture'))
+                names.update((part.get('texture'), part.get('detail_texture')))
                 fx = part.get('fx') or {}
                 names.update(value for key, value in fx.items()
                              if ('texture' in key.lower() or key == 'NormalMap') and isinstance(value, str))
@@ -1009,7 +1014,7 @@ class MapRenderer:
                     continue
                 n = len(tree['positions'])
                 zeros = np.zeros((n, 3), np.float32)
-                vertices = np.hstack([tree['positions'], tree['normals'], tree['uv'], tree['colors'], zeros, zeros])
+                vertices = np.hstack([tree['positions'], tree['normals'], tree['uv'], tree['colors'], zeros, zeros, tree['uv']])
                 # TextureName (+ '.tga') replaces the model texture in the atlas.
                 name_t = texture_override or tree['texture']
                 self.batches.append(dict(
@@ -1038,10 +1043,13 @@ class MapRenderer:
                 n = len(part['positions'])
                 tangents = part['tangents'] if part['tangents'] is not None else np.zeros((n, 3), np.float32)
                 binormals = part['binormals'] if part['binormals'] is not None else np.zeros((n, 3), np.float32)
-                vertices = np.hstack([part['positions'], part['normals'], part['uv'], part['colors'], tangents, binormals])
+                vertices = np.hstack([part['positions'], part['normals'], part['uv'], part['colors'], tangents, binormals,
+                                      part.get('uv2', part['uv'])])
                 batch = self._material_batch(part, texture_override, fx_report)
                 batch.update(vao=self._vertex_array(vertices, part['indices'], inst, scales, sway),
-                             caster=caster, count=len(instances), vegetation=False, scaled=not prop, sky=sky)
+                             caster=caster, count=len(instances), vegetation=False, scaled=not prop, sky=sky,
+                             camera=part.get('camera', 0), pivot=tuple(float(v) for v in part.get('pivot', (0, 0, 0))),
+                             grid=part['material'].get('grid'))
                 self.batches.append(batch)
                 if sky:
                     z = part['positions'][:, 2]
@@ -1213,7 +1221,7 @@ class MapRenderer:
                     positions, normals = place(part, offset, plan, ends[0])
                     n = len(positions)
                     zeros = np.zeros((n, 3), np.float32)
-                    vertices = np.hstack([positions, normals, part['uv'], part['colors'], zeros, zeros])
+                    vertices = np.hstack([positions, normals, part['uv'], part['colors'], zeros, zeros, part['uv']])
                     batch = self._material_batch(dict(part, fx=None), texture, fx_report)
                     batch.update(vao=self._vertex_array(vertices, part['indices'], identity, one, still),
                                  caster=False, count=1, vegetation=False, scaled=True, sky=False, cull=False)
@@ -1270,7 +1278,14 @@ class MapRenderer:
             fx_report.setdefault(name, dict(meshes=0, approximated='fixed-function stand-in'))['meshes'] += 1
         material, sources = part['material'], part['sources']
         texture = texture_override or part['texture']
-        return dict(texture=self._object_texture(texture) if state['texturing'] and texture else None,
+        # Texture stage 1 (DetailColorFunc), drawn for the functions the
+        # fragment shader knows; others leave stage 0 as it is.
+        detail = state.get('detail', 0) if part.get('detail_texture') and state['texturing'] else 0
+        # Without alpha blending or testing the texture's alpha is unused, and
+        # additive glows keep their colour under zero alpha: draw it as stored.
+        raw = state['blend'] is not None and state['blend'][0] != 'src_alpha' and state['alpha_ref'] is None
+        return dict(texture=self._object_texture(texture, raw) if state['texturing'] and texture else None,
+                    detail=self._object_texture(part['detail_texture'], raw) if detail else None,
                     normal=None, technique=0, cull=not part['two_sided'], depth_mask=state['depth_mask'],
                     alpha_ref=None if state['alpha_ref'] is None else state['alpha_ref']/255,
                     blend=state['blend'], mode=part['mode'],
@@ -1279,7 +1294,7 @@ class MapRenderer:
                                   ambient_from_vertex=int(sources['ambient']),
                                   diffuse_from_vertex=int(sources['diffuse']), lighting=int(sources['lighting']),
                                   gradient=state['gradient'] if state['gradient'] in (0, 1, 2) else 1,
-                                  texturing=int(state['texturing'])))
+                                  texturing=int(state['texturing']), detail_func=detail))
     @staticmethod
     def _prototype_scale(o):
         for name, _, value in o.get('properties') or ():
@@ -1660,6 +1675,14 @@ class MapRenderer:
         op['technique'].value = batch['technique']
         op['alpha_ref'].value = -1.0 if batch['alpha_ref'] is None else float(batch['alpha_ref'])
         op['texturing'].value = 1
+        # Camera-facing meshes and Grid-mapped textures (render.w3d).
+        op['camera_mode'].value = batch.get('camera', 0)
+        op['pivot'].value = batch.get('pivot', (0.0, 0.0, 0.0))
+        op['uv_grid'].value = tuple(float(v) for v in batch.get('grid') or (0, 0, 0))
+        op['detail_func'].value = batch['uniforms'].get('detail_func', 0)
+        if batch.get('detail') is not None:
+            batch['detail'].use(3)
+            op['detail_tex'].value = 3
         if batch.get('normal') is not None:
             batch['normal'].use(9)
             op['normal_tex'].value = 9
@@ -1849,6 +1872,9 @@ class MapRenderer:
             op = self.object_program
             op['view_projection'].write(vp)
             op['eye'].value = eye
+            back = np.asarray(camera['eye'], float) - np.asarray(camera['target'], float)
+            op['camera_back'].value = tuple(back/(np.linalg.norm(back) or 1.0))
+            op['time'].value = float(time)
             self._bind_shadow(op, light_vp, light_depth if light_vp is not None else 1.0, volume_count)
             op['use_cloud'].value = int(self.options['clouds'] and self.cloud_tex is not None)
             if 'cloud_xform' in p:

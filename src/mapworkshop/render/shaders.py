@@ -500,6 +500,11 @@ uniform vec4 cloud_xform;           // Terrain.Cloud: uv = world.xy * xy + zw
 uniform vec3 fx_ambient_color;      // normalmapped AmbientColor
 uniform vec4 fx_diffuse;            // normalmapped DiffuseColor
 uniform float fx_opacity;           // OpacityOverride
+uniform int camera_mode;            // 0 normal, 1 camera-aligned, 2 camera-oriented mesh
+uniform vec3 pivot;                 // aligned/oriented: the mesh's bone position, model space
+uniform vec3 camera_back;           // the camera's z axis (pointing back, towards the viewer)
+uniform vec3 uv_grid;               // Grid mapper: frames per row, frames per second, frames (0: none)
+uniform float time;
 in vec3 in_position;
 in vec3 in_normal;
 in vec2 in_uv;
@@ -509,8 +514,10 @@ in vec3 in_binormal;
 in vec4 in_place;                   // x, y, z, angle
 in float in_scale;
 in float in_sway;                   // sway type (vegetation)
+in vec2 in_uv2;                     // texture stage 1 (detail)
 out vec3 v_world;
 out vec2 v_uv;
+out vec2 v_uv2;
 out vec4 v_color;                   // oD0 (or oT4 for normalmapped Default_M)
 out vec3 v_main;                    // main-light share of v_color (shadow mapping)
 out vec2 v_cloud;
@@ -521,7 +528,29 @@ void main() {
     vec3 p = in_position * in_scale;
     v_world = vec3(c*p.x - s*p.y, s*p.x + c*p.y, p.z) + in_place.xyz;
     vec3 n = vec3(c*in_normal.x - s*in_normal.y, s*in_normal.x + c*in_normal.y, in_normal.z);
+    if (camera_mode != 0) {
+        // DX8 mesh renderer: Obj_Look_At(position, camera position) for
+        // oriented meshes, (position, position + camera z) for aligned ones:
+        // local x points along that direction, y stays level.
+        vec3 q = pivot * in_scale;
+        vec3 origin = vec3(c*q.x - s*q.y, s*q.x + c*q.y, q.z) + in_place.xyz;
+        vec3 d = camera_mode == 2 ? eye - origin : camera_back;
+        float len1 = length(d), len2 = length(d.xy);
+        float sinp = len1 > 0.0 ? d.z / len1 : 0.0, cosp = len1 > 0.0 ? len2 / len1 : 1.0;
+        float siny = len2 > 0.0 ? d.y / len2 : 0.0, cosy = len2 > 0.0 ? d.x / len2 : 1.0;
+        mat3 look = mat3(vec3(cosy*cosp, siny*cosp, sinp), vec3(-siny, cosy, 0.0), vec3(-cosy*sinp, -siny*sinp, cosp));
+        v_world = origin + look * p;
+        n = look * in_normal;
+    }
     v_uv = in_uv;
+    v_uv2 = in_uv2;
+    if (uv_grid.x > 0.0) {
+        // GridTextureMapperClass: step through the frames row by row. The
+        // offset applies to the loaded (V-flipped) coordinates, so it lowers
+        // the stored V.
+        float frame = mod(floor(time * uv_grid.y), uv_grid.z);
+        v_uv += vec2(mod(frame, uv_grid.x), -floor(frame / uv_grid.x)) / uv_grid.x;
+    }
     v_main = vec3(0.0);
     v_cloud = vec2(0.0);
     v_light_t = vec3(0.0);
@@ -634,6 +663,9 @@ float lit_fraction(vec3 world) {
 }
 in vec3 v_world;
 in vec2 v_uv;
+in vec2 v_uv2;
+uniform int detail_func;            // W3D DetailColorFunc of texture stage 1
+uniform sampler2D detail_tex;
 in vec4 v_color;
 in vec3 v_main;
 in vec2 v_cloud;
@@ -709,6 +741,17 @@ void main() {
         if (gradient == 0) c = base;
         else if (gradient == 2) c = vec4(base.rgb + d.rgb, base.a * d.a);
         else c = vec4(base.rgb * d.rgb * (modulate2x != 0 ? 2.0 : 1.0), base.a * d.a);
+        // Stage 1 (ShaderClass::Apply detail colour): DETAIL, SCALE, ADD,
+        // ADDSIGNED, ADDSIGNED2X and SCALE2X.
+        if (detail_func != 0) {
+            vec3 dt = texture(detail_tex, vec2(v_uv2.x, 1.0 - v_uv2.y)).rgb;
+            if (detail_func == 1) c.rgb = dt;
+            else if (detail_func == 2) c.rgb *= dt;
+            else if (detail_func == 4) c.rgb += dt;
+            else if (detail_func == 9) c.rgb += dt - 0.5;
+            else if (detail_func == 10) c.rgb = 2.0 * (c.rgb + dt - 0.5);
+            else if (detail_func == 11) c.rgb *= 2.0 * dt;
+        }
     }
     if (alpha_ref >= 0.0 && c.a < alpha_ref) discard;
     vec3 color = apply_fog(c.rgb, v_world);
