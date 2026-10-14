@@ -1,0 +1,6 @@
+id = "brightwater-fold"
+title = "Brightwater Fold"
+native_name = "map mp brightwater fold"
+players = 2
+description = "A Rohan dale: a river parting round an island hold, golden downs, creeks, fords and horse paddocks between two players."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

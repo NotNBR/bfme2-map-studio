@@ -68,6 +68,7 @@ environment. More in [Getting started](docs/getting-started.md).
 | [The Ashen March](maps/ashen_march/README.md) | 2 | A ruined Gondorian watch on the edge of Mordor |
 | [Ithilien Frontier](maps/ithilien_frontier/README.md) | 2 | A wooded Gondorian frontier with four river crossings |
 | [Bramble Hollow](maps/bramble_hollow/README.md) | 2 | A Shire valley with a millpond hamlet, wooden footbridges and a creek gorge |
+| [Brightwater Fold](maps/brightwater_fold/README.md) | 2 | A Rohan dale: a river parting round an island hold, creeks, fords and horse paddocks |
 
 ## Documentation
 
