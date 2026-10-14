@@ -26,9 +26,38 @@ first cross-section to its last; which bank a section names first varies
 (1,277 to 910 in the stock maps), so it carries no meaning. UV speed is 0.06 in
 almost every stock river.
 
-The renderer draws rivers (`render.rivers`) as an approximation: the game's
-river shader is not matched, and whether a river strip alone (without
-standing water) affects movement has not been tested. `mw render --flow` and
+The strips reach onto their banks. At the two ends of the stock cross-sections
+the ground lies 1 to 10 above the river (median), 40 to 95% of them under the
+bank, while 10% in from each end it is 2 to 6 below. So `TWAlphaEdge`'s pale
+outer fringe (its outer eighth on each side, where its alpha rises from 0)
+falls at the shoreline and partly under the bank. A strip narrower than its
+channel puts that fringe over open water as two hard lines along it.
+`bank_width(line, height_at, height)` gives `add_river` a width that runs out
+to where the ground stands above the river on both sides.
+
+The renderer draws rivers (`render.rivers`) as the game does, ported from
+`WaterRenderObjClass::drawRiverWater` (RVA 0x00100A0B, reconstructed in
+Open-BFME-2) and the game's `RiverWater.fx` (`shaders/compiled/riverwater.fxo`):
+
+- One vertex pair per cross-section. The river and sparkle textures run 0 to
+  0.5 across, the alpha edge 0 to 1; v advances evenly per cross-section, one
+  repeat about as long as the first cross-section is wide, scrolls by
+  UV speed x seconds and wobbles by sin(2 pi v - 3 x scroll) / 22.
+- The noise texture lies in world space at 1/16 scale and scrolls diagonally
+  by UV speed x seconds, whatever way the river runs.
+- Colour = sparkle x noise + vertex colour x river texture + alpha edge;
+  alpha = alpha edge x river alpha x vertex alpha x the river's alpha. A
+  white river (all stock ones) is lit as flat ground by the terrain lights,
+  times the time of day's `WaterSet` `DiffuseColor` in `water.ini`.
+- Blending: source alpha onto one (additive) or inverse source alpha; depth
+  test without depth writes, no fog. The game draws every standing water
+  area first and the rivers over it, with nothing masked under a river.
+- A river whose minimum LOD is above the detail level's WaterLOD is not drawn.
+
+Not confirmed: which stored end of a cross-section the game puts first (it
+mirrors the river texture across), and whether `Opacity` reaches the shader's
+w component. Whether a river strip alone (without standing water) affects
+movement has not been tested. `mw render --flow` and
 the viewer's key 8 draw arrows along each strip in its flow direction;
 `mw rivers` lists the strips' courses. In the Fords of Isen the strips at
 water 365 and 366 end in ones at 295, which agrees with first-to-last flow.

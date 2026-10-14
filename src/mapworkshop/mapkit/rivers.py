@@ -94,6 +94,38 @@ def cross_sections(line, width, step=120):
     return out
 
 
+def bank_width(line, height_at, height, rise=2.0, least=40.0, reach=300.0, step=60.0):
+    """A width for add_river (a function of the distance along `line`) that
+    carries the strip out onto both banks, as in the stock maps: at points
+    every `step`, out from the line on either side to where the ground
+    (`height_at(x, y)`) stands `rise` above the river's `height`, the wider
+    side taken twice, smoothed along. The stock strips' edges lie 1 to 10
+    above the water, mostly under the bank, so the alpha edge's pale fringe
+    meets the shore instead of running over open water."""
+    points = _resample([tuple(map(float, p)) for p in line], step)
+    widths, along = [], [0.0]
+    for i, (p, heading) in enumerate(points):
+        if i:
+            along.append(along[-1]+math.dist(points[i-1][0], p))
+        nx, ny = -math.sin(heading), math.cos(heading)
+        half = least/2
+        for side in (1, -1):
+            d = 0.0
+            while d < reach and height_at(p[0]+side*nx*d, p[1]+side*ny*d) < height+rise:
+                d += 5.0
+            half = max(half, d)
+        widths.append(2*half)
+    smoothed = [sum(widths[max(0, i-1):i+2])/len(widths[max(0, i-1):i+2]) for i in range(len(widths))]
+
+    def width(s):
+        for k in range(1, len(along)):
+            if s <= along[k]:
+                f = (s-along[k-1])/(along[k]-along[k-1]) if along[k] > along[k-1] else 0.0
+                return smoothed[k-1]+(smoothed[k]-smoothed[k-1])*f
+        return smoothed[-1]
+    return width
+
+
 def add_river(m, name, line, width, height, look='flow', step=120, alpha=1.0, uv_speed=0.06, min_lod='Medium',
               layer=''):
     """Append a river strip flowing along `line`. `height` is its water height

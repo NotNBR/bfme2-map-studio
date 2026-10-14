@@ -249,6 +249,10 @@ class MapRenderer:
         lights = {(l['target'], l['light_index']): l for l in config}
         to_light = lambda l: tuple(-_normalize(l['direction']))
         self.terrain_ambient = lights[('terrain', 0)]['ambient']
+        # As GlobalData holds them for drawRiverWater: directions as stored.
+        self.terrain_lights = [(tuple(lights[('terrain', i)]['direction']), tuple(lights[('terrain', i)]['diffuse']))
+                               for i in range(3)]
+        self.time_of_day = value['time_of_day']
         self.sun_dir = to_light(lights[('terrain', 0)])
         self.sun_color = lights[('terrain', 0)]['diffuse']
         self.fills = [(to_light(lights[('terrain', i)]), lights[('terrain', i)]['diffuse']) for i in (1, 2)]
@@ -634,7 +638,8 @@ class MapRenderer:
                 self._prepare_image(name)
 
     def _prepare_rivers(self):
-        """RiverAreas strips as meshes (render.rivers), with their textures."""
+        """RiverAreas strips as meshes (render.rivers), with their textures;
+        rivers whose minimum LOD is above the WaterLOD are left out, as in game."""
         from mapworkshop.render import rivers
         self.rivers, self._prepared_rivers = [], []
         try:
@@ -643,7 +648,7 @@ class MapRenderer:
             areas = []
         for area in areas:
             mesh = rivers.mesh(area['cross_sections'], area['water_height'])
-            if mesh is None:
+            if mesh is None or not rivers.drawn(area.get('min_lod'), self.water_level):
                 continue
             self._prepared_rivers.append((area, mesh))
             for name in (area['texture'], area['noise'], area['alpha_edge'], area['sparkle']):
@@ -653,7 +658,6 @@ class MapRenderer:
                                      for a, _ in self._prepared_rivers]
 
     def _rivers_gpu(self):
-        from mapworkshop.render import rivers
         if not self._prepared_rivers:
             return
         self.river_program = program = self.ctx.program(vertex_shader=shaders.RIVER_VS,
@@ -661,25 +665,26 @@ class MapRenderer:
         self.river_flow_program = self.ctx.program(vertex_shader=shaders.RIVER_VS,
                                                    fragment_shader=shaders.RIVER_FLOW_FS)
         white = self._plain_texture('', None)
+        layout = '3f 2f 1f'
         for area, (vertices, triangles) in self._prepared_rivers:
             vbo = self.ctx.buffer(vertices.tobytes())
             ibo = self.ctx.buffer(triangles.tobytes())
-            textures = [self._plain_texture(area[k]) or white for k in ('texture', 'noise', 'alpha_edge', 'sparkle')]
+            # RiverWater.fx's samplers s0-s3: river, sparkles, noise, opacity (the alpha edge).
+            textures = [self._plain_texture(area[k]) or white for k in ('texture', 'sparkle', 'noise', 'alpha_edge')]
             self.rivers.append(dict(
-                vao=self.ctx.vertex_array(program, [(vbo, '3f 2f', 'in_position', 'in_uv')], index_buffer=ibo,
-                                          index_element_size=4),
-                flow_vao=self.ctx.vertex_array(self.river_flow_program, [(vbo, '3f 2f', 'in_position', 'in_uv')],
+                vao=self.ctx.vertex_array(program, [(vbo, layout, 'in_position', 'in_uv', 'in_v')],
+                                          index_buffer=ibo, index_element_size=4),
+                flow_vao=self.ctx.vertex_array(self.river_flow_program, [(vbo, layout, 'in_position', 'in_uv', 'in_v')],
                                                index_buffer=ibo, index_element_size=4),
-                length=float(vertices[-1, 4]),
-                textures=textures, tint=rivers.colour(area['color_bytes']), alpha=float(area['alpha']),
-                uv_speed=float(area['uv_speed']), additive=int(area['additive'])))
+                length=float(vertices[-1, 5]), textures=textures, color_bytes=tuple(area['color_bytes']),
+                alpha=float(area['alpha']), uv_speed=float(area['uv_speed']), additive=int(area['additive'])))
         self._prepared_rivers = []
 
     def _draw_rivers(self, vp, eye, time, border):
-        """The river strips over the standing water, without depth writes, and
-        the flow overlay over them when it is on."""
+        """The river strips over the standing water, and the flow overlay
+        over them when it is on."""
         if self.visible['water']:
-            self._draw_river_surfaces(vp, eye, time, border)
+            self._draw_river_surfaces(vp, time, border)
         if self.visible['flow']:
             mgl, ctx, p = self.moderngl, self.ctx, self.river_flow_program
             p['view_projection'].write(vp)
@@ -691,18 +696,27 @@ class MapRenderer:
             ctx.fbo.depth_mask = False
             for river in self.rivers:
                 p['strip_length'].value = river['length']
+                if 'uv_speed' in p:
+                    p['uv_speed'].value = river['uv_speed']
                 river['flow_vao'].render(mgl.TRIANGLES)
             ctx.fbo.depth_mask = True
             ctx.disable(mgl.BLEND)
 
-    def _draw_river_surfaces(self, vp, eye, time, border):
+    def _draw_river_surfaces(self, vp, time, border):
+        """RiverWater.fx's pass: depth test without depth writes, no culling
+        and no fog; SRCALPHA onto ONE (additive) or INVSRCALPHA."""
+        from mapworkshop.render import rivers
         mgl, ctx, p = self.moderngl, self.ctx, self.river_program
+        cache = self.__dict__.setdefault('_water_diffuse', {})
+        if self.time_of_day not in cache:
+            cache[self.time_of_day] = rivers.water_diffuse((self.assets.ini_text('water.ini'), self.map_ini),
+                                                           self.time_of_day)
+        water = cache[self.time_of_day]
         p['view_projection'].write(vp)
         p['time'].value = float(time)
         p['playable'].value = self.playable
         p['show_border'].value = int(border)
-        self._set_fog(p, eye)
-        for unit, name in enumerate(('river_tex', 'noise_tex', 'edge_tex', 'sparkle_tex'), start=1):
+        for unit, name in enumerate(('river_tex', 'sparkle_tex', 'noise_tex', 'edge_tex'), start=1):
             p[name].value = unit
         ctx.enable(mgl.BLEND)
         ctx.fbo.depth_mask = False
@@ -710,11 +724,11 @@ class MapRenderer:
             for unit, texture in enumerate(river['textures'], start=1):
                 if texture is not None:
                     texture.use(unit)
-            p['tint'].value = river['tint']
-            p['alpha'].value = river['alpha']
+            p['diffuse'].value = rivers.vertex_colour(river['color_bytes'], self.terrain_ambient,
+                                                      self.terrain_lights, water)
+            p['opacity'].value = river['alpha']
             p['uv_speed'].value = river['uv_speed']
-            p['additive'].value = river['additive']
-            ctx.blend_func = (mgl.ONE, mgl.ONE) if river['additive'] else (mgl.SRC_ALPHA, mgl.ONE_MINUS_SRC_ALPHA)
+            ctx.blend_func = (mgl.SRC_ALPHA, mgl.ONE if river['additive'] else mgl.ONE_MINUS_SRC_ALPHA)
             river['vao'].render(mgl.TRIANGLES)
         ctx.fbo.depth_mask = True
         ctx.disable(mgl.BLEND)

@@ -893,87 +893,92 @@ in vec3 in_position;                // world space
 void main() { gl_Position = view_projection * vec4(in_position, 1.0); }
 """
 
+# RiverWater.fx (shaders/compiled/riverwater.fxo), technique Default_M; its
+# Default_L pass 0 is the same arithmetic in ps_1_1 and pass 1 only multiplies
+# in the shroud, which is not drawn. Per vertex: the river and sparkle
+# textures at (u1, v), the alpha edge at (u2, v), the noise in world space at
+# 1/16 scale scrolling by Time x UVScrollPerSecond (the river's UV speed on
+# both axes). v scrolls and wobbles as drawRiverWater sets it (render.rivers).
+# The pass draws with depth test, no depth writes, no culling and no fog
+# (FOGENABLE 0), blending SRCALPHA with DESTBLEND 6 - 4 x IsAdditiveBlended:
+# ONE for additive rivers, INVSRCALPHA for the others.
 RIVER_VS = """
 #version 430
 uniform mat4 view_projection;
+uniform float time;                 // seconds; VOrigin = time x the river's UV speed
+uniform float uv_speed;
 in vec3 in_position;                // x, y, the river's water height
-in vec2 in_uv;                      // u across the strip, v along it in strip widths
+in vec2 in_uv;                      // u1 (river, sparkle), u2 (alpha edge)
+in float in_v;                      // v before the scroll and wobble
 out vec3 v_world;
-out vec2 v_uv;
+out vec2 v_tex0;                    // oT0 = oT1
+out vec2 v_tex2;                    // oT2: the noise
+out vec2 v_tex3;                    // oT3: the alpha edge
+out vec2 v_strip;                   // u2 and the unscrolled v, for the flow overlay
 void main() {
+    float origin = time * uv_speed;
+    float v = in_v + sin(6.28318531 * in_v - 3.0 * origin) / 22.0 - origin;
     v_world = in_position;
-    v_uv = in_uv;
+    v_tex0 = vec2(in_uv.x, v);
+    v_tex3 = vec2(in_uv.y, v);
+    v_tex2 = in_position.xy * 0.0625 + time * vec2(uv_speed);
+    v_strip = vec2(in_uv.y, in_v);
     gl_Position = view_projection * vec4(in_position, 1.0);
 }
 """
 
-# A river strip (render.rivers): an approximation, the game's river shader is
-# not matched. The texture scrolls downstream at the river's UV speed, the
-# sparkle texture modulated by the noise texture moves over it, and the
-# alpha-edge texture fades the strip out at both banks. Additive rivers (the
-# black TWWaterEmpty of most stock rivers) show only what they add.
 RIVER_FS = """
 #version 430
-uniform sampler2D river_tex;
-uniform sampler2D noise_tex;
-uniform sampler2D edge_tex;
-uniform sampler2D sparkle_tex;
-uniform vec3 tint;
-uniform float alpha;
-uniform float uv_speed;
-uniform float time;
-uniform int additive;
+uniform sampler2D river_tex;        // s0 RiverSampler
+uniform sampler2D sparkle_tex;      // s1 SparklesSampler
+uniform sampler2D noise_tex;        // s2 NoiseSampler
+uniform sampler2D edge_tex;         // s3 OpacitySampler (the alpha edge)
+uniform vec4 diffuse;               // oD0: the river's vertex colour (render.rivers.vertex_colour)
+uniform float opacity;              // Opacity.w: the river's alpha
 uniform vec2 playable;
 uniform int show_border;
-uniform int fog_enabled;
-uniform vec3 fog_color;
-uniform vec2 fog_range;
-uniform vec3 fog_eye;
 in vec3 v_world;
-in vec2 v_uv;
+in vec2 v_tex0;
+in vec2 v_tex2;
+in vec2 v_tex3;
+in vec2 v_strip;
 out vec4 frag;
 void main() {
     if (show_border == 0 && (any(lessThan(v_world.xy, vec2(0.0))) || any(greaterThan(v_world.xy, playable)))) discard;
-    vec2 flow = vec2(0.0, time * uv_speed);
-    vec4 base = texture(river_tex, v_uv - flow);
-    float noise = texture(noise_tex, v_uv * 0.5 - flow * 0.6).r;
-    vec3 sparkle = texture(sparkle_tex, v_uv * 1.5 - flow * 1.3).rgb * (0.4 + noise);
-    float edge = texture(edge_tex, v_uv).a;
-    float fog = fog_enabled == 0 ? 0.0 :
-        clamp((length(v_world - fog_eye) - fog_range.x) / max(fog_range.y - fog_range.x, 1.0), 0.0, 1.0);
-    if (additive == 1) {
-        frag = vec4((base.rgb + sparkle * 0.55) * tint * alpha * edge * (1.0 - fog), 1.0);
-    } else {
-        vec3 c = mix(base.rgb * tint + sparkle * 0.25, fog_color, fog);
-        frag = vec4(clamp(c, 0.0, 1.0), base.a * alpha * edge);
-    }
+    vec4 river = texture(river_tex, v_tex0);
+    vec4 sparkle = texture(sparkle_tex, v_tex0);
+    vec4 noise = texture(noise_tex, v_tex2);
+    vec4 edge = texture(edge_tex, v_tex3);
+    vec3 c = sparkle.rgb * noise.rgb + diffuse.rgb * river.rgb + edge.rgb;
+    float a = edge.a * river.a * diffuse.a * opacity;
+    frag = clamp(vec4(c, a), 0.0, 1.0);
 }
 """
 
 # The flow overlay over a river strip (mw render --flow, the viewer's River
-# flow): chevrons pointing downstream, one per strip width and drifting
+# flow): chevrons pointing downstream, one per v repeat and drifting
 # downstream with time; the strip's banks as thin lines, its first cross-section
 # green and its last red. At least a pixel or two wide at any distance.
 RIVER_FLOW_FS = """
 #version 430
 uniform float time;
-uniform float strip_length;         // the strip's length in v (strip widths)
+uniform float strip_length;         // the strip's length in v
 uniform vec2 playable;
 uniform int show_border;
 in vec3 v_world;
-in vec2 v_uv;
+in vec2 v_strip;
 out vec4 frag;
 void main() {
     if (show_border == 0 && (any(lessThan(v_world.xy, vec2(0.0))) || any(greaterThan(v_world.xy, playable)))) discard;
-    vec2 px = fwidth(v_uv) * 1.5;
-    float across = abs(v_uv.x - 0.5);
+    vec2 px = fwidth(v_strip) * 1.5;
+    float across = abs(v_strip.x - 0.5);
     // The middle of each chevron leads: v + 0.8|u - 0.5| is constant along it.
-    float f = fract(v_uv.y + 0.8 * across - time * 0.25);
+    float f = fract(v_strip.y + 0.8 * across - time * 0.25);
     vec4 c = vec4(0.0);
-    if (v_uv.x < max(0.02, px.x) || v_uv.x > 1.0 - max(0.02, px.x)) c = vec4(0.25, 0.85, 1.0, 0.85);
+    if (v_strip.x < max(0.02, px.x) || v_strip.x > 1.0 - max(0.02, px.x)) c = vec4(0.25, 0.85, 1.0, 0.85);
     if (across < 0.34 && f < max(0.12, px.y)) c = vec4(1.0, 0.82, 0.12, 0.95);
-    if (v_uv.y < max(0.06, px.y)) c = vec4(0.2, 1.0, 0.3, 0.95);
-    if (v_uv.y > strip_length - max(0.06, px.y)) c = vec4(1.0, 0.25, 0.2, 0.95);
+    if (v_strip.y < max(0.06, px.y)) c = vec4(0.2, 1.0, 0.3, 0.95);
+    if (v_strip.y > strip_length - max(0.06, px.y)) c = vec4(1.0, 0.25, 0.2, 0.95);
     if (c.a == 0.0) discard;
     frag = c;
 }

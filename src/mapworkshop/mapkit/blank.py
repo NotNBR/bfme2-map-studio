@@ -255,15 +255,19 @@ def set_world(m, **values):
     sections.write(m,'WorldInfo',[(k,kind,values.get(k,v)) for k,kind,v in fields])
 
 
-def water_plane(m, name, height, points=None, uv_speed=.03, margin=300):
+def water_plane(m, name, height, points=None, uv_speed=.03, margin=300, shader='wtr_Riv03.W3D'):
     """One standing-water area at `height`: under it, the terrain is water.
-    Without `points` it covers the playable area and `margin` beyond."""
+    Without `points` it covers the playable area and `margin` beyond.
+    `shader` is the stock water model; its WindSpeed and WindAngle scroll the
+    ripples one way over the whole area. Stock maps put flowing rivers
+    (mapkit.rivers) over both kinds: wtr_Riv03 in Ithilien, the nearly still
+    'wtr_Riv_pond.W3D' in Fangorn."""
     if points is None:
         t=m.heightmap();w=(t['width']-2*t['border'])*10;h=(t['height']-2*t['border'])*10
         points=[(-margin,-margin),(w+margin,-margin),(w+margin,h+margin),(-margin,h+margin)]
     m.chunk('StandingWaterAreas').data=standing_water([dict(id=1,name=name,layer='Water',
         uv_speed=uv_speed,additive=0,bump_texture='WaterRippleBump.tga',sky_texture='SkyEnv.tga',
-        points=points,water_height=int(height),shader='wtr_Riv03.W3D',depth_colors='LUTDepthTint.tga')])
+        points=points,water_height=int(height),shader=shader,depth_colors='LUTDepthTint.tga')])
 
 
 def starts(m, points):

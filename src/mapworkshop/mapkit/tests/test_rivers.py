@@ -9,10 +9,10 @@ from mapworkshop.config import GAME_DATA
 from mapworkshop.formats import sections
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.blank import create, water_plane
-from mapworkshop.mapkit.rivers import (WAVE, add_river, add_shore_wave, add_shore_waves, compass, courses,
+from mapworkshop.mapkit.rivers import (WAVE, add_river, add_shore_wave, add_shore_waves, bank_width, compass, courses,
                                        cross_sections, flow_text, point_along, runs)
 from mapworkshop.mapkit.sites import shipwright
-from mapworkshop.render.rivers import mesh
+from mapworkshop.render.rivers import drawn, mesh, vertex_colour, water_diffuse
 
 
 class Rivers(unittest.TestCase):
@@ -25,6 +25,17 @@ class Rivers(unittest.TestCase):
             self.assertGreater(ly, ry)                          # left of the flow first
         tapered = cross_sections([(0, 0), (1000, 0)], lambda s: 40+s/10, step=500)
         self.assertEqual([round(math.hypot(c[2]-c[0], c[3]-c[1])) for c in tapered], [40, 90, 140])
+
+    def test_bank_width_reaches_the_shore(self):
+        # A channel along x: water to 50 either side of y = 0 on the left half,
+        # to 80 on the right; the banks stand 10 above the river beyond that.
+        def height_at(x, y):
+            return 140.0 if abs(y) < (50 if x < 500 else 80) else 161.0
+        width = bank_width([(0, 0), (1000, 0)], height_at, 151, rise=1, step=100)
+        self.assertEqual(round(width(100)), 100)
+        self.assertEqual(round(width(900)), 160)
+        capped = bank_width([(0, 0), (1000, 0)], lambda x, y: 140.0, 151, reach=60, step=100)
+        self.assertEqual(round(capped(500)), 120)
 
     def test_courses_read_the_flow_back_as_compass_runs(self):
         self.assertEqual((compass(1, 0), compass(1, -1), compass(0, 1)), ('east', 'south-east', 'north'))
@@ -52,14 +63,32 @@ class Rivers(unittest.TestCase):
         with self.assertRaises(ValueError):
             add_river(m, 'Dot', [(0, 0), (0, 0)], 50, 151)
 
-    def test_mesh(self):
+    def test_mesh_as_draw_river_water_builds_it(self):
+        # Three cross-sections 100 wide and 100 apart: the outline's length
+        # without its closing edge is 100+200+100+100 = 500, so v advances
+        # (500/2-100)/100/2 = 0.75 per cross-section.
         vertices, triangles = mesh([(0, 50, 0, -50), (100, 50, 100, -50), (200, 50, 200, -50)], 151)
-        self.assertEqual(vertices.shape, (6, 5))
-        self.assertEqual(triangles.shape, (4, 3))
+        self.assertEqual(vertices.shape, (6, 6))
         self.assertTrue(np.all(vertices[:, 2] == 151))
-        self.assertEqual(list(vertices[:, 3]), [0, 1, 0, 1, 0, 1])
-        self.assertEqual(list(vertices[::2, 4]), [0, 1, 2])          # strip widths along
+        self.assertEqual([tuple(v) for v in vertices[:2, :2]], [(0, -50), (0, 50)])   # second end first
+        self.assertEqual([tuple(v) for v in vertices[:, 3:5]], [(0.5, 1), (0, 0)]*3)
+        self.assertEqual(list(vertices[::2, 5]), [0, .75, 1.5])
+        self.assertEqual(triangles.tolist(), [[0, 1, 3], [2, 3, 5], [0, 3, 2], [2, 5, 4]])
         self.assertIsNone(mesh([(0, 0, 0, 10)], 151))
+
+    def test_vertex_colour_and_lod(self):
+        lights = [((0.0, 0.5, -0.8), (1.0, 0.9, 0.8)), ((0.0, 0.0, 0.5), (1.0, 1.0, 1.0))]   # the second points up
+        water = (185/255, 185/255, 185/255, 1.0)
+        r, g, b, a = vertex_colour((255, 255, 255, 0), (0.2, 0.2, 0.2), lights, water)
+        self.assertAlmostEqual(r, (0.2+0.8)*185/255)
+        self.assertAlmostEqual(b, (0.2+0.8*0.8)*185/255)
+        self.assertEqual(a, 1.0)
+        self.assertEqual(vertex_colour((0, 0, 0, 0), (0, 0, 0), [], water)[:3], (1.0, 1.0, 1.0))
+        self.assertEqual(vertex_colour((51, 102, 255, 0), (0, 0, 0), [], water)[:3], (0.2, 0.4, 1.0))
+        ini = 'WaterSet AFTERNOON\n  DiffuseColor = R:185 G:180 B:175 A:128\nEnd\n'
+        self.assertEqual(water_diffuse([ini], 2), (185/255, 180/255, 175/255, 128/255))
+        self.assertTrue(drawn('', 0) and drawn('Medium', 1))
+        self.assertFalse(drawn('Medium', 0))
 
 
 class Waves(unittest.TestCase):
