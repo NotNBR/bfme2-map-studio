@@ -7,7 +7,7 @@ camera choices. Visual appearance and gameplay passability are separate concerns
 | --- | --- |
 | Heights | [Heightmap import](heightmaps.md), world/sample conversion, borders and elevation limits |
 | Textures, blends and cliffs | [Terrain records](terrain.md), palette/index inspection, original material authoring and native test panels |
-| Water and shores | [Stored geometry](../file-structure/reference.md#trigger-and-water-geometry); standing-water writer and [depth tests](../navigation/README.md) |
+| Water and shores | [Stored geometry](../file-structure/reference.md#trigger-and-water-geometry); standing-water writer and [depth tests](../navigation/README.md); [rivers, shore waves and shipwrights](rivers-and-waves.md) |
 | Lighting | [Versioned lighting](lighting.md), original writer and native field readback |
 | Objects and scenery | [Creation workflow](../../../map-workflow.md); template assets, footprint and behavior come from the installed game |
 | Environment and cameras | [Environment](../file-structure/reference.md#environment-and-lighting) and [camera layouts](../file-structure/reference.md#cameras); semantic coverage is partial |

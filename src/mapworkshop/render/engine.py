@@ -198,6 +198,7 @@ class MapRenderer:
         yield from self._terrain_steps()
         self._progress(0.78, 'Uploading water')
         yield from self._water_steps()
+        self._rivers_gpu()
         self._weather_gpu()
         yield
         if self.options['objects']:
@@ -605,6 +606,7 @@ class MapRenderer:
         self.water = []
         self._prepared_water = []
         self.water_level = water_level(self.assets.ini_text('gamelod.ini'), self.options['lod'])
+        self._prepare_rivers()
         try:
             areas = records(self.map, 'StandingWaterAreas')
         except ValueError:
@@ -625,6 +627,68 @@ class MapRenderer:
             for name in (fx.get('WaterBumpTexture') or area.get('bump_texture'),
                          fx.get('WaterEnvTexture') or area.get('sky_texture'), fx.get('WaveTexture')):
                 self._prepare_image(name)
+
+    def _prepare_rivers(self):
+        """RiverAreas strips as meshes (render.rivers), with their textures."""
+        from mapworkshop.render import rivers
+        self.rivers, self._prepared_rivers = [], []
+        try:
+            areas = records(self.map, 'RiverAreas')
+        except ValueError:
+            areas = []
+        for area in areas:
+            mesh = rivers.mesh(area['cross_sections'], area['water_height'])
+            if mesh is None:
+                continue
+            self._prepared_rivers.append((area, mesh))
+            for name in (area['texture'], area['noise'], area['alpha_edge'], area['sparkle']):
+                self._prepare_image(name)
+        if self._prepared_rivers:
+            self.report['rivers'] = [dict(name=a['name'], sections=len(a['cross_sections']), additive=a['additive'])
+                                     for a, _ in self._prepared_rivers]
+
+    def _rivers_gpu(self):
+        from mapworkshop.render import rivers
+        if not self._prepared_rivers:
+            return
+        self.river_program = program = self.ctx.program(vertex_shader=shaders.RIVER_VS,
+                                                        fragment_shader=shaders.RIVER_FS)
+        white = self._plain_texture('', None)
+        for area, (vertices, triangles) in self._prepared_rivers:
+            vbo = self.ctx.buffer(vertices.tobytes())
+            ibo = self.ctx.buffer(triangles.tobytes())
+            textures = [self._plain_texture(area[k]) or white for k in ('texture', 'noise', 'alpha_edge', 'sparkle')]
+            self.rivers.append(dict(
+                vao=self.ctx.vertex_array(program, [(vbo, '3f 2f', 'in_position', 'in_uv')], index_buffer=ibo,
+                                          index_element_size=4),
+                textures=textures, tint=rivers.colour(area['color_bytes']), alpha=float(area['alpha']),
+                uv_speed=float(area['uv_speed']), additive=int(area['additive'])))
+        self._prepared_rivers = []
+
+    def _draw_rivers(self, vp, eye, time, border):
+        """The river strips over the standing water, without depth writes."""
+        mgl, ctx, p = self.moderngl, self.ctx, self.river_program
+        p['view_projection'].write(vp)
+        p['time'].value = float(time)
+        p['playable'].value = self.playable
+        p['show_border'].value = int(border)
+        self._set_fog(p, eye)
+        for unit, name in enumerate(('river_tex', 'noise_tex', 'edge_tex', 'sparkle_tex'), start=1):
+            p[name].value = unit
+        ctx.enable(mgl.BLEND)
+        ctx.fbo.depth_mask = False
+        for river in self.rivers:
+            for unit, texture in enumerate(river['textures'], start=1):
+                if texture is not None:
+                    texture.use(unit)
+            p['tint'].value = river['tint']
+            p['alpha'].value = river['alpha']
+            p['uv_speed'].value = river['uv_speed']
+            p['additive'].value = river['additive']
+            ctx.blend_func = (mgl.ONE, mgl.ONE) if river['additive'] else (mgl.SRC_ALPHA, mgl.ONE_MINUS_SRC_ALPHA)
+            river['vao'].render(mgl.TRIANGLES)
+        ctx.fbo.depth_mask = True
+        ctx.disable(mgl.BLEND)
 
     def _water_steps(self):
         if not self._prepared_water:
@@ -1842,6 +1906,8 @@ class MapRenderer:
                 entry['vao'].render(mgl.TRIANGLES)
             ctx.fbo.depth_mask = True
             ctx.disable(mgl.BLEND)
+        if getattr(self, 'rivers', None) and self.visible['water']:
+            self._draw_rivers(vp, eye, time, border)
         if getattr(self, 'effects', None) is not None and self.visible['objects'] and self.visible['effects'] \
                 and hasattr(self, 'effect_program'):
             self._draw_effects(vp, camera, eye, time)

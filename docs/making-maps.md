@@ -72,6 +72,9 @@ Building blocks, in `src/mapworkshop/`:
   object after an added or skipped placement would get a new size, and a small
   edit would change the whole map (`mw diff` shows it).
 - `mapkit.roads`: road pairs; `formats.water.standing_water`: several water areas.
+- `mapkit.rivers`: a river's flowing surface over standing water (`add_river`
+  along a line, `cross_sections`) and shore waves (`add_shore_waves`); the
+  renderer draws the rivers ([rivers, shore waves and shipwrights](reference/mapping/terrain-and-presentation/rivers-and-waves.md)).
 - `mapkit.pathing` and `mapkit.walkable`: local walkability estimates from terrain,
   water, object footprints and walking meshes, without starting the game.
   `mw walkable <map>`, the viewer (key **7**) and `mw render --walkable` show
@@ -88,7 +91,7 @@ Building blocks, in `src/mapworkshop/`:
   (`castle_site`, a CastleFlag that unpacks the capturing faction's castle;
   `castle_layout` reads one) ([walls and castles](reference/mapping/navigation/walls-and-castles.md)).
 - `mapkit.sites`: outposts, inns, signal fires and shipwrights with the
-  capture flag they are taken by (`neutral_site`), creep lairs
+  capture flag they are taken by (`neutral_site`, `shipwright` on a shore), creep lairs
   (`creep_lair`), skirmish Gollum's spawn points (`gollum_spawns`) and
   `spread` for evenly spaced points; `mapkit.ambient`: a map's sound bed and
   emitters by kind of place (`ambient`, palettes per setting)

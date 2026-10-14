@@ -850,6 +850,63 @@ in vec3 in_position;                // world space
 void main() { gl_Position = view_projection * vec4(in_position, 1.0); }
 """
 
+RIVER_VS = """
+#version 430
+uniform mat4 view_projection;
+in vec3 in_position;                // x, y, the river's water height
+in vec2 in_uv;                      // u across the strip, v along it in strip widths
+out vec3 v_world;
+out vec2 v_uv;
+void main() {
+    v_world = in_position;
+    v_uv = in_uv;
+    gl_Position = view_projection * vec4(in_position, 1.0);
+}
+"""
+
+# A river strip (render.rivers): an approximation, the game's river shader is
+# not matched. The texture scrolls downstream at the river's UV speed, the
+# sparkle texture modulated by the noise texture moves over it, and the
+# alpha-edge texture fades the strip out at both banks. Additive rivers (the
+# black TWWaterEmpty of most stock rivers) show only what they add.
+RIVER_FS = """
+#version 430
+uniform sampler2D river_tex;
+uniform sampler2D noise_tex;
+uniform sampler2D edge_tex;
+uniform sampler2D sparkle_tex;
+uniform vec3 tint;
+uniform float alpha;
+uniform float uv_speed;
+uniform float time;
+uniform int additive;
+uniform vec2 playable;
+uniform int show_border;
+uniform int fog_enabled;
+uniform vec3 fog_color;
+uniform vec2 fog_range;
+uniform vec3 fog_eye;
+in vec3 v_world;
+in vec2 v_uv;
+out vec4 frag;
+void main() {
+    if (show_border == 0 && (any(lessThan(v_world.xy, vec2(0.0))) || any(greaterThan(v_world.xy, playable)))) discard;
+    vec2 flow = vec2(0.0, time * uv_speed);
+    vec4 base = texture(river_tex, v_uv - flow);
+    float noise = texture(noise_tex, v_uv * 0.5 - flow * 0.6).r;
+    vec3 sparkle = texture(sparkle_tex, v_uv * 1.5 - flow * 1.3).rgb * (0.4 + noise);
+    float edge = texture(edge_tex, v_uv).a;
+    float fog = fog_enabled == 0 ? 0.0 :
+        clamp((length(v_world - fog_eye) - fog_range.x) / max(fog_range.y - fog_range.x, 1.0), 0.0, 1.0);
+    if (additive == 1) {
+        frag = vec4((base.rgb + sparkle * 0.55) * tint * alpha * edge * (1.0 - fog), 1.0);
+    } else {
+        vec3 c = mix(base.rgb * tint + sparkle * 0.25, fog_color, fog);
+        frag = vec4(clamp(c, 0.0, 1.0), base.a * alpha * edge);
+    }
+}
+"""
+
 WATER_DEPTH_VS = """
 #version 430
 uniform mat4 view_projection;

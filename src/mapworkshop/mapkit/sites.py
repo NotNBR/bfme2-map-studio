@@ -15,7 +15,7 @@ maps, measured):
 - Creep lairs (WargLair, CaveTrollLair, ...) belong to PlyrCreeps and have no
   flag.
 
-    from mapworkshop.mapkit.sites import neutral_site, creep_lair, gollum_spawns
+    from mapworkshop.mapkit.sites import neutral_site, creep_lair, gollum_spawns, shipwright
     neutral_site(m, 'Outpost', 1290, 2710, angle=2.4)        # with its flag
     creep_lair(m, 'WargLair', 650, 3850)
     gollum_spawns(m, [(1400, 2000), (3390, 2790)])
@@ -49,6 +49,14 @@ def neutral_site(m, template, x, y, angle=0.0, flag=None, layer='Objectives', ex
     fx, fy = flag if flag is not None else flag_position(template, x, y, angle)
     add_object(m, FLAG, fx, fy, angle, layer=layer, extra=neutral)
     return fx, fy
+
+
+def shipwright(m, x, y, water, layer='Objectives'):
+    """A neutral shipwright and its flag. The stock maps stand it on the
+    waterline (ground within about 5 of the water level) with its local +x
+    side to open water 7 to 35 deep 120 out, and the land behind it: `water` is
+    the map angle towards the water. The flag stands on the land side."""
+    return neutral_site(m, 'ShipWright', x, y, angle=water, layer=layer)
 
 
 def creep_lair(m, template, x, y, angle=0.0, layer='Objectives'):
