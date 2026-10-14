@@ -51,7 +51,9 @@ Reusable view sets go in a JSON file passed with `--views`:
 The 30-cell border outside the playable area is drawn black, as the game
 does; `--border` shows its terrain (generators often fill it by repeating the
 edge, which looks streaked). Other options: `--no-objects`, `--normal-maps auto|on|off`, `--no-shadows`, `--no-clouds`
-(the cloud texture is on, as in game, frozen at time zero), `--lod` and `--grid` (100-unit world grid overlay).
+(the cloud texture is on, as in game, frozen at time zero), `--lod`, `--grid` (100-unit world grid overlay) and `--flow` (river flow arrows: yellow chevrons
+pointing downstream along each river strip, its banks in blue, its first cross-section green and its last
+red, so joins and overlaps between strips show).
 
 ## Single objects and collages
 

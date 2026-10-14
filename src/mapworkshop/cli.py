@@ -22,6 +22,7 @@ USAGE = """
   mw history [MAP]           earlier builds
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
+  mw rivers [MAP] [--json]   which way each river strip flows
   mw item TEMPLATE           render one object on its own (--heading, --elevation, --rotation, --top)
   mw items PATTERN...        a labelled collage of objects: "*bridge*", --from-map MAP [--layer L]
   mw render | graphics | workspace ...   render images, map graphics, hand-edit workspaces
@@ -65,6 +66,9 @@ def parser():
     s.add_argument('--compare', action='store_true', help='Compare the local estimate with a saved native grid; does not launch the game')
     s.add_argument('--image', type=Path, help='Also write the overlay as a top-view PNG, one pixel per 10-unit cell')
     s.add_argument('--json', action='store_true', help='Print the cut-off areas as JSON')
+    s = sub.add_parser('rivers', help='Which way each river strip flows')
+    s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
+    s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
     s = sub.add_parser('diff', help='What the last build changed, or what differs between two maps')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('other', nargs='?', help='A second map: show what changes from MAP to OTHER')
@@ -289,6 +293,27 @@ def cmd_walkable(args):
     return 0
 
 
+def cmd_rivers(args):
+    """Each river strip (RiverAreas) in flow order, as compass runs."""
+    import json
+    from mapworkshop import project
+    from mapworkshop.formats.map import Map
+    from mapworkshop.mapkit import rivers
+    path = project.map_path(args.map)
+    courses = rivers.courses(Map(path.read_bytes()))
+    if args.json:
+        say(json.dumps([dict(c, middle=[[round(x, 1), round(y, 1)] for x, y in c['middle']]) for c in courses],
+                       indent=2))
+        return 0
+    say(f'{path.stem}: {len(courses)} river strips. Coordinates are map units, x east and y north; '
+        'a strip flows from its first cross-section to its last.')
+    for c in courses:
+        layer = f' [{c["layer"]}]' if c['layer'] else ''
+        say(f'#{c["id"]} {c["name"]}{layer}: {c["length"]:,.0f} long, {c["width"]:.0f} wide, '
+            f'water {c["water_height"]}; {rivers.flow_text(c)}')
+    return 0
+
+
 def cmd_config(args):
     from mapworkshop import game
     from mapworkshop.config import CONFIG, save_setting, settings
@@ -381,7 +406,7 @@ def main(argv=None):
     if extra and extra[0] == '--':
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
-                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable)
+                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:
         if args.command in commands:

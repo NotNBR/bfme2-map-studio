@@ -24,6 +24,10 @@ Stock evidence (local/game/maps, measured):
     water_plane(m, 'Lake', 150)
     add_river(m, 'Brook', line, width=140, height=151)
     add_shore_waves(m, 'Beach', shoreline)          # land to the left of the line
+
+`courses(m)` reads the strips back in flow order; `mw rivers` prints how each
+one flows, `mw marks` the rivers under each mark, and `mw render --flow`
+draws arrows along them.
 """
 import math
 
@@ -105,6 +109,65 @@ def add_river(m, name, line, width, height, look='flow', step=120, alpha=1.0, uv
                        min_lod=min_lod, cross_sections=[tuple(map(float, c)) for c in sections_]))
     sections.write(m, 'RiverAreas', rivers)
     return rivers[-1]
+
+
+COMPASS = ('east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east')
+
+
+def compass(dx, dy):
+    """The compass direction of a step (x east, y north): 'south-east'."""
+    return COMPASS[round(math.atan2(dy, dx)/(math.pi/4)) % 8]
+
+
+def courses(m):
+    """Each river strip in flow order: its id, name, layer, water height, mean
+    width, length and `middle`, the middle of each cross-section from its
+    first (upstream) to its last."""
+    try:
+        rivers = sections.read(m, 'RiverAreas')
+    except ValueError:
+        return []
+    out = []
+    for r in rivers:
+        cs = r['cross_sections']
+        if len(cs) < 2:
+            continue
+        middle = [((a+c)/2, (b+d)/2) for a, b, c, d in cs]
+        out.append(dict(id=r['id'], name=r['name'], layer=r['layer'], water_height=r['water_height'],
+                        width=sum(math.dist(c[:2], c[2:]) for c in cs)/len(cs),
+                        length=sum(math.dist(p, q) for p, q in zip(middle, middle[1:])), middle=middle))
+    return out
+
+
+def runs(points, least=60.0):
+    """A course as compass runs, [(direction, length)]: consecutive steps in
+    one direction merged, the shortest runs under `least` folded into a neighbour."""
+    def merge(items):
+        out = []
+        for way, length in items:
+            if out and out[-1][0] == way:
+                out[-1][1] += length
+            else:
+                out.append([way, length])
+        return out
+
+    out = merge([compass(q[0]-p[0], q[1]-p[1]), math.dist(p, q)] for p, q in zip(points, points[1:]) if p != q)
+    while len(out) > 1:
+        i = min(range(len(out)), key=lambda k: out[k][1])
+        if out[i][1] >= least:
+            break
+        _, length = out.pop(i)
+        out[i-1 if i else 0][1] += length
+        out = merge(out)
+    return [(way, length) for way, length in out]
+
+
+def flow_text(course, points=None):
+    """One line on how a strip flows (over `points`, a part of its middle, or all of it)."""
+    points = course['middle'] if points is None else points
+    (x0, y0), (x1, y1) = points[0], points[-1]
+    ways = ', '.join(f'{way} {length:,.0f}' for way, length in runs(points))
+    return f'flows from ({x0:.0f}, {y0:.0f}) to ({x1:.0f}, {y1:.0f}): {ways}'
 
 
 def add_shore_wave(m, name, start, end, parameters=WAVE, texture=WAVE_TEXTURE, layer=''):

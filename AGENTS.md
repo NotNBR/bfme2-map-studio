@@ -66,6 +66,8 @@ viewer's **Copy for agent** button copies.
    renders a view to look at. After changing terrain, water, buildings or
    bridges, `mw walkable <map>` computes a local walkability estimate and lists
    areas cut off from every start; add `--walkable` to a render to see it.
+   After changing rivers, add `--flow` to a render to see which way each strip
+   flows and where strips join.
    `--compare` checks against an existing native capture without starting the
    game. Use `--native` only for an explicit game verification (about a minute).
 

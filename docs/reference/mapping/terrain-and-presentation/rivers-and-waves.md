@@ -28,7 +28,10 @@ almost every stock river.
 
 The renderer draws rivers (`render.rivers`) as an approximation: the game's
 river shader is not matched, and whether a river strip alone (without
-standing water) affects movement has not been tested.
+standing water) affects movement has not been tested. `mw render --flow` and
+the viewer's key 8 draw arrows along each strip in its flow direction;
+`mw rivers` lists the strips' courses. In the Fords of Isen the strips at
+water 365 and 366 end in ones at 295, which agrees with first-to-last flow.
 
 ## Shore waves
 

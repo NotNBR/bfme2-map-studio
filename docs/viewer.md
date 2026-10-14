@@ -23,10 +23,18 @@ The controls are those of a 3D editor, not the game's:
 | W A S D / arrows | Move (Shift faster, Ctrl slower) |
 | Q / E, R / F, Z / X | Rotate, tilt, zoom |
 | Space / Home, T | Reset to the whole map, toggle top-down |
-| 1 2 3 4 5 6 7 | Objects, water, shadows, normal maps, clouds, weather, walkable |
+| 1 2 3 4 5 6 7 8 | Objects, water, shadows, normal maps, clouds, weather, walkable, river flow arrows |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, reload, build, controls |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change |
 | Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); quit when nothing is left |
+
+## River flow
+
+**View → River flow arrows** (key 8) draws yellow chevrons along each river
+strip, pointing and drifting downstream, with the strip's banks in blue, its
+first cross-section green and its last red. `mw render ... --flow` draws the
+same into still renders, and `mw rivers <map>` prints each strip's course as
+compass runs.
 
 ## Walkable areas
 

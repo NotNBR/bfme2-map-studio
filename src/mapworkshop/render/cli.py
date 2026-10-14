@@ -75,6 +75,9 @@ def main(argv=None):
     parser.add_argument('--grid', action='store_true', help='Overlay a 100-unit world grid')
     parser.add_argument('--walkable', action='store_true',
                         help='Overlay locally computed walkability (no game launch)')
+    parser.add_argument('--flow', action='store_true',
+                        help='Draw arrows along each river strip pointing downstream; its first cross-section '
+                             'green, its last red')
     parser.add_argument('--border', action='store_true',
                         help='Draw the non-playable border (hidden in game, black by default)')
     args = parser.parse_args(argv)
@@ -108,6 +111,7 @@ def main(argv=None):
     if args.walkable:
         renderer.walkable_overlay()
         renderer.visible['walkable'] = True
+    renderer.visible['flow'] = args.flow
     args.out.mkdir(parents=True, exist_ok=True)
     outputs = []
     for name, view in views:

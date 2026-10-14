@@ -9,8 +9,8 @@ from mapworkshop.config import GAME_DATA
 from mapworkshop.formats import sections
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.blank import create, water_plane
-from mapworkshop.mapkit.rivers import (WAVE, add_river, add_shore_wave, add_shore_waves, cross_sections,
-                                       point_along)
+from mapworkshop.mapkit.rivers import (WAVE, add_river, add_shore_wave, add_shore_waves, compass, courses,
+                                       cross_sections, flow_text, point_along, runs)
 from mapworkshop.mapkit.sites import shipwright
 from mapworkshop.render.rivers import mesh
 
@@ -25,6 +25,20 @@ class Rivers(unittest.TestCase):
             self.assertGreater(ly, ry)                          # left of the flow first
         tapered = cross_sections([(0, 0), (1000, 0)], lambda s: 40+s/10, step=500)
         self.assertEqual([round(math.hypot(c[2]-c[0], c[3]-c[1])) for c in tapered], [40, 90, 140])
+
+    def test_courses_read_the_flow_back_as_compass_runs(self):
+        self.assertEqual((compass(1, 0), compass(1, -1), compass(0, 1)), ('east', 'south-east', 'north'))
+        self.assertEqual([(way, round(length)) for way, length in runs([(0, 0), (500, 0), (520, 5), (1000, 0),
+                                                                         (1000, -400)])],
+                         [('east', 1001), ('south', 400)])              # the 20-unit wiggle folds in
+        m = create(200, 200, 30)
+        add_river(m, 'Brook', [(100, 1000), (1100, 1000), (1100, 300)], width=100, height=151)
+        (brook,) = courses(m)
+        self.assertEqual(brook['name'], 'Brook')
+        self.assertAlmostEqual(brook['width'], 100, places=3)      # stored as f32
+        self.assertEqual(tuple(round(v) for v in brook['middle'][0]), (100, 1000))
+        self.assertEqual(tuple(round(v) for v in brook['middle'][-1]), (1100, 300))
+        self.assertTrue(flow_text(brook).startswith('flows from (100, 1000) to (1100, 300): east'))
 
     def test_add_river_round_trips_after_the_standing_water(self):
         m = create(200, 200, 30)

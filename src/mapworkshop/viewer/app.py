@@ -17,6 +17,7 @@ Keyboard
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
+  8 river flow arrows
   G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
   Esc        steps back: closes a menu, cancels a drawing, drops the selection,
              puts the mark tool away, closes the marking row, then quits
@@ -265,7 +266,8 @@ def main(argv=None):
     # The View menu: (id, label) in groups; None separates them.
     view_items = [('objects', 'Objects'), ('water', 'Water'), ('shadows', 'Shadows'), None,
                   ('clouds', 'Cloud shadows'), ('normal_maps', 'Normal maps'), ('fx', 'Fog and rain/snow'), None,
-                  ('grid', 'Grid'), ('border', 'Map border'), ('walkable', 'Walkable (local estimate)'), None,
+                  ('grid', 'Grid'), ('border', 'Map border'), ('walkable', 'Walkable (local estimate)'),
+                  ('flow', 'River flow arrows'), None,
                   ('animate', 'Animate'), ('limits', 'Game object limits (1,200 trees, 2,000 shrubs)')]
 
     def map_title(path):
@@ -275,7 +277,7 @@ def main(argv=None):
         r = scene['renderer']
         if r is None:
             return False
-        if name in ('objects', 'water', 'shadows', 'walkable'):
+        if name in ('objects', 'water', 'shadows', 'walkable', 'flow'):
             return r.visible[name]
         if name == 'fx':
             return r.visible['weather']
@@ -617,7 +619,7 @@ def main(argv=None):
         r = scene['renderer']
         if r is None:
             return
-        if name in ('objects', 'water', 'shadows'):
+        if name in ('objects', 'water', 'shadows', 'flow'):
             r.visible[name] = not r.visible[name]
         elif name == 'walkable':
             r.visible['walkable'] = not r.visible['walkable']
@@ -1015,7 +1017,8 @@ def main(argv=None):
         scene['renderer'].save(np.ascontiguousarray(pixels), path)
         print('Saved', path)
 
-    toggles = {glfw.KEY_1: 'objects', glfw.KEY_2: 'water', glfw.KEY_3: 'shadows', glfw.KEY_6: 'weather'}
+    toggles = {glfw.KEY_1: 'objects', glfw.KEY_2: 'water', glfw.KEY_3: 'shadows', glfw.KEY_6: 'weather',
+               glfw.KEY_8: 'flow'}
     options = {glfw.KEY_4: 'normal_maps', glfw.KEY_5: 'clouds'}
 
     def on_key(win, key, scancode, action, mods):

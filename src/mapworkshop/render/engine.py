@@ -166,7 +166,7 @@ class MapRenderer:
         self.shadow_settings = self._shadow_settings()
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
-                            walkable=False, effects=True)
+                            walkable=False, effects=True, flow=False)
         self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0)
         self._progress = report
         self._effects = {}
@@ -658,6 +658,8 @@ class MapRenderer:
             return
         self.river_program = program = self.ctx.program(vertex_shader=shaders.RIVER_VS,
                                                         fragment_shader=shaders.RIVER_FS)
+        self.river_flow_program = self.ctx.program(vertex_shader=shaders.RIVER_VS,
+                                                   fragment_shader=shaders.RIVER_FLOW_FS)
         white = self._plain_texture('', None)
         for area, (vertices, triangles) in self._prepared_rivers:
             vbo = self.ctx.buffer(vertices.tobytes())
@@ -666,12 +668,34 @@ class MapRenderer:
             self.rivers.append(dict(
                 vao=self.ctx.vertex_array(program, [(vbo, '3f 2f', 'in_position', 'in_uv')], index_buffer=ibo,
                                           index_element_size=4),
+                flow_vao=self.ctx.vertex_array(self.river_flow_program, [(vbo, '3f 2f', 'in_position', 'in_uv')],
+                                               index_buffer=ibo, index_element_size=4),
+                length=float(vertices[-1, 4]),
                 textures=textures, tint=rivers.colour(area['color_bytes']), alpha=float(area['alpha']),
                 uv_speed=float(area['uv_speed']), additive=int(area['additive'])))
         self._prepared_rivers = []
 
     def _draw_rivers(self, vp, eye, time, border):
-        """The river strips over the standing water, without depth writes."""
+        """The river strips over the standing water, without depth writes, and
+        the flow overlay over them when it is on."""
+        if self.visible['water']:
+            self._draw_river_surfaces(vp, eye, time, border)
+        if self.visible['flow']:
+            mgl, ctx, p = self.moderngl, self.ctx, self.river_flow_program
+            p['view_projection'].write(vp)
+            p['time'].value = float(time)
+            p['playable'].value = self.playable
+            p['show_border'].value = int(border)
+            ctx.enable(mgl.BLEND)
+            ctx.blend_func = (mgl.SRC_ALPHA, mgl.ONE_MINUS_SRC_ALPHA)
+            ctx.fbo.depth_mask = False
+            for river in self.rivers:
+                p['strip_length'].value = river['length']
+                river['flow_vao'].render(mgl.TRIANGLES)
+            ctx.fbo.depth_mask = True
+            ctx.disable(mgl.BLEND)
+
+    def _draw_river_surfaces(self, vp, eye, time, border):
         mgl, ctx, p = self.moderngl, self.ctx, self.river_program
         p['view_projection'].write(vp)
         p['time'].value = float(time)
@@ -1932,7 +1956,7 @@ class MapRenderer:
                 entry['vao'].render(mgl.TRIANGLES)
             ctx.fbo.depth_mask = True
             ctx.disable(mgl.BLEND)
-        if getattr(self, 'rivers', None) and self.visible['water']:
+        if getattr(self, 'rivers', None) and (self.visible['water'] or self.visible['flow']):
             self._draw_rivers(vp, eye, time, border)
         if getattr(self, 'effects', None) is not None and self.visible['objects'] and self.visible['effects'] \
                 and hasattr(self, 'effect_program'):

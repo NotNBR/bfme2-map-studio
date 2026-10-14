@@ -950,6 +950,35 @@ void main() {
 }
 """
 
+# The flow overlay over a river strip (mw render --flow, the viewer's River
+# flow): chevrons pointing downstream, one per strip width and drifting
+# downstream with time; the strip's banks as thin lines, its first cross-section
+# green and its last red. At least a pixel or two wide at any distance.
+RIVER_FLOW_FS = """
+#version 430
+uniform float time;
+uniform float strip_length;         // the strip's length in v (strip widths)
+uniform vec2 playable;
+uniform int show_border;
+in vec3 v_world;
+in vec2 v_uv;
+out vec4 frag;
+void main() {
+    if (show_border == 0 && (any(lessThan(v_world.xy, vec2(0.0))) || any(greaterThan(v_world.xy, playable)))) discard;
+    vec2 px = fwidth(v_uv) * 1.5;
+    float across = abs(v_uv.x - 0.5);
+    // The middle of each chevron leads: v + 0.8|u - 0.5| is constant along it.
+    float f = fract(v_uv.y + 0.8 * across - time * 0.25);
+    vec4 c = vec4(0.0);
+    if (v_uv.x < max(0.02, px.x) || v_uv.x > 1.0 - max(0.02, px.x)) c = vec4(0.25, 0.85, 1.0, 0.85);
+    if (across < 0.34 && f < max(0.12, px.y)) c = vec4(1.0, 0.82, 0.12, 0.95);
+    if (v_uv.y < max(0.06, px.y)) c = vec4(0.2, 1.0, 0.3, 0.95);
+    if (v_uv.y > strip_length - max(0.06, px.y)) c = vec4(1.0, 0.25, 0.2, 0.95);
+    if (c.a == 0.0) discard;
+    frag = c;
+}
+"""
+
 WATER_DEPTH_VS = """
 #version 430
 uniform mat4 view_projection;

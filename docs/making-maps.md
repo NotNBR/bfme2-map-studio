@@ -75,6 +75,8 @@ Building blocks, in `src/mapworkshop/`:
 - `mapkit.rivers`: a river's flowing surface over standing water (`add_river`
   along a line, `cross_sections`) and shore waves (`add_shore_waves`); the
   renderer draws the rivers ([rivers, shore waves and shipwrights](reference/mapping/terrain-and-presentation/rivers-and-waves.md)).
+  `mw rivers <map>`, the viewer (key **8**) and `mw render --flow` show which
+  way each strip flows.
 - `mapkit.pathing` and `mapkit.walkable`: local walkability estimates from terrain,
   water, object footprints and walking meshes, without starting the game.
   `mw walkable <map>`, the viewer (key **7**) and `mw render --walkable` show
