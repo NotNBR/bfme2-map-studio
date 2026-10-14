@@ -41,6 +41,7 @@ from pathlib import Path
 
 from mapworkshop.config import GAME_DATA, RUNTIME, game_dir
 from mapworkshop.native import debugger
+from mapworkshop.native.pe import PE
 
 GAME, MOD, APPDATA, LOGS = RUNTIME/'game', RUNTIME/'mod', RUNTIME/'appdata', RUNTIME/'logs'
 HEADLESS_GAME = RUNTIME/'game-headless'
@@ -103,6 +104,9 @@ def prepare(progress=print):
     for path in sorted(source.rglob('*')):
         relative = path.relative_to(source)
         if not path.is_file() or SKIPPED.search(path.name):
+            continue
+        if path.name.lower() == 'dinput8.dll' and 'mwLoading' in PE(path).exports():
+            (GAME/relative).unlink(missing_ok=True)   # mw patch's DLL: the runtime loads loading.dll itself
             continue
         target = GAME/relative
         if _same(path, target):
@@ -303,10 +307,14 @@ def staged(dll):
 
 
 def fast_loading(game):
-    """Load loading.dll (native/loading: the terrain textures' D3DX work on
-    worker threads) and flush it when the new-game pass has loaded the
-    skirmish's map, before its first frame."""
+    """Load loading.dll (native/loading, the bfme2-map-quickload submodule:
+    the terrain textures' D3DX work on worker threads) and flush it when the
+    new-game pass has loaded the skirmish's map, before its first frame.
+    Without the submodule (a zip download) the map loads at the game's speed."""
     from mapworkshop.native import msvc
+    if not msvc.dll('loading').exists():
+        game.res['fast_loading'] = 'loading.dll missing: git submodule update --init'
+        return
     exports = {}
     game.inject(staged(msvc.dll('loading')), lambda game, found: exports.update(found))
 

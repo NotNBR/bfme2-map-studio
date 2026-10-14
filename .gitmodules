@@ -1,0 +1,3 @@
+[submodule "src/mapworkshop/native/loading"]
+	path = src/mapworkshop/native/loading
+	url = https://github.com/NotNBR/bfme2-map-quickload.git

@@ -73,7 +73,11 @@ def check_syntax():
 
 def check_links():
     problems, count = [], 0
-    documents = [p for p in ROOT.rglob('*.md') if not ({'local', '.git', '.claude', 'node_modules'} & set(p.relative_to(ROOT).parts))]
+    # Submodules are other repositories: their links point into those.
+    modules = [ROOT/line.split('=', 1)[1].strip() for line in (ROOT/'.gitmodules').read_text().splitlines()
+               if line.strip().startswith('path')] if (ROOT/'.gitmodules').exists() else []
+    documents = [p for p in ROOT.rglob('*.md') if not ({'local', '.git', '.claude', 'node_modules'} & set(p.relative_to(ROOT).parts))
+                 and not any(m in p.parents for m in modules)]
     for path in documents:
         for target in re.findall(r'\]\(([^)\s]+)\)', path.read_text(encoding='utf-8')):
             if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*:', target) or target.startswith(('#', '<')):

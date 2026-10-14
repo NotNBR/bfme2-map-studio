@@ -278,7 +278,7 @@ each one it composites the terrain on the CPU, then Microsoft's D3DX library
 compresses it to DXT1 and builds its mipmaps, one texture after another on one
 core (about 8.5 of 10 seconds on Brightwater Fold at Medium; 1,156 textures).
 Every runtime start loads
-[native/loading/loading.cpp](../src/mapworkshop/native/loading/loading.cpp)
+[loading.cpp](https://github.com/NotNBR/bfme2-map-quickload/blob/main/loading.cpp) (the `native/loading` submodule)
 into the game, which hands those two D3DX calls to worker threads (one fewer
 than the processor count, up to 15) while the map loads: each texture gets the
 same calls with the same input, on a CPU-only staging copy made on a Direct3D
@@ -303,6 +303,41 @@ and two screenshots take 13 s instead of 54.
 `runtime.start(..., fast=False)` loads the map as the game alone does, for
 comparisons. The rest of the load (about 2 s to the engine, 2 s of map on
 Brightwater Fold) stays on the main thread.
+
+### In your normal game
+
+`mw patch install` puts the same faster loading into your BFME2 folder, for
+every map and every game you start there, skirmish or multiplayer:
+
+```
+mw patch            # status: not installed, installed, outdated or foreign
+mw patch install    # copy dinput8.dll into the game folder
+mw patch remove     # take it out again
+```
+
+The patch is its own public project,
+[bfme2-map-quickload](https://github.com/NotNBR/bfme2-map-quickload) (players
+can download `dinput8.dll` from its releases without this toolkit), and
+`src/mapworkshop/native/loading/` is that repository as a submodule: its
+`loading.cpp` builds both `bin/loading.dll`, which test games load, and
+`bin/dinput8.dll`, which `mw patch` installs. The game imports
+DirectInput from `dinput8.dll` and finds this copy before Windows' own, which
+it forwards to. Without a launcher, the DLL works out the end of each load
+itself: it defers while the game shows its loading screen and finishes the
+terrain textures in the tactical view's first update after it, before the map
+is drawn. It also skips the five seconds of title logo after loading, by
+setting the 5000 milliseconds of that wait to 0 in memory, so the fade-in
+after it still runs. Brightwater Fold reaches gameplay 4.5 s after the start,
+the Greywater Marches 9.3 s.
+
+- It works only with BFME2 1.06 (`install` checks `game.dat`); in any other
+  version, or any other program that loads it, it only forwards DirectInput.
+- It changes how fast textures are built, not what the game simulates, so it
+  should not affect multiplayer; that is untested.
+- `install` never replaces a `dinput8.dll` that is not this patch (another
+  mod's), and `remove` never deletes one. A folder in Program Files needs an
+  administrator prompt.
+- The runtime does not copy it: test games load `loading.dll` themselves.
 
 With `mw play --normal-game`, or when the game is not BFME2 1.06, the build
 goes into the game's user maps folder

@@ -23,6 +23,7 @@ USAGE = """
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
   mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself, headless (--graphics High, --show)
+  mw patch [install|remove]  faster map loading in your normal game (status without an action)
   mw rivers [MAP] [--json]   which way each river strip flows
   mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
                              (--textures, --roads, --sounds, --effects: those instead)
@@ -83,6 +84,8 @@ def parser():
     s.add_argument('--settle', type=int, default=30, help='Rendered frames to wait after moving the camera (30)')
     s.add_argument('--show', action='store_true',
                    help='Show the game window and use native Direct3D 9 (default: headless, through DXVK)')
+    s = sub.add_parser('patch', help="Faster map loading in your normal game (a dinput8.dll in the game folder)")
+    s.add_argument('action', nargs='?', choices=['status', 'install', 'remove'], default='status')
     s = sub.add_parser('rivers', help='Which way each river strip flows')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
@@ -107,6 +110,11 @@ def say(text=''):
 # Commands ----------------------------------------------------------------------
 def cmd_setup(args):
     from mapworkshop import game
+    from mapworkshop.config import ROOT
+    if (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
+        import subprocess
+        say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
+        subprocess.run(['git', 'submodule', 'update', '--init'], cwd=ROOT, check=False)
     choice = args.game
     if not choice and game.find() is None:
         if not sys.stdin.isatty():
@@ -141,6 +149,10 @@ def cmd_doctor(args):
     folder = game_dir()
     check(bool(folder and game.is_game(folder)), f'BFME2 folder: {folder or "not set"}', 'Run `mw setup` (or `mw setup --game DIR`).')
     check(game.extracted(), 'Game data extracted (local/game)', 'Run `mw setup`.')
+    from mapworkshop.config import ROOT
+    check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
+          'bfme2-map-quickload submodule (faster map loading in test games)',
+          'Run `git submodule update --init` (or `mw setup`).', required=False)
     try:
         import moderngl
         ctx = moderngl.create_standalone_context(require=430)
@@ -280,6 +292,24 @@ def cmd_diff(args):
     else:
         say(f'From {before}\n  to {after}\n')
         say('\n'.join(mapdiff.lines(result, args.limit)))
+    return 0
+
+
+def cmd_patch(args):
+    """Install, remove or report the faster-loading patch in the normal game."""
+    from mapworkshop.native import patch
+    if args.action == 'install':
+        say(f'Installed {patch.install()}: maps load with their terrain textures built on several processor cores, '
+            'and the title logo after loading is skipped. `mw patch remove` takes it out again.')
+    elif args.action == 'remove':
+        say(f'Removed {patch.remove()}; the game loads as it did before.')
+    else:
+        state = patch.status()
+        say({'not installed': 'Not installed: `mw patch install` makes maps load faster in your normal game.',
+             'installed': f'Installed and up to date ({patch.folder()/patch.NAME}).',
+             'outdated': 'Installed, but an older build: `mw patch install` updates it.',
+             'foreign': f'{patch.folder()/patch.NAME} belongs to another program; the patch cannot be installed '
+                        'beside it.'}[state])
     return 0
 
 
@@ -462,7 +492,8 @@ def main(argv=None):
     if extra and extra[0] == '--':
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
-                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, capture=cmd_capture)
+                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, capture=cmd_capture,
+                    patch=cmd_patch)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:
         if args.command in commands:

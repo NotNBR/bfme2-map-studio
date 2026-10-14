@@ -145,6 +145,36 @@ class RuntimeTests(unittest.TestCase):
             self.assertIn('MappedImage After', copy)
             self.assertEqual(source.read_text(encoding='latin1'), text)     # the extracted data is untouched
 
+    def test_normal_game_patch_installs_updates_and_leaves_other_dlls_alone(self):
+        import hashlib
+        from mapworkshop.native import patch
+        with tempfile.TemporaryDirectory() as folder:
+            game = Path(folder)
+            (game/'game.dat').write_bytes(b'not the real game')
+            with self.assertRaises(RuntimeError):                       # not 1.06
+                patch.install(game)
+            with mock.patch.object(patch, 'SUPPORTED_SHA256', hashlib.sha256(b'not the real game').hexdigest()):
+                self.assertEqual(patch.status(game), 'not installed')
+                patch.install(game)
+                self.assertEqual(patch.status(game), 'installed')
+                self.assertEqual((game/'dinput8.dll').read_bytes(), msvc.dll('dinput8').read_bytes())
+                (game/'dinput8.dll').write_bytes(msvc.dll('loading').read_bytes())   # an older build of ours
+                self.assertEqual(patch.status(game), 'outdated')
+                patch.install(game)
+                self.assertEqual(patch.status(game), 'installed')
+                patch.remove(game)
+                self.assertFalse((game/'dinput8.dll').exists())
+                (game/'dinput8.dll').write_bytes(msvc.dll('capture').read_bytes())   # another program's
+                self.assertEqual(patch.status(game), 'foreign')
+                with self.assertRaises(RuntimeError):
+                    patch.install(game)
+                with self.assertRaises(RuntimeError):
+                    patch.remove(game)
+                self.assertEqual((game/'dinput8.dll').read_bytes(), msvc.dll('capture').read_bytes())
+
+    def test_dinput8_build_forwards_directinput(self):
+        self.assertIn('DirectInput8Create', PE(msvc.dll('dinput8')).exports())
+
     def test_install_copies_the_build_and_replaces_its_cache_entry(self):
         with tempfile.TemporaryDirectory() as folder:
             build = Path(folder)/'build'

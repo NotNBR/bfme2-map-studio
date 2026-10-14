@@ -38,8 +38,13 @@ been tested.
    and extract it, or clone the repository:
 
    ```sh
-   git clone https://github.com/NotNBR/bfme2-map-studio.git
+   git clone --recursive https://github.com/NotNBR/bfme2-map-studio.git
    ```
+
+   `--recursive` also fetches [bfme2-map-quickload](https://github.com/NotNBR/bfme2-map-quickload),
+   the faster map loading test games use (`mw setup` fetches it in a clone made
+   without). The zip download lacks it: test games then load at the game's own
+   speed.
 
 2. Open the folder and double-click **`Install.cmd`**. It finds the game, sets everything up and adds
    **Map Workshop** to the Start menu.
