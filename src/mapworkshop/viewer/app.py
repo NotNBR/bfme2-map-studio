@@ -531,8 +531,12 @@ def main(argv=None):
                 except RuntimeError:
                     normal_game('no bfme-workshop runtime: ')
                     return
-                native.play(owner, progress=lambda line: set_status(line[:140], 10))
-                set_status(f'starting BFME2 in a skirmish on {owner.title}...', 10)
+                # Each step holds the status until the next: the game says
+                # when the skirmish is playable and when it has closed.
+                process, seconds = native.play(owner, progress=lambda line: set_status(line[:140], 600))
+                set_status(f'{owner.title} is playable in BFME2 ({seconds:.0f} s to start)', 600)
+                native.watch(process)
+                set_status(f'the test game on {owner.title} has closed', 8)
             except Exception as error:
                 set_status(str(error)[:140], 15)
 

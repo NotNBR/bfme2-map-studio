@@ -7,7 +7,8 @@ that runtime's mod, starts a short skirmish on it, reads the game's
 pathfinding grid (pathfind_dump.py) and keeps it next to the build as
 pathfind.npz and pathfind.json, with the map's hash (mapkit.walkable).
 play() installs the build the same way and starts a skirmish on it that you
-play: the game opens straight in the map (mw play, the viewer's Test In-Game).
+play (play_game.py): the game opens straight in the map (mw play, the
+viewer's Test In-Game) and closes with its window.
 """
 import hashlib
 import json
@@ -19,6 +20,8 @@ import subprocess
 from mapworkshop.config import CACHE, ROOT, setting
 
 DRIVER = Path(__file__).with_name('pathfind_dump.py')
+PLAY = Path(__file__).with_name('play_game.py')
+EVENT = 'mapworkshop: '               # play_game.py's event lines
 
 
 def workshop():
@@ -75,21 +78,19 @@ def pathfind(project, progress=print):
     return info
 
 
-PLAY = """import sys
-import host.launch
-sys.argv = ['host.launch', '--map', sys.argv[1], '--window', '--strategic']
-raise SystemExit(host.launch.main())
-"""
-
-
 def play(project, progress=print):
     """Install the project's build into the runtime and start BFME2 there
     straight in a skirmish on it, as bfme-workshop's own map presets do
     (host.launch --map ... --window --strategic): you against an easy AI, in
     a 1600 x 1200 window, with the runtime's own profile, so the normal game
-    and its options are untouched. The launcher stays running as the game's
-    debugger until the game closes; its output goes to a log in the cache.
-    Returns the log's path."""
+    and its options are untouched. The launcher (play_game.py) stays running
+    as the game's debugger until the game closes, by its window's X, Alt+F4
+    or the menus; its output goes to a log in the cache.
+
+    Returns once the game reports that it has loaded the map and the
+    skirmish is playable: the launcher process (for watch(); close its
+    stdout if you do not watch it) and the seconds the start took. Raises
+    RuntimeError when the launcher ends before that."""
     if not project.map_file.exists():
         raise LookupError(f'{project.title} has not been built yet: run `mw build {project.id}`')
     root, python, mod = workshop()
@@ -98,13 +99,26 @@ def play(project, progress=print):
     log = CACHE/'play'/f'{project.id}.log'
     log.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, PYTHONPATH=str(root/'src'), PYTHONIOENCODING='utf-8')
-    with open(log, 'w', encoding='utf-8') as out:
-        process = subprocess.Popen([str(python), '-c', PLAY, f'maps\\{project.native_name}.map'], cwd=root, env=env,
-                                   stdout=out, stderr=subprocess.STDOUT,
-                                   creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    try:
-        code = process.wait(8)
-    except subprocess.TimeoutExpired:
-        return log                                   # still running: the game is starting
-    text = log.read_text(encoding='utf-8', errors='replace').strip()
-    raise RuntimeError(f'The game did not start (launcher exit {code}): ' + (text.splitlines()[-1] if text else 'no output'))
+    process = subprocess.Popen([str(python), str(PLAY), f'maps\\{project.native_name}.map', str(log)], cwd=root,
+                               env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                               encoding='utf-8', errors='replace',
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    progress(f'Starting BFME2 and loading {project.title}...')
+    last = ''
+    for line in process.stdout:
+        if line.startswith(EVENT + 'loaded '):
+            return process, float(line.split()[-1])
+        last = line.strip() or last
+    code = process.wait()
+    raise RuntimeError(f'The game ended before {project.title} was playable (launcher exit {code}): '
+                       + (last or 'no output') + f'; the log is {log}')
+
+
+def watch(process):
+    """Wait until a test game from play() closes; returns the seconds it ran."""
+    seconds = None
+    for line in process.stdout:
+        if line.startswith(EVENT + 'closed '):
+            seconds = float(line.split()[-1])
+    process.wait()
+    return seconds

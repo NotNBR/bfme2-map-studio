@@ -74,8 +74,10 @@ capture. The default CLI and viewer always use the local calculation.
   terminal) and leaves the previous build in place.
 - **Test In-Game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
-  ([making maps](making-maps.md#testing-in-game)). Without bfme-workshop, or
-  for one of the game's own maps, it starts the normal game at its menu.
+  ([making maps](making-maps.md#testing-in-game)). The status bar says when
+  the skirmish is playable and when the game has closed. Without
+  bfme-workshop, or for one of the game's own maps, it starts the normal game
+  at its menu.
 - **Detail**: Low, Medium or High, as `--lod`.
 - **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**, **Haze**,
   **Rain**, **Snow** and **Dusk** apply the

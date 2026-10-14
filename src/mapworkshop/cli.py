@@ -215,8 +215,14 @@ def cmd_play(args, extra):
         except RuntimeError as error:
             say(f'{error}\nStarting your normal game instead.')
         else:
-            log = native.play(p, progress=say)
-            say(f'Starting BFME2 in a skirmish on {p.title} (you against an easy AI); the launcher log is {log}.')
+            try:
+                process, seconds = native.play(p, progress=say)
+            except RuntimeError as error:
+                say(str(error))
+                return 1
+            process.stdout.close()                   # the game runs on; its launcher logs to the cache
+            say(f'{p.title} is playable in BFME2, {seconds:.0f} s after the start: you against an easy AI. '
+                'Closing the game window ends it.')
             return 0
     target = game.install(p.build_dir, p.native_name)
     say(f'Installed {p.title} into {target}')

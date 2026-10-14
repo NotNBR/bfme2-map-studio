@@ -150,8 +150,18 @@ skirmish on the current build, without going through the menus. It uses
 registered in its map cache, and the game opens in a 1600 x 1200 window, you
 against an easy AI, with bfme-workshop's strategic camera. The runtime has its
 own profile, so your normal game, its options and saved games are untouched,
-and it needs no administrator rights. The launcher log is in
-`local/cache/play/<map>.log`; closing the game ends the launcher.
+and it needs no administrator rights.
+
+The launcher runs the game as its debugger, so it learns from the game itself,
+not from a timer, when the skirmish is ready: a breakpoint at the end of the
+game's new-game pass, after the map is loaded and the players placed, reports
+it. `mw play` returns at that moment ("playable in BFME2, 13 s after the
+start"), or with the launcher's last line if the game ends before then; the
+viewer's status bar shows the start, then "playable", then "closed" when the
+game ends. Retail BFME2 ignores its window's close button and Alt+F4; the
+launcher catches that close request and ends the game, so closing the window
+works. The launcher log, with each of these events, is in
+`local/cache/play/<map>.log`.
 
 Without a prepared bfme-workshop runtime, or with `mw play --normal-game`, the
 build goes into the game's user maps folder
