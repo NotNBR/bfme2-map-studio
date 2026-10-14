@@ -87,6 +87,12 @@ Building blocks, in `src/mapworkshop/`:
   with an owner; `ground_rise` finds pieces on uneven ground) and castle sites
   (`castle_site`, a CastleFlag that unpacks the capturing faction's castle;
   `castle_layout` reads one) ([walls and castles](reference/mapping/navigation/walls-and-castles.md)).
+- `mapkit.sites`: outposts, inns, signal fires and shipwrights with the
+  capture flag they are taken by (`neutral_site`), creep lairs
+  (`creep_lair`), skirmish Gollum's spawn points (`gollum_spawns`) and
+  `spread` for evenly spaced points; `mapkit.ambient`: a map's sound bed and
+  emitters by kind of place (`ambient`, palettes per setting)
+  ([neutral sites](reference/mapping/players-economy-and-ai/neutral-sites.md)).
 - `mapkit.vegetation`: keeps trees and shrubs past the game's 1,200 / 2,000
   buffer limits visible as full models.
 - `mapkit.weather`: weather presets with the map's own sun and fill

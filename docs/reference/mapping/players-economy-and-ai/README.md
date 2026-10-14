@@ -10,6 +10,7 @@ controlled scenarios. Existing map projects provide basic playable setups.
 | Sides and teams | Property dictionaries, multiplayer slot records and owner/team references |
 | Ownership | Native script tests verify the declared owner of laboratory units |
 | Bases and build lists | [Castle templates and libraries](bases.md), versioned readers/writers and nonempty retail corpus inspection |
+| Neutral sites | [Capture flags, creep lairs, Gollum and ambient sound](neutral-sites.md), measured in the retail maps |
 | Economy, diplomacy and victory | Existing scenarios use game rules; comprehensive map-authoring tests remain |
 | AI | Build-list and library formats understood structurally; sustained base-building and attack behavior unverified |
 
