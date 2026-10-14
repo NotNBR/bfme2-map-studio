@@ -26,7 +26,7 @@ Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
   Build      rebuild the current project; the scene reloads when it is done and
              a failed build shows its error in the status bar
-  Play       copy the current project into the game's user maps and start BFME2
+  Test In-Game  start BFME2 straight in a skirmish on the current project (mw play)
   Detail     game detail level (Low, Medium, High)
   Weather    the map's own weather, or a preset (clear, haze, rain, snow, dusk)
   Sun        the weather's own sun, or a light rig over it
@@ -237,7 +237,7 @@ def main(argv=None):
     watched = [source, source.parent/'map.ini']
     toolbar = Toolbar(ctx, [
         dict(kind='dropdown', id='map', label='Map'),
-        dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Play'),
+        dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
         dict(kind='gap'),
         dict(kind='dropdown', id='lod', label='Detail'),
         dict(kind='dropdown', id='weather', label='Weather'),
@@ -457,7 +457,7 @@ def main(argv=None):
             return
         if kind == 'button':
             action = target[1]
-            # Build and Play need no scene: they work while the first load
+            # Build and Test In-Game need no scene: they work while the first load
             # is still running or after it failed.
             if action == 'build':
                 start_build()
@@ -512,12 +512,36 @@ def main(argv=None):
         threading.Thread(target=work, daemon=True).start()
 
     def play():
+        """Test In-Game: BFME2 straight in a skirmish on the current project
+        (native.play), or, without bfme-workshop or for a game map, the
+        normal game at its menu."""
         owner = owners.get(state['source'])
-        try:
+
+        def normal_game(note=''):
             if owner:
                 game.install(owner.build_dir, owner.native_name)
             game.launch()
-            set_status((f'{owner.title} installed in the game\'s maps; ' if owner else '') + 'starting BFME2...', 8)
+            set_status(note + (f'{owner.title} installed in the game\'s maps; ' if owner else '') + 'starting BFME2...', 10)
+
+        def work():
+            try:
+                from mapworkshop import native
+                try:
+                    native.workshop()
+                except RuntimeError:
+                    normal_game('no bfme-workshop runtime: ')
+                    return
+                native.play(owner, progress=lambda line: set_status(line[:140], 10))
+                set_status(f'starting BFME2 in a skirmish on {owner.title}...', 10)
+            except Exception as error:
+                set_status(str(error)[:140], 15)
+
+        try:
+            if owner is None:
+                normal_game()
+            else:
+                set_status(f'installing {owner.title} for a test game...', 10)
+                threading.Thread(target=work, daemon=True).start()
         except Exception as error:
             set_status(str(error)[:140], 10)
 

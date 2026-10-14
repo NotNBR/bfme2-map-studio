@@ -21,8 +21,8 @@ Explore a map, mark areas for an agent, and see edits reload in the viewer.
 - **Marks for agents.** Pin, circle, frame or draw around a place, press **Copy
   for agent** and ask for "a forest in mark 2". The marks come with their map
   coordinates and the objects inside them.
-- **Into the game.** `mw play` installs the map into BFME2's maps folder and starts
-  the game.
+- **Into the game.** `mw play` (**Test In-Game** in the viewer) starts BFME2
+  straight in a skirmish on your map.
 - **Check your map.** Estimate walkability, inspect changes between builds, and
   render views for review. Walkability is a local estimate; verify final gameplay
   in BFME2.
@@ -52,7 +52,7 @@ The launcher and command-line tool still use the names **Map Workshop** and
 .\local\venv\Scripts\Activate.ps1
 mw new "Misty Vale"     # Start a map
 mw dev misty-vale       # Build, open the viewer, and rebuild on every save
-mw play misty-vale      # Play it in BFME2
+mw play misty-vale      # Test it in-game
 ```
 
 You can also run `.\local\venv\Scripts\mw.exe` directly without activating the

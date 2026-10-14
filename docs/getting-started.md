@@ -43,7 +43,7 @@ mw maps                    list the map projects
 mw new "Misty Vale"        start a new map project
 mw dev [MAP]               rebuild on every save, with the viewer open
 mw build [MAP] [--install] build a map
-mw play [MAP]              install the map and start BFME2
+mw play [MAP]              test it in-game: BFME2 straight in a skirmish on it
 mw marks [MAP]             print the viewer's marks, for an agent
 mw doctor                  check the setup
 ```

@@ -17,7 +17,7 @@ USAGE = """
   mw dev [MAP]               rebuild on every save, with the viewer open
   mw build [MAP] [--install] build a map (--install: also into the game's maps)
   mw view [MAP]              open the viewer
-  mw play [MAP]              install the map and start BFME2
+  mw play [MAP]              test it in-game: start BFME2 straight in a skirmish on it
   mw marks [MAP] [--json]    print the viewer's marks, for an agent
   mw history [MAP]           earlier builds
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
@@ -51,9 +51,11 @@ def parser():
     s = sub.add_parser('build', help='Build a map')
     s.add_argument('map', nargs='?')
     s.add_argument('--install', action='store_true', help="Also copy it into the game's user maps")
-    s = sub.add_parser('play', help='Install the map and start BFME2')
+    s = sub.add_parser('play', help='Test the map in-game: start BFME2 straight in a skirmish on it')
     s.add_argument('map', nargs='?')
     s.add_argument('--rebuild', action='store_true', help='Build before installing')
+    s.add_argument('--normal-game', action='store_true',
+                   help="Install into your own game's user maps and start it at the menu instead")
     s = sub.add_parser('history', help='Earlier builds of a map')
     s.add_argument('map', nargs='?')
     s = sub.add_parser('config', help='Show or change settings')
@@ -205,8 +207,18 @@ def cmd_play(args, extra):
         code = _build(p, extra)
         if code:
             return code
-    target = game.install(p.build_dir, p.native_name)
     project.remember(p)
+    if not args.normal_game:
+        from mapworkshop import native
+        try:
+            native.workshop()
+        except RuntimeError as error:
+            say(f'{error}\nStarting your normal game instead.')
+        else:
+            log = native.play(p, progress=say)
+            say(f'Starting BFME2 in a skirmish on {p.title} (you against an easy AI); the launcher log is {log}.')
+            return 0
+    target = game.install(p.build_dir, p.native_name)
     say(f'Installed {p.title} into {target}')
     game.launch()
     say(f'Starting BFME2: pick "{p.title}" under Skirmish or Multiplayer.')

@@ -7,7 +7,7 @@ shows it in the viewer.
 ```powershell
 mw new "Misty Vale" --players 4 --size 600x600   # an empty, level map
 mw dev misty-vale                                # build, open the viewer, rebuild on save
-mw play misty-vale                               # install it into the game and start BFME2
+mw play misty-vale                               # test it in-game: a skirmish on it, straight away
 ```
 
 For the design side (composition, landforms, materials, detail), follow the
@@ -140,9 +140,24 @@ Python process:
   (The process runs with a fixed `PYTHONHASHSEED`, because some builds iterate
   sets of names.)
 
-`mw build --install` and `mw play` copy the build into the game's user maps
-folder (`%APPDATA%\My Battle for Middle-earth(tm) II Files\Maps`), where BFME2
-finds it under Skirmish.
+## Testing in-game
+
+`mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a
+skirmish on the current build, without going through the menus. It uses
+[bfme-workshop](https://github.com/NotNBR/bfme-workshop)'s isolated runtime
+(a checkout next to this one, or `mw config bfme_workshop <folder>`), as
+`mw walkable --native` does: the build is copied into that runtime's mod and
+registered in its map cache, and the game opens in a 1600 x 1200 window, you
+against an easy AI, with bfme-workshop's strategic camera. The runtime has its
+own profile, so your normal game, its options and saved games are untouched,
+and it needs no administrator rights. The launcher log is in
+`local/cache/play/<map>.log`; closing the game ends the launcher.
+
+Without a prepared bfme-workshop runtime, or with `mw play --normal-game`, the
+build goes into the game's user maps folder
+(`%APPDATA%\My Battle for Middle-earth(tm) II Files\Maps`) and BFME2 starts at
+its menu; pick the map under Skirmish. `mw build --install` copies it there
+too.
 
 Older projects with `build.py` and `main()` read their output folders from
 module globals the pipeline sets: `OUT` (the build's folder), `CHECK` (its

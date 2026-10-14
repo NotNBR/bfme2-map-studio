@@ -6,6 +6,8 @@ skirmish and read the game's memory. pathfind() installs a project's build into
 that runtime's mod, starts a short skirmish on it, reads the game's
 pathfinding grid (pathfind_dump.py) and keeps it next to the build as
 pathfind.npz and pathfind.json, with the map's hash (mapkit.walkable).
+play() installs the build the same way and starts a skirmish on it that you
+play: the game opens straight in the map (mw play, the viewer's Test In-Game).
 """
 import hashlib
 import json
@@ -71,3 +73,38 @@ def pathfind(project, progress=print):
     shutil.copy2(out/'pathfind.npz', project.build_dir/'pathfind.npz')
     (project.build_dir/'pathfind.json').write_text(json.dumps(info, indent=2) + '\n', encoding='utf-8')
     return info
+
+
+PLAY = """import sys
+import host.launch
+sys.argv = ['host.launch', '--map', sys.argv[1], '--window', '--strategic']
+raise SystemExit(host.launch.main())
+"""
+
+
+def play(project, progress=print):
+    """Install the project's build into the runtime and start BFME2 there
+    straight in a skirmish on it, as bfme-workshop's own map presets do
+    (host.launch --map ... --window --strategic): you against an easy AI, in
+    a 1600 x 1200 window, with the runtime's own profile, so the normal game
+    and its options are untouched. The launcher stays running as the game's
+    debugger until the game closes; its output goes to a log in the cache.
+    Returns the log's path."""
+    if not project.map_file.exists():
+        raise LookupError(f'{project.title} has not been built yet: run `mw build {project.id}`')
+    root, python, mod = workshop()
+    progress(f'Installing {project.title} into the bfme-workshop runtime...')
+    install(project, root, python, mod)
+    log = CACHE/'play'/f'{project.id}.log'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, PYTHONPATH=str(root/'src'), PYTHONIOENCODING='utf-8')
+    with open(log, 'w', encoding='utf-8') as out:
+        process = subprocess.Popen([str(python), '-c', PLAY, f'maps\\{project.native_name}.map'], cwd=root, env=env,
+                                   stdout=out, stderr=subprocess.STDOUT,
+                                   creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    try:
+        code = process.wait(8)
+    except subprocess.TimeoutExpired:
+        return log                                   # still running: the game is starting
+    text = log.read_text(encoding='utf-8', errors='replace').strip()
+    raise RuntimeError(f'The game did not start (launcher exit {code}): ' + (text.splitlines()[-1] if text else 'no output'))
