@@ -69,6 +69,7 @@ from mapworkshop.render.camera import look_at, perspective
 
 ORBIT_DEGREES_PER_PIXEL = 0.25
 SMOOTHING = 16.0          # 1/s; higher follows input faster
+TOAST_DELAY = 0.25        # s a reload runs before its toast shows, so quick ones do not flash
 MIN_DISTANCE, MAX_DISTANCE = 60.0, 40000.0
 
 
@@ -231,7 +232,7 @@ def main(argv=None):
                  fps_limit=args.fps, next_frame=0.0, building=False, build_line='',
                  summary=None, summary_key=None, summary_busy=False, requested=source,
                  request=None, upload=None, walk_request=None, limits=False, normal_maps=None, clouds=True,
-                 status_sample=0.0, focus_status='')
+                 status_sample=0.0, focus_status='', load_title='', toast=None)
     scene = dict(renderer=None)
     out_dir = RENDERS
     watched = [source, source.parent/'map.ini']
@@ -333,9 +334,8 @@ def main(argv=None):
 
     def toolbar_state():
         r = scene['renderer']
-        if state['loading']:
-            fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
-            status = f'Loading {map_title(state["requested"])}: {step}'
+        if state['loading'] and r is None:
+            status = ''
         elif state['building']:
             status = f'building: {state["build_line"]}'
         elif time.perf_counter() < state['status_until']:
@@ -683,6 +683,8 @@ def main(argv=None):
         state['load_signature'] = signature()
         state['load_started'] = time.perf_counter()
         state['loading'] = True
+        state['load_title'] = load_title(source)
+        state['toast'] = None
 
         def prepare(request):
             if not base_assets:
@@ -692,6 +694,28 @@ def main(argv=None):
             return MapRenderer.prepare(source, assets=base_assets[0], shared=cpu_shared,
                                        progress=request.report, **options)
         state['request'] = loader.submit(prepare)
+
+    def load_title(source):
+        """What the loading toast calls this load: the map, or the settings
+        that changed on it."""
+        r = scene['renderer']
+        if r is None or source != state['source']:
+            return map_title(source)
+        changed = []
+        if state['lod'] != r.options['lod']:
+            changed.append(f'Detail {state["lod"].title()}')
+        if state['weather'] != (r.weather_preset or 'map'):
+            changed.append('Weather')
+        if state['sun'] != (r.sun or 'own'):
+            changed.append('Sun')
+        if state['limits'] != r.options['vegetation_limits']:
+            changed.append('Object limits')
+        return 'Applying ' + ', '.join(changed) if changed else f'Reloading {map_title(source)}'
+
+    def toast_shown():
+        """Whether the loading toast is up: the load has run long enough not
+        to flash."""
+        return state['loading'] and time.perf_counter()-state['load_started'] >= TOAST_DELAY
 
     def request_walkability():
         if state['walk_request']:
@@ -727,6 +751,7 @@ def main(argv=None):
                 state['request'] = None
                 return
             old = scene['renderer']
+            shown = toast_shown()
             new.defer_walkability = True
             if old:
                 new.visible.update(old.visible)
@@ -755,9 +780,14 @@ def main(argv=None):
                     print('Could not remember last map:', error)
             seconds = time.perf_counter()-state['load_started']
             set_status(f'Loaded {map_title(state["source"])} ({seconds:.1f} s)', 5)
+            if shown:
+                state['toast'] = dict(kind='done', title=state['load_title'], detail=f'Done in {seconds:.1f} s',
+                                      until=time.perf_counter()+1.6)
             print(f'Loaded {state["source"].name} in {seconds:.2f} s')
             request_walkability()
         except Exception as error:
+            state['toast'] = dict(kind='failed', title=state['load_title'], detail=str(error),
+                                  until=time.perf_counter()+6.0)
             if state['upload']:
                 state['upload'].close()
                 state['upload'] = None
@@ -788,6 +818,20 @@ def main(argv=None):
             return
         r.install_walkability(request.take())
         set_status(f'Walkability ready: {len(r.walkable["cut_off"])} cut-off areas', 5)
+
+    def draw_toast(size):
+        """The loading toast at the top left, below the toolbar rows: the
+        load's progress while it runs, then briefly how it ended."""
+        top = toolbar.height + (mark_bar.height if state['marking'] and scene['renderer'] is not None else 0)
+        now = time.perf_counter()
+        if toast_shown():
+            fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
+            alpha = min(1.0, (now-state['load_started']-TOAST_DELAY)/0.15)
+            toolbar.draw_toast(size, scale(), top, state['load_title'], step, fraction, 'loading', alpha)
+        elif state['toast'] and now < state['toast']['until']:
+            toast = state['toast']
+            toolbar.draw_toast(size, scale(), top, toast['title'], toast['detail'], None, toast['kind'],
+                               min(1.0, (toast['until']-now)/0.4))
 
     def set_status(text, seconds):
         state['status'] = text
@@ -1187,9 +1231,6 @@ def main(argv=None):
                     # Keep check marks current (keyboard toggles, a finished reload).
                     toolbar.open_menu = (toolbar.open_menu[0], menu_entries(toolbar.open_menu[0]))
                 toolbar.draw((fw, fh), scale(), toolbar_state())
-                if scene['renderer'] is None and state['loading']:
-                    fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
-                    toolbar.draw_loading((fw, fh), scale(), map_title(state['requested']), step, fraction)
                 toolbar.panel_rect = None
                 if state['marking'] and scene['renderer'] is not None:
                     mark_bar.draw((fw, fh), scale(), marks_bar_state())
@@ -1197,7 +1238,8 @@ def main(argv=None):
                         update_summary()
                         toolbar.draw_panel((fw, fh), scale(), 'Marks', summary_lines(),
                                            toolbar.height + mark_bar.height)
-                # Last, so the mark row, the panel and the loading card never cover it.
+                draw_toast((fw, fh))
+                # Last, so the mark row, the panel and the loading toast never cover it.
                 toolbar.draw_menu((fw, fh), scale())
                 glfw.swap_buffers(window)
             limit = state['fps_limit']

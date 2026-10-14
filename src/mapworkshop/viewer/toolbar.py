@@ -9,7 +9,9 @@ draw_menu(), after everything else, and scrolls when it is taller than the
 window.
 """
 
-from PIL import Image, ImageDraw, ImageFont
+import time
+
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 from functools import lru_cache
 
 BAR = (243, 243, 245)
@@ -20,6 +22,8 @@ HOVER = (226, 228, 234)
 ON = (220, 232, 250)
 ON_LINE = (120, 160, 225)
 MENU = (255, 255, 255)
+GOOD = (46, 150, 88)
+BAD = (196, 64, 60)
 
 VS = """
 #version 430
@@ -34,9 +38,13 @@ void main() {
 FS = """
 #version 430
 uniform sampler2D tex;
+uniform float alpha;
 in vec2 v_uv;
 out vec4 frag;
-void main() { frag = texture(tex, vec2(v_uv.x, 1.0 - v_uv.y)); }
+void main() {
+    frag = texture(tex, vec2(v_uv.x, 1.0 - v_uv.y));
+    frag.a *= alpha;
+}
 """
 
 
@@ -306,54 +314,94 @@ class Toolbar:
         self._blit(self.menu_texture, self.menu_rect, size)
         ctx.disable(self.mgl.BLEND)
 
-    def _blit(self, texture, rect, size):
+    def _blit(self, texture, rect, size, alpha=1.0):
         width, height = size
         x0, y0, x1, y1 = rect
         to_ndc = lambda x, y: (2*x/width-1, 1-2*y/height)
         a, b = to_ndc(x0, y1), to_ndc(x1, y0)
         self.program['rect'].value = (a[0], a[1], b[0], b[1])
+        self.program['alpha'].value = alpha
         texture.use(0)
         self.program['tex'].value = 0
         self.vao.render(self.mgl.TRIANGLE_STRIP)
 
-    def draw_loading(self, size, scale, title, step, fraction):
-        """Dim the frame and show a centred loading card with a progress bar."""
-        key = (round(scale, 3), title, step, round(fraction*100))
-        if key != getattr(self, 'card_key', None):
-            self.card_key = key
-            self._loading_card(scale, title, step, fraction)
+    def draw_toast(self, size, scale, top, title, detail, fraction=None, kind='loading', alpha=1.0):
+        """A small card at the top left, `top` pixels down: a spinner (kind
+        'loading'), a check ('done') or a cross ('failed'), a bold title and a
+        muted detail line; while loading, the percentage and a thin progress
+        bar along its bottom edge."""
+        phase = int(time.perf_counter()*12) % 12 if kind == 'loading' else 0
+        percent = None if fraction is None else round(100*max(0.0, min(1.0, fraction)))
+        key = (round(scale, 3), title, detail, percent, kind, phase)
+        if key != getattr(self, 'toast_key', None):
+            self.toast_key = key
+            self._toast_card(scale, title, detail, percent, kind, phase)
         width, height = size
-        w, h = self.card_texture.size
+        w, h = self.toast_texture.size
+        margin = round(10*scale)
         ctx = self.ctx
         ctx.viewport = (0, 0, width, height)
         ctx.disable(self.mgl.DEPTH_TEST)
         ctx.enable(self.mgl.BLEND)
         ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
-        self._blit(self.dim_texture, (0, self.height, width, height), size)
-        x0, y0 = (width-w)//2, (height-h)//2
-        self._blit(self.card_texture, (x0, y0, x0+w, y0+h), size)
+        self._blit(self.toast_texture, (margin, top+margin, margin+w, top+margin+h), size, alpha)
         ctx.disable(self.mgl.BLEND)
 
-    def _loading_card(self, scale, title, step, fraction):
-        w, h = round(420*scale), round(108*scale)
-        card = Image.new('RGBA', (w, h), MENU+(255,))
+    def _toast_card(self, scale, title, detail, percent, kind, phase):
+        # The Marks panel's width, padding, corners and fonts.
+        w, h = round(380*scale), round(58*scale)
+        radius = round(8*scale)
+        card = Image.new('RGBA', (w, h), (0, 0, 0, 0))
         d = ImageDraw.Draw(card)
-        d.rounded_rectangle([0, 0, w-1, h-1], radius=round(8*scale), outline=LINE, fill=MENU)
-        pad = round(18*scale)
-        if len(title) > 44:
-            title = title[:43]+'…'
-        d.text((pad, round(26*scale)), title, font=_font(round(15*scale), bold=True), fill=TEXT, anchor='lm')
-        d.text((pad, round(52*scale)), step, font=_font(round(12*scale)), fill=MUTED, anchor='lm')
-        y0, y1 = round(74*scale), round(82*scale)
-        d.rounded_rectangle([pad, y0, w-pad, y1], radius=round(4*scale), fill=HOVER)
-        fill_x = pad+max(0.0, min(1.0, fraction))*(w-2*pad)
-        if fill_x > pad+2:
-            d.rounded_rectangle([pad, y0, fill_x, y1], radius=round(4*scale), fill=ON_LINE)
-        d.text((w-pad, round(52*scale)), f'{round(100*max(0.0, min(1.0, fraction)))}%',
-               font=_font(round(12*scale)), fill=MUTED, anchor='rm')
-        self.card_texture = self._upload(card, getattr(self, 'card_texture', None))
-        if getattr(self, 'dim_texture', None) is None:
-            self.dim_texture = self._upload(Image.new('RGBA', (1, 1), (12, 14, 18, 150)), None)
+        d.rounded_rectangle([0, 0, w-1, h-1], radius=radius, outline=LINE, fill=MENU+(245,))
+        pad = round(12*scale)
+        # The icon, drawn four times larger and scaled down for smooth edges.
+        icon = round(18*scale)
+        big = Image.new('RGBA', (icon*4, icon*4), (0, 0, 0, 0))
+        b = ImageDraw.Draw(big)
+        line = max(4, round(2*scale*4))
+        box = [line//2, line//2, icon*4-line//2-1, icon*4-line//2-1]
+        if kind == 'loading':
+            b.ellipse(box, outline=HOVER, width=line)
+            b.arc(box, start=phase*30, end=phase*30+100, fill=ON_LINE, width=line)
+        else:
+            b.ellipse(box, fill=GOOD if kind == 'done' else BAD)
+            c, s = icon*2, icon*4
+            if kind == 'done':
+                b.line([(s*0.28, s*0.52), (s*0.44, s*0.68), (s*0.73, s*0.36)], fill=MENU, width=line, joint='curve')
+            else:
+                b.line([(s*0.33, s*0.33), (s*0.67, s*0.67)], fill=MENU, width=line)
+                b.line([(s*0.67, s*0.33), (s*0.33, s*0.67)], fill=MENU, width=line)
+        card.alpha_composite(big.resize((icon, icon), Image.LANCZOS), (pad, (h-icon)//2))
+        x = pad+icon+round(10*scale)
+        right = w-pad
+        bold, small = _font(round(13*scale), bold=True), _font(round(12*scale))
+        if percent is not None:
+            label = f'{percent}%'
+            d.text((right, round(21*scale)), label, font=small, fill=MUTED, anchor='rm')
+            right -= d.textlength(label, font=small)+round(8*scale)
+
+        def fit(text, font, room):
+            if d.textlength(text, font=font) > room:
+                while text and d.textlength(text+'…', font=font) > room:
+                    text = text[:-1]
+                text += '…'
+            return text
+        d.text((x, round(21*scale)), fit(title, bold, right-x), font=bold, fill=TEXT, anchor='lm')
+        d.text((x, round(39*scale)), fit(detail, small, w-pad-x), font=small,
+               fill=BAD if kind == 'failed' else MUTED, anchor='lm')
+        if percent is not None:
+            # A thin bar inside the bottom edge, clipped to the card's corners.
+            bar = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+            bd = ImageDraw.Draw(bar)
+            y0 = h-round(3*scale)
+            bd.rectangle([0, y0, w, h], fill=HOVER+(255,))
+            bd.rectangle([0, y0, round(w*percent/100), h], fill=ON_LINE+(255,))
+            mask = Image.new('L', (w, h), 0)
+            ImageDraw.Draw(mask).rounded_rectangle([0, 0, w-1, h-1], radius=radius, fill=255)
+            bar.putalpha(ImageChops.darker(bar.getchannel('A'), mask))
+            card.alpha_composite(bar)
+        self.toast_texture = self._upload(card, getattr(self, 'toast_texture', None))
 
     def draw_panel(self, size, scale, title, lines, top):
         """A card at the top right, `top` pixels down, with a bold title and

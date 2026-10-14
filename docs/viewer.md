@@ -102,8 +102,12 @@ scene in place and the camera stays where it is. Map preparation runs in the
 background and GPU uploads are spread across frames. The current scene and
 controls remain usable while loading, including when switching maps or changing
 detail, weather or sun. Selecting another map replaces the pending request.
+A load that takes longer than a quarter of a second shows a toast at the top
+left, below the toolbar: the map or the changed settings, the current step and
+a progress bar. When the load ends, the toast briefly shows how long it took,
+or the error.
 Models and textures are cached between reloads. If the new file can't be read,
-the last good scene stays and the status bar shows the error. Individual GPU
+the last good scene stays and the toast and status bar show the error. Individual GPU
 uploads and first-use shader compilation can still cause short pauses.
 
 `mw dev [MAP]` is the quickest way to work on a map: it builds the project,
@@ -156,5 +160,6 @@ same text, so an agent can also read the marks itself; see
 
 The camera is a preview camera, not the game's. Animation (water ripples,
 cloud shadows, rain and snow) runs on the game's clocks; **Animate** pauses
-it. A weather or sun change applies in place in well under a second; changing
-the map or the detail level reloads the scene, with a progress card.
+it. Changing the map, the detail level, the weather, the sun or the game object
+limits reloads the scene, with the loading toast described under
+[Live reload](#live-reload).

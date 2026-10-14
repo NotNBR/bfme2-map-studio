@@ -988,7 +988,7 @@ class MapRenderer:
                     self._effect('normalmapped.fx')
 
         for index, (model, override, caster, decal, buffer, prop, sky) in enumerate(groups):
-            self._progress(0.38 + 0.25*index/max(len(groups), 1), f'Preparing model: {model}')
+            self._progress(0.38 + 0.25*index/max(len(groups), 1), f'Preparing models {index+1}/{len(groups)}: {model}')
             names.update((override, decal))
             if buffer is not None:
                 tree = self.model_cache.load_tree(model)
@@ -1039,7 +1039,7 @@ class MapRenderer:
         decals = {}
         fx_report = {}
         for index, ((model, texture_override, caster, decal, buffer, prop, sky), instances) in enumerate(groups.items()):
-            self._progress(0.80+0.18*index/max(len(groups), 1), f'Uploading objects: {model}')
+            self._progress(0.80+0.18*index/max(len(groups), 1), f'Uploading objects {index+1}/{len(groups)}: {model}')
             yield
             inst = ctx.buffer(np.array([i[:4] for i in instances], 'f4').tobytes())
             scales = ctx.buffer(np.array([i[4] for i in instances], 'f4').tobytes())
