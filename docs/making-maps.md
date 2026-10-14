@@ -138,7 +138,49 @@ Building blocks, in `src/mapworkshop/`:
 Positions are map units, 10 per terrain cell: x runs east and y north from the
 playable area's south-west corner, the same coordinates as the viewer's marks.
 Template and texture names are the game's: `b.assets.templates` lists the
-objects, `local/game/data/ini/terrain.ini` the textures.
+objects, `local/game/data/ini/terrain.ini` the textures; `mw find` searches
+them.
+
+## Finding objects, textures and effects
+
+`mw find` searches the game's object templates by what they are rather than by
+name alone ([render/catalog.py](../src/mapworkshop/render/catalog.py)):
+
+```powershell
+mw find stone bridge                        # every word must match name, type, region, material or variant
+mw find --type tree --region shire --used   # filters; --used: only what the stock maps place
+mw find snow ruin --size large              # footprint: small <10, medium <40, large <120, huge (map units)
+mw find torch --render                      # also an `mw items` collage of the results
+mw find --textures mordor --type cliff      # terrain textures by terrain.ini's Type and Region
+mw find --roads | --sounds | --effects [WORDS]
+mw item FireCampfire --info                 # everything known about one template
+```
+
+Each template has a group and type (Nature: tree, shrub, rock, cliff, water
+feature, animal...; Built scenery: house, wall, tower, gate, bridge, ruin,
+statue, light / fire, clutter...; Gameplay neutrals: lairs, capturable
+buildings, flags), a region (Shire, Gondor / Minas Tirith, Erebor, Mordor, ...),
+variants (Snow, Ruined, Rubble, Damaged, Dead / burnt, Night), a material, its
+footprint radius and its use in the 72 stock maps. Results cover every group,
+in order of use in the stock maps; `--group` narrows them (nature, built,
+gameplay, faction, creeps, sound, system, obsolete). `--json` prints the full
+entries.
+
+Groups follow the game's own `EditorSorting`, `KindOf`, `Side` and the INI each
+template is defined in; types, regions and variants also use rules over names,
+so a few templates are misfiled. Material shows its evidence: `game flag` (the
+game's `MADE_OF_*`, set on few templates), `type` (trees are vegetation),
+`name`, `texture` (the model's texture names) or `culture guess` (Gondor and
+dwarf buildings stone, Rohan and Shire wood), weakest last. Effects list the
+templates that carry each particle system (a map shows a particle system
+through an object that carries it). The index is built once (about half a
+minute) into `local/cache/catalog.json` and again when the game data or the
+stock maps change; `--refresh` forces it.
+
+A `!` marks templates the game marks obsolete, defines for cinematics or
+tests, or spawns itself, and a faction's gameplay buildings (production,
+defence, economy, fortress); `mw item NAME --info` says which. Every build
+lists the same for the objects it placed (below).
 
 ## Builds
 
@@ -158,6 +200,11 @@ Python process:
   shows it again; `mw diff MAP OTHER` compares any two maps (projects, stock maps
   or `.map` files), `--json` gives everything. Objects are matched by template and
   position, so renumbered uniqueIDs are not changes.
+- It then lists placed templates to know about, with their count and layers,
+  also in `build.json` (`template_concerns`): names the game doesn't define,
+  obsolete, cinematic or spawned-only templates, and faction gameplay buildings
+  that no player owns. They inform; the build still succeeds, and
+  `mw item NAME --info` says more.
 - Builds are reproducible: the same source gives the same map, byte for byte.
   (The process runs with a fixed `PYTHONHASHSEED`, because some builds iterate
   sets of names.)

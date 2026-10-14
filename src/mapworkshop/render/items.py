@@ -1,7 +1,11 @@
 """Game objects rendered on their own: one item, or a labelled collage of many.
 
     mw item TEMPLATE [--heading H] [--elevation E] [--rotation R] [--distance D] [--top]
+    mw item TEMPLATE --info
     mw items PATTERN... [--from-map MAP [--layer L]] [--views 3q,side,top] [--columns N]
+
+`mw item TEMPLATE --info` renders nothing: it prints what the game says about
+the template (render.catalog.describe). To find names, `mw find`.
 
 An item stands alone on a plain background (white unless --background) with
 a soft ground shadow, lit by the game's renderer: the same models, materials
@@ -368,8 +372,16 @@ def main_item(argv=None):
     parser.add_argument('template', help='Object template, e.g. GenericTreeBridge')
     parser.add_argument('--top', action='store_true', help='Look straight down (the footprint)')
     parser.add_argument('--size', type=int, default=800, help='Image width and height in pixels (800)')
+    parser.add_argument('--info', action='store_true',
+                        help='Print what the game says about it (INI file, KindOf, footprint, stock-map use) instead of rendering')
     _common(parser)
     args = parser.parse_args(argv)
+    if args.info:
+        from mapworkshop.render import catalog
+        from mapworkshop.render.assets import GameAssets
+        assets = GameAssets()
+        print('\n'.join(catalog.describe(assets, args.template, catalog.load(assets, progress=lambda text: print(text, flush=True)))))
+        return 0
     started = time.time()
     renderer = ItemRenderer(lod=args.lod)
     names, skipped = select(renderer.assets, [args.template])

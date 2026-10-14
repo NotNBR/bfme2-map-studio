@@ -70,7 +70,12 @@ mw item ShireGeneric03 --top                           # straight down: the foot
 mw items "*bridge*"                                    # every template with "bridge" in its name
 mw items ShireGeneric01 CBHobbitBldg01 --views 3q,side,top
 mw items --from-map bramble-hollow --layer Hamlet      # what a map places, most used first
+mw item FireCampfire --info                            # no image: what the game says about it
 ```
+
+To find names to render, `mw find` searches the templates by type, region and
+material ([making maps](making-maps.md#finding-objects-textures-and-effects));
+`mw find ... --render` renders its results as a collage.
 
 Patterns are template names or case-insensitive wildcards over the game's
 templates that have a model. Views: `3q` (default), `front`, `back`, `left`,

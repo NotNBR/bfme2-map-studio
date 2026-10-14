@@ -18,6 +18,10 @@ from mapworkshop.config import GAME_DATA, game_dir
 from mapworkshop.formats.big import BigArchive
 
 TEXTURE_EXTENSIONS = ('.dds', '.tga', '.jpg')
+# An object template: its kind, name, parent (ChildObject, ObjectReskin) and
+# body, up to the next one. The game also reads indented definitions.
+TEMPLATE = re.compile(r'(?ms)^[ \t]*(Object|ObjectReskin|ChildObject)[ \t]+([^\s=]+)(?:[ \t]+([^\s;]+))?[^\n]*\n(.*?)'
+                      r'(?=^[ \t]*(?:Object|ObjectReskin|ChildObject)[ \t]+[^\s=]|\Z)')
 
 
 def _archive_order(path):
@@ -118,26 +122,31 @@ class GameAssets:
     # Object templates -------------------------------------------------------
     @property
     def templates(self):
+        """Every object template by lowercase name: kind, parent, body, name,
+        and where it is defined (`file` below data/ini, `line`)."""
         if not hasattr(self, '_templates'):
-            text = self.ini_text('object')
             found = {}
-            pattern = r'(?ms)^(Object|ObjectReskin|ChildObject)\s+(\S+)(?:[ \t]+(\S+))?[^\n]*\n(.*?)(?=^(?:Object|ObjectReskin|ChildObject)\s|\Z)'
-            # Yield between template matches instead of holding the GIL for
-            # one regex over the entire game's object INIs during a load.
-            for match in re.finditer(pattern, text):
-                kind, name, parent, body = match.groups()
-                found[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
-                                           body=body, name=name)
+            ini = self.mod/'data/ini'
+            for path in sorted((ini/'object').rglob('*.ini')):
+                text = path.read_text(encoding='cp1252', errors='replace')
+                file, line, counted = path.relative_to(ini).as_posix(), 1, 0
+                # Yield between template matches instead of holding the GIL for
+                # one regex over the entire game's object INIs during a load.
+                for match in TEMPLATE.finditer(text):
+                    kind, name, parent, body = match.groups()
+                    line += text.count('\n', counted, match.start())
+                    counted = match.start()
+                    found[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
+                                               body=body, name=name, file=file, line=line)
             self._templates = found
         return self._templates
 
     def add_map_templates(self, text):
         """Object definitions from a map's map.ini, which the game loads on
         top of the INI templates for that map."""
-        pattern = r'(?ms)^(Object|ObjectReskin|ChildObject)\s+(\S+)(?:[ \t]+(\S+))?[^\n]*\n(.*?)(?=^(?:Object|ObjectReskin|ChildObject)\s|\Z)'
-        for kind, name, parent, body in re.findall(pattern, text):
+        for kind, name, parent, body in TEMPLATE.findall(text):
             self.templates[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
-                                                body=body, name=name)
+                                                body=body, name=name, file='map.ini', line=None)
         self._models = {}
 
     def template_model(self, template):

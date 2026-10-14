@@ -43,13 +43,19 @@ viewer's **Copy for agent** button copies.
      the build.
    - Write each mark's coordinates into the code. Mark files live in the ignored
      `local/marks/` and don't travel with the repository.
-   - Use names the game knows: templates from `GameAssets().templates`
-     (`mapworkshop.render.assets`), textures from `local/game/data/ini/terrain.ini`.
-     Prefer what the map already uses.
-   - To choose between objects, look at them: `mw items "*bridge*"` (or names,
-     or `--from-map <map> --layer <layer>`) renders a labelled collage with each
-     one's size in map units, and its JSON lists the sizes; `mw item <template>`
-     renders one from any angle ([rendering](docs/rendering.md)).
+   - Use names the game knows. `mw find` searches them: `mw find stone bridge`,
+     `mw find --type tree --region shire`, `mw find --textures mordor --type cliff`,
+     `--roads`, `--sounds`, `--effects`. Each result shows its group, type,
+     region, footprint, material and use in the stock maps; a `!` marks
+     obsolete, cinematic, game-spawned and faction gameplay templates.
+     `mw item <template> --info` prints what the game says about one: its INI
+     file and line, KindOf, footprint, effects, stock maps
+     ([finding objects](docs/making-maps.md#finding-objects-textures-and-effects)).
+   - To choose between objects, look at them: `mw find ... --render`, or
+     `mw items "*bridge*"` (or names, or `--from-map <map> --layer <layer>`),
+     renders a labelled collage with each one's size in map units, and its JSON
+     lists the sizes; `mw item <template>` renders one from any angle
+     ([rendering](docs/rendering.md)).
    - Before setting a building's angle, find its front by looking: models don't
      agree on which side that is, and many have doors on more than one side.
      `mw items <template> --views 0/40,90/40,180/40,270/40` shows its local

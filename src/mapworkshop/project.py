@@ -266,6 +266,9 @@ def build(project, args=(), progress=print):
     since, changes = _changes(project, work)
     if changes is not None:
         record.update(changes_since=since, changes=changes)
+    concerns = _template_concerns(b)
+    if concerns:
+        record['template_concerns'] = concerns
     if b.report:
         (work/'report.json').write_text(json.dumps(b.report, indent=2, default=str) + '\n', encoding='utf-8')
     (work/'build.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
@@ -281,7 +284,26 @@ def build(project, args=(), progress=print):
         progress(f'Changes since the build of {since} (`mw diff {project.id}`):')
     for line in changes or ():
         progress('  ' + line)
+    if concerns:
+        progress('Placed templates to know about (`mw item NAME --info`):')
+        for line in concerns:
+            progress('  ' + line)
     return project.build_dir
+
+
+def _template_concerns(b):
+    """Objects of the built map whose templates the game doesn't define, or
+    that are obsolete, cinematic, spawned-only or unowned faction gameplay
+    buildings (render.catalog.check_map), as lines. They inform; the build
+    still succeeds."""
+    try:
+        from mapworkshop.formats.map import Map
+        from mapworkshop.render import catalog
+        ini = b.out/'map.ini'
+        return catalog.check_map(b.assets, Map(b.map_file.read_bytes()),
+                                   ini.read_text(encoding='ascii', errors='replace') if ini.exists() else '')
+    except Exception as error:   # a check never fails the build
+        return [f'(No template check: {error})']
 
 
 def _apply_properties(project, b):

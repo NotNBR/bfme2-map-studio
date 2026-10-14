@@ -24,7 +24,9 @@ USAGE = """
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
   mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself (--graphics High)
   mw rivers [MAP] [--json]   which way each river strip flows
-  mw item TEMPLATE           render one object on its own (--heading, --elevation, --rotation, --top)
+  mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
+                             (--textures, --roads, --sounds, --effects: those instead)
+  mw item TEMPLATE           render one object on its own (--info: what the game says about it)
   mw items PATTERN...        a labelled collage of objects: "*bridge*", --from-map MAP [--layer L]
   mw render | graphics | workspace ...   render images, map graphics, hand-edit workspaces
   mw config [KEY [VALUE]]    show or change settings (game, last_map)
@@ -90,6 +92,7 @@ def parser():
     for name, text in (('view', 'Open the viewer'), ('marks', "Print the viewer's marks"),
                        ('render', 'Render map images headlessly'), ('graphics', 'Map plans and comparisons'),
                        ('workspace', 'Hand-edit workspaces for .map files'),
+                       ('find', "Search the game's objects, terrain textures, roads, sounds and effects"),
                        ('item', 'Render one object on its own'), ('items', 'A labelled collage of objects')):
         sub.add_parser(name, help=text, add_help=False)
     return p
@@ -435,6 +438,7 @@ def cmd_test(args, extra):
 PASSTHROUGH = {'view': 'mapworkshop.viewer.app', 'marks': 'mapworkshop.viewer.marks',
                'render': 'mapworkshop.render.cli', 'graphics': 'mapworkshop.mapkit.graphics',
                'workspace': 'mapworkshop.mapkit.workspace',
+               'find': 'mapworkshop.render.catalog',
                'item': 'mapworkshop.render.items:main_item', 'items': 'mapworkshop.render.items:main'}
 
 
