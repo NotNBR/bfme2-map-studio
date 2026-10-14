@@ -15,6 +15,7 @@ from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.render import shaders
 from mapworkshop.render.assets import GameAssets
 from mapworkshop.render.camera import OrbitView, TopView, parse_view, _normalize
+from mapworkshop.render.effects import QUAD_CORNERS, TRI_CORNERS, Effects
 from mapworkshop.render.shadows import shadow_kind
 from mapworkshop.render.terrain import TerrainData
 from mapworkshop.render.w3d import ModelCache, chunks, fx_constants
@@ -165,7 +166,7 @@ class MapRenderer:
         self.shadow_settings = self._shadow_settings()
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
-                            walkable=False)
+                            walkable=False, effects=True)
         self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0)
         self._progress = report
         self._effects = {}
@@ -763,6 +764,7 @@ class MapRenderer:
         """
         show_props = self._show_props()
         limits = self.options.get('vegetation_limits', False)
+        self._effect_objects = []
         counts = dict(tree=0, shrub=0)
         dropped = dict(tree=0, shrub=0, prop=0)
         types = dict(tree=set(), shrub=set())
@@ -844,6 +846,11 @@ class MapRenderer:
             sky = 'SKYBOX' in kinds
             key = (resolved['model'], resolved['texture'], caster, decal, buffer, bool(resolved.get('prop')), sky)
             groups.setdefault(key, []).append((o['x'], o['y'], z, angle, scale, sway))
+            if buffer is None and not resolved.get('prop'):
+                # A drawable in the scene runs its emitters and particle
+                # systems; the prop buffer (W3DPropDraw) never adds its
+                # render objects to a scene, so their emitters stay idle.
+                self._effect_objects.append((name, resolved['model'], o['x'], o['y'], z, angle, scale, o['index']))
         self.report['vegetation'] = dict(trees=counts['tree'], shrubs=counts['shrub'],
                                          trees_dropped=dropped['tree'], shrubs_dropped=dropped['shrub'],
                                          props_hidden=dropped['prop'], show_props=show_props, limits=limits,
@@ -900,6 +907,19 @@ class MapRenderer:
         for name in names:
             self._progress(0.64, 'Preparing object textures')
             self._prepare_image(name)
+        self._prepare_effects()
+
+    def _prepare_effects(self):
+        """Emitters and particle systems of the placed objects (render.effects)."""
+        effects = Effects(self.assets, self.options['lod'])
+        for template, model, x, y, z, angle, scale, index in getattr(self, '_effect_objects', []):
+            effects.add(template, self.model_cache.load(model), x, y, z, angle, scale, index)
+        self.effects = effects.finish()
+        # Additive particles draw the colour under zero alpha, so their
+        # textures are kept as they are (no bleed_alpha).
+        self._effect_images = {name: self.assets.image(name) for name in effects.textures()}
+        self.report['effects'] = dict(emitters=effects.report['emitters'], systems=effects.report['systems'],
+                                      skipped=dict(sorted(effects.report['skipped'].items())))
 
     def _objects_steps(self):
         ctx = self.ctx
@@ -983,6 +1003,76 @@ class MapRenderer:
         self._upload_volumes(self._prepared_volume_triangles)
         self.report['missing_models'] = sorted(set(self.report['missing_models']))
         self._apply_sky()
+        self._effects_gpu()
+
+    def _effects_gpu(self):
+        ctx = self.ctx
+        self.effect_program = ctx.program(vertex_shader=shaders.EFFECT_VS, fragment_shader=shaders.EFFECT_FS)
+        self.effect_corners = {}
+        for shape, corners in (('quad', QUAD_CORNERS), ('tri', TRI_CORNERS)):
+            self.effect_corners[shape] = ctx.buffer(corners.tobytes())
+        self.effect_textures = {}
+        for name, image in getattr(self, '_effect_images', {}).items():
+            if image is None:
+                self.report['missing_textures'].append(name)
+                continue
+            texture = ctx.texture((image.shape[1], image.shape[0]), 4, np.ascontiguousarray(image).tobytes())
+            texture.build_mipmaps()
+            texture.filter = (self.moderngl.LINEAR_MIPMAP_LINEAR, self.moderngl.LINEAR)
+            texture.repeat_x = texture.repeat_y = False
+            self.effect_textures[name.lower()] = texture
+        self._object_resources += [self.effect_program, *self.effect_corners.values(), *self.effect_textures.values()]
+        self.__dict__.pop('_effect_images', None)
+
+    def _draw_effects(self, vp, camera, eye, time):
+        """Particles of object effects at `time`: camera-facing quads or
+        triangles (PointGroupClass), ground-aligned quads flat on the ground,
+        drawn without depth writes; alpha-blended groups first, each sorted
+        back to front, then additive ones. Fog fades additive particles to
+        black and multiplicative ones to white."""
+        groups = self.effects.particles(time)
+        if not groups:
+            return
+        mgl, ctx = self.moderngl, self.ctx
+        p = self.effect_program
+        forward = np.asarray(camera['target'], float) - np.asarray(camera['eye'], float)
+        forward /= np.linalg.norm(forward) or 1.0
+        right = np.cross(forward, (0.0, 0.0, 1.0))
+        right = right/np.linalg.norm(right) if np.linalg.norm(right) > 1e-6 else np.array([1.0, 0.0, 0.0])
+        up = np.cross(right, forward)
+        p['view_projection'].write(vp)
+        self._set_fog(p, eye)
+        p['tex'].value = 0
+        ctx.enable(mgl.BLEND)
+        ctx.fbo.depth_mask = False
+        order = sorted(groups, key=lambda g: g[1] == ('one', 'one'))
+        for texture_name, blend, alpha_ref, depth_test, shape, ground in order:
+            texture = self.effect_textures.get(texture_name)
+            if texture is None:
+                continue
+            rows = groups[(texture_name, blend, alpha_ref, depth_test, shape, ground)]
+            if blend != ('one', 'one'):
+                rows = rows[np.argsort(-np.linalg.norm(rows[:, :3] - np.asarray(eye, np.float32), axis=1))]
+            p['right'].value = (1.0, 0.0, 0.0) if ground else tuple(right)
+            p['up'].value = (0.0, 1.0, 0.0) if ground else tuple(up)
+            p['alpha_ref'].value = -1.0 if alpha_ref is None else float(alpha_ref)
+            p['fog_mode'].value = 1 if blend == ('one', 'one') else 2 if blend == ('zero', 'src_color') else 0
+            ctx.blend_func = self._blend_func(blend)
+            if depth_test:
+                ctx.enable(mgl.DEPTH_TEST)
+            else:
+                ctx.disable(mgl.DEPTH_TEST)
+            texture.use(0)
+            instances = ctx.buffer(np.ascontiguousarray(rows, np.float32).tobytes())
+            vao = ctx.vertex_array(p, [(self.effect_corners[shape], '4f', 'in_corner'),
+                                       (instances, '3f f 4f f 3f/i', 'in_center', 'in_size', 'in_color', 'in_angle',
+                                        'in_frame')])
+            vao.render(mgl.TRIANGLES, vertices=6 if shape == 'quad' else 3, instances=len(rows))
+            vao.release()
+            instances.release()
+        ctx.enable(mgl.DEPTH_TEST)
+        ctx.fbo.depth_mask = True
+        ctx.disable(mgl.BLEND)
 
     def walkable_overlay(self):
         """Local walkability as an overlay texture and its world extent.
@@ -1752,6 +1842,9 @@ class MapRenderer:
                 entry['vao'].render(mgl.TRIANGLES)
             ctx.fbo.depth_mask = True
             ctx.disable(mgl.BLEND)
+        if getattr(self, 'effects', None) is not None and self.visible['objects'] and self.visible['effects'] \
+                and hasattr(self, 'effect_program'):
+            self._draw_effects(vp, camera, eye, time)
         if self.particles and self.visible['weather']:
             self._draw_particles(vp, camera, eye, time)
 

@@ -35,19 +35,26 @@ def chunks(data):
 
 
 def bones_of(data):
+    named = named_bones(data)
+    return None if named is None else named[1]
+
+
+def named_bones(data):
+    """(names, model-space matrices) of the hierarchy, or None."""
     parts = dict(chunks(data))
     if HIERARCHY not in parts:
         return None
     items = dict(chunks(parts[HIERARCHY]))
     count = struct.unpack_from('<I', items[0x101], 20)[0]
     pivots = items[0x102]
-    bones = []
+    names, bones = [], []
     for i in range(count):
         p = pivots[i*60:(i+1)*60]
+        names.append(p[:16].split(b'\0', 1)[0].decode('latin-1').lower())
         parent = struct.unpack_from('<i', p, 16)[0]
         local = matrix(struct.unpack_from('<3f', p, 20), struct.unpack_from('<4f', p, 44))
         bones.append(bones[parent] @ local if 0 <= parent < i else local)
-    return bones
+    return names, bones
 
 
 def fx_constants(payload):
@@ -326,8 +333,9 @@ class ModelCache:
                 mesh = parse_mesh(payload)
                 meshes[(mesh['container']+'.'+mesh['name']).lower()] = mesh
                 meshes.setdefault(mesh['name'].lower(), mesh)
-        bones = bones_of(data)
+        named = named_bones(data)
         placement = {}
+        aggregates = []
         for kind, payload in top:
             if kind != HLOD:
                 continue
@@ -339,14 +347,19 @@ class ModelCache:
                 if k == 0x702:
                     lods.append([(struct.unpack_from('<I', q)[0], cstr(q[4:36]))
                                  for kk, q in chunks(p) if kk == 0x704])
-            if bones is None and hierarchy_name:
+                if k == 0x705:
+                    # The aggregate array: further render objects on bones,
+                    # such as particle emitters (render.effects draws them).
+                    aggregates += [(struct.unpack_from('<I', q)[0], cstr(q[4:36]))
+                                   for kk, q in chunks(p) if kk == 0x704]
+            if named is None and hierarchy_name:
                 key = self.assets.model_key(hierarchy_name)
                 if key:
-                    bones = bones_of(self.assets.read(key))
+                    named = named_bones(self.assets.read(key))
             # LOD arrays are stored from lowest to highest detail.
             for bone, name in (lods[-1] if lods else []):
                 placement[name.lower()] = bone
-            # Aggregates and proxies are separate render objects; omit them.
+        bones = None if named is None else named[1]
         parts = []
         shadow = []
         collision = []
@@ -398,4 +411,7 @@ class ModelCache:
         if not parts:
             return None
         allpos = np.concatenate([p['positions'] for p in parts])
-        return dict(parts=parts, bounds=(allpos.min(0), allpos.max(0)), shadow=shadow, collision=collision)
+        bone_matrix = lambda i: bones[i] if bones is not None and i < len(bones) else np.eye(4)
+        return dict(parts=parts, bounds=(allpos.min(0), allpos.max(0)), shadow=shadow, collision=collision,
+                    bones={} if named is None else {n: m for n, m in zip(*named)},
+                    aggregates=[(name, bone_matrix(bone)) for bone, name in aggregates])

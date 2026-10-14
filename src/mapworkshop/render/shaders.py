@@ -783,6 +783,60 @@ void main() {
 }
 """
 
+# Object effects (render.effects): one quad or triangle per particle, its
+# corners in camera space (x right, y up) as PointGroupClass builds them,
+# turned by the particle's angle and scaled by its size. Ground-aligned
+# systems pass world x and y as right and up. Texture x vertex colour
+# (the point group's MODULATE gradient), alpha tested if the shader does.
+EFFECT_VS = """
+#version 430
+uniform mat4 view_projection;
+uniform vec3 right;
+uniform vec3 up;
+in vec4 in_corner;                  // offset x, y; u, v within the frame
+in vec3 in_center;
+in float in_size;
+in vec4 in_color;
+in float in_angle;
+in vec3 in_frame;                   // frame origin u, v and frame size
+out vec2 v_uv;
+out vec4 v_color;
+out vec3 v_world;
+void main() {
+    float c = cos(in_angle), s = sin(in_angle);
+    vec2 o = vec2(in_corner.x * c - in_corner.y * s, in_corner.x * s + in_corner.y * c) * in_size;
+    v_world = in_center + right * o.x + up * o.y;
+    v_uv = in_frame.xy + in_corner.zw * in_frame.z;
+    v_color = in_color;
+    gl_Position = view_projection * vec4(v_world, 1.0);
+}
+"""
+
+EFFECT_FS = """
+#version 430
+uniform sampler2D tex;
+uniform float alpha_ref;            // < 0: no alpha test
+uniform int fog_enabled;
+uniform vec3 fog_color;
+uniform vec2 fog_range;
+uniform vec3 fog_eye;
+uniform int fog_mode;               // 0 fog colour, 1 black (additive), 2 white (multiply)
+in vec2 v_uv;
+in vec4 v_color;
+in vec3 v_world;
+out vec4 frag;
+void main() {
+    vec4 c = texture(tex, v_uv) * v_color;
+    if (alpha_ref >= 0.0 && c.a < alpha_ref) discard;
+    if (fog_enabled != 0) {
+        float f = clamp((length(v_world - fog_eye) - fog_range.x) / max(fog_range.y - fog_range.x, 1.0), 0.0, 1.0);
+        vec3 target = fog_mode == 1 ? vec3(0.0) : fog_mode == 2 ? vec3(1.0) : fog_color;
+        c.rgb = mix(c.rgb, target, f);
+    }
+    frag = c;
+}
+"""
+
 # Stencil shadow volumes (Medium: UseShadowVolumes). The silhouette quads are
 # built on the CPU (render.shadows.silhouette_quads), as the game builds them
 # per object: each polygon's facing is decided once, so the quads of

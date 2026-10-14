@@ -126,6 +126,7 @@ def main(argv=None):
                               objects_drawn=renderer.report['objects_drawn'],
                               texture_size_errors=renderer.report.get('texture_size_errors', [])),
                   vegetation=renderer.report.get('vegetation'), fx_materials=renderer.report.get('fx_materials'),
+                  effects=renderer.report.get('effects'),
                   shadows=dict(volumes=renderer.report.get('shadow_volumes'), tree_decals=renderer.report.get('shadow_decals', 0)),
                   water=renderer.report.get('water'), weather=renderer.report.get('weather') if renderer.visible['weather'] else None,
                   outputs=outputs, seconds=round(time.time()-started, 2))

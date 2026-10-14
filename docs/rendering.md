@@ -330,6 +330,8 @@ Animation (the viewer's clock, or `render --time SECONDS` for stills; time 0 by 
 - Cloud shadows: the cloud texture moves by weather.ini's CloudOffsetPerSecond (texture units per second).
 - Rain and snow: particles fall by time x SnowSpeed and wrap in the box (W3DSnowManager::update 0x000949D9), wobble
   with the height, and drift by time x SnowXYSpeed less one fall's worth per wrap. Lightning flashes are not drawn.
+- Object effects: torch flames, smoke, embers and glows (`render.effects`). See
+  [Particle effects](#particle-effects).
 
 Open questions, approximated for now:
 
@@ -393,6 +395,83 @@ report lists how many were dropped under `vegetation`.
 
 Not reproduced: roads, river areas, cliff UV records and shroud. Textures smaller than their declared terrain
 class are drawn but reported, because the game cannot load them.
+
+## Particle effects
+
+Objects get particle effects in two ways, and the renderer draws both:
+
+- **W3D emitters.** The model's HLOD aggregate array (chunk `0x705`) names
+  emitter files on bones. `GenericTorch`'s `GBTORCH`, for example, has
+  `E_Fire_SM`, `E_Smoke_SM` and `E_FireSparks_SM`, which hold its flame.
+- **INI particle systems.** `ParticleSysBone = <bone> <system>` lines in the
+  draw module's `DefaultModelConditionState` and `IdleAnimationState` attach
+  an `FXParticleSystem` from `fxparticlesystem.ini`. `FireCampfire`'s
+  embers and `FireBonfire`'s glow and smoke work this way.
+
+Only drawables in the scene run effects. `W3DPropDraw` templates go to the
+prop buffer, which renders their models without adding them to a scene, so
+their emitters never update: `W3DPropDraw::reactToTransformChange` feeds
+`W3DPropBuffer`, and `ParticleEmitterClass::Render` is empty. Trees and shrubs
+have none.
+
+Effects are shown as on a map that has run for a while:
+
+- Systems that stop stay off: those with a `SystemLifetime`, `IsOneShot`, or
+  emitters with `MaxEmissions`.
+- Systems below the detail level's `MinParticlePriority` (`gamelod.ini`;
+  `HIGH_OR_ABOVE` is off at Medium) are not drawn.
+
+Each particle's state is a closed-form function of its age, so any instant
+renders without simulating up to it. Randomness is a hash of the object, the
+emission and the particle, so stills are reproducible and the viewer animates.
+
+- **Emitters** (WW3D2 `part_emt.cpp`, `part_buf.cpp`, `pointgr.cpp`):
+  - Emission every `int(1000 / rate)` ms, in bursts.
+  - Position: a random point in the creation volume and a velocity (random,
+    plus outward, plus base), both rotated by the bone, under world
+    acceleration.
+  - Colour, opacity, size, rotation and texture frame follow the keyframes,
+    plus per-particle randoms.
+  - The point group forces the MODULATE gradient.
+  - Triangle particles span a frame 3.464 x size wide; quads are 1 x size.
+  - The object's scale scales sizes, offsets and speeds.
+- **INI systems** (Zero Hour `ParticleSys.cpp`):
+  - A burst every BurstDelay + 1 frames.
+  - Each frame, as `Particle::update`: velocity plus gravity, times damping;
+    position plus velocity plus drift; damped size and angle rates.
+  - Colour keys, with BFME2's colour scale drawn per non-zero channel of keys
+    1 to 6 (the colour module constructor, 0x0055BCF1).
+  - Alpha keys for non-additive shaders.
+  - Point, line, sphere, box and cylinder volumes, with ortho, outward,
+    spherical, hemispherical and cylindrical velocities.
+  - Placed at the bone's position times the object's scale, turned by the
+    bone's Z rotation only (W3DModelDraw).
+  - Drawn as `DefaultDraw` camera-facing quads (ground-aligned ones flat),
+    with the sprite shader of their `Shader`.
+
+Particles are drawn after water, without depth writes: alpha-blended groups
+first, sorted back to front, then additive ones. Fog fades additive particles
+to black. Particle textures are uploaded as they are: additive textures keep
+colour under zero alpha, which the alpha bleed applied to object textures
+would overwrite.
+
+The render report lists `effects`: emitters and systems attached, and those
+skipped with the reason.
+
+Approximations:
+
+- Burst delays use the mean of `BurstDelay`.
+- `Wind`, `StartSizeRate`, slave and per-particle attached systems, `Event`
+  modules and the cylinder's `RadiusRate` are left out.
+- Other draw modules are skipped: `StreakDraw`, `GpuDraw`, `RenderObjectDraw`,
+  `LightningDraw` and `ButterflyDraw`.
+- Whether BFME2 also adds the colour scale every frame, as Generals does, is
+  not recovered.
+- Effects of other model-condition states (damaged, night, snow) are not
+  drawn.
+
+The sources behind this are listed in bfme2-map-workshop's
+`docs/research/particle-effects.md`.
 
 ## Compiled effects
 
