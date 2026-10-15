@@ -31,6 +31,7 @@ from mapworkshop.mapkit.lines import nearest, polyline_distance
 from mapworkshop.mapkit.earth import fbm, thermal_erosion
 from mapworkshop.mapkit.ambient import ambient, along
 from mapworkshop.mapkit.cliffs import steep_cells
+from mapworkshop.mapkit.rivers import add_river, bank_width
 from mapworkshop.mapkit.sites import neutral_site, creep_lair, gollum_spawns
 from mapworkshop.mapkit.variety import spot_random
 from mapworkshop.mapkit.weather import add_sky, ini_block, apply_weather
@@ -71,21 +72,37 @@ GATES = [(scaled([(2900, 3800), (3250, 3880), (3620, 3950)]), 240*S),
          (scaled([(2900, 1990), (3250, 1910), (3620, 1840)]), 240*S)]
 # The field: half-size of a rounded box about the centre.
 FIELD = (700*S, 2350*S)
-# The Sirannon: an S-bend through the centre, crossing the centre line at
-# the middle and FORD_SPACING north and south of it, where its fords are.
+# The Sirannon: a river in an S-bend through the centre, crossing the centre
+# line at the middle and FORD_SPACING north and south of it. Too deep to
+# wade, it is crossed by a great stone bridge in the middle, among the ruins
+# of Ost-in-Edhil, and by a shallow gravel ford at the north and south
+# crossings.
 STREAM_BEND, FORD_SPACING = 260*S, 1500*S
+RIVER_HALF = 105              # half its width
+BRIDGE = 'GondorIthilienBridge2'   # deck along its local y, walkable; 545 long, ramps 275 from its middle
+BRIDGE_BANK = WATER+12        # the banks under each bridge's ramps; the origin goes 1 below
 CITY_GRID = .32                # Ost-in-Edhil's street grid, radians from north
+# The rocky knolls between each court's gates (the west team's; the east
+# team's are turned) are buttes: steep rocky sides round a gently domed top,
+# crags along its field-side rim. A narrow goat path climbs the court-facing
+# face to the top, room for archers and siege engines over the gates; every
+# other side stays sheer, so a knoll is no way into the court. Centre, and
+# where round the face from the way to the court the path starts (radians;
+# its sign picks the side it climbs from).
+KNOLLS = [((4220, 3146), -1.25), ((4232, 4357), 1.25)]
+KNOLL_RISE = 125              # the top above the ground round it
+TRAIL_WIDTH = 24              # the path's half-width
 
 # Terrain textures. Higher entries blend over lower ones at their edges.
 PALETTE = ['GrassEregion01', 'GrassEregion08', 'GrassEregion07', 'GrassEregion04', 'GrassEregion10',
-           'GrassEregion03', 'GrassEregion09', 'GrassRivendell01', 'DirtRivendell03', 'LothlorienDirt07',
+           'GrassEregion03', 'GrassEregion09', 'GrassRivendell01', 'DirtRivendell03', 'SandType3wet',
            'RockEregion02', 'RockEregion01', 'CliffCaradhras05', 'RockCaradhras05',
            'CliffEttenmoors01', 'SnowCaradhras04', 'SnowCaradhras06', 'DirtEregion04', 'DirtEregion02',
-           'DirtEregion01', 'DirtEregion03', 'CliffErebor05']
+           'DirtEregion01', 'StoneErebor08', 'StoneShire03', 'CliffErebor05']
 # The cliff texture comes last: steep faces are cliff-mapped and keep no
 # blend, so it blends over its neighbours instead.
 (OCHRE, MIXED, DRY, RED, RUST, GOLD, LEAVES, GREEN, MUD, SILT, ROCKY_GRASS, ROCK, CLIFF_HIGH,
- SCREE, CLIFF_SNOW, SNOW, SNOW_DEEP, TRODDEN, LANE_EDGE, LANE, PAVING, CLIFF) = range(len(PALETTE))
+ SCREE, CLIFF_SNOW, SNOW, SNOW_DEEP, TRODDEN, LANE_EDGE, LANE, PAVING, RUBBLE, CLIFF) = range(len(PALETTE))
 
 
 def smooth(a, b, v):
@@ -154,17 +171,58 @@ def start_positions():
     return west+turned(west)
 
 
+# The river's course north of the centre, as (east of the centre, north of
+# it): bends of uneven length and depth, as a river wanders. South of the
+# centre it runs the same way turned, so both teams meet the same river.
+COURSE = [(0, 0), (25, 380), (220, 760), (210, 1230), (-110, 1640), (-250, 2060), (-130, 2520),
+          (130, 2960), (170, 3420), (70, 3900), (40, 4500)]
+
+
 def stream_line():
     """The Sirannon from beyond the north edge to beyond the south edge,
-    point-symmetric: its bend is an odd function of the distance from the centre."""
-    ys = np.linspace(SPAN_Y+600, -600, 140)
-    v = ys-CY
-    xs = CX+STREAM_BEND*np.sin(2*math.pi*v/(2*FORD_SPACING))+40*np.sin(2*math.pi*v/700)
-    return list(zip(xs, ys))
+    point-symmetric about the centre, which it crosses."""
+    north = [(CX+dx, CY+dy) for dx, dy in COURSE]
+    return chaikin(north[::-1]+turned(north)[1:], 4)
 
 
 def fords():
-    return [(CX, CY+FORD_SPACING), (CX, CY), (CX, CY-FORD_SPACING)]
+    """Where the river is crossed, north to south: the north ford, the
+    bridge (the centre) and the south ford, each where the river crosses
+    FORD_SPACING north or south of the centre."""
+    line = stream_line()
+    def crossing(y0):
+        for (ax, ay), (bx, by) in zip(line, line[1:]):
+            if (ay-y0)*(by-y0) <= 0 and ay != by:
+                return ax+(bx-ax)*(y0-ay)/(by-ay), y0
+        raise ValueError(f'The river does not cross y = {y0}')
+    return [crossing(CY+FORD_SPACING), (CX, CY), crossing(CY-FORD_SPACING)]
+
+
+def across(px, py):
+    """The unit vector square to the river at the point nearest (px, py),
+    pointing east (towards the east team)."""
+    line = stream_line()
+    k = min(range(len(line)-1), key=lambda i: math.dist(line[i], (px, py)))
+    (ax, ay), (cx, cy) = line[max(k-2, 0)], line[min(k+3, len(line)-1)]
+    n = math.dist((ax, ay), (cx, cy))
+    ux, uy = (cy-ay)/n, -(cx-ax)/n
+    return (ux, uy) if ux > 0 else (-ux, -uy)
+
+
+def bridges():
+    """The bridge's middle and the direction of its deck (square to the river)."""
+    bx, by = fords()[1]
+    return [((bx, by), across(bx, by))]
+
+
+def approach(crossing, side, start):
+    """A track's last stretch from `start` to a crossing: it swings round to
+    meet the river square on, running straight in for the last 450 on the
+    west (side -1) or east (side 1) bank, onto the bridge deck or into the ford."""
+    cx, cy = crossing
+    ux, uy = across(cx, cy)
+    near, far = (cx+side*ux*170, cy+side*uy*170), (cx+side*ux*620, cy+side*uy*620)
+    return [far, (cx+side*ux*400, cy+side*uy*400), near, (cx, cy)]
 
 
 def bowl(x, y, bx, by, line, k):
@@ -235,13 +293,17 @@ def terrain():
     weights = [np.exp(-(d-lowest)/60) for d, _ in parts]
     floor = sum(w*h for w, (_, h) in zip(weights, parts))/sum(weights)
 
-    # The Sirannon: a narrow stream in a shallow valley, too deep to wade
-    # but at its three fords. It comes down from the mountains through a
-    # ravine of its own at each end.
+    # The Sirannon: a river in a broad valley, too deep to wade but at its
+    # two fords. It comes down from the mountains through a ravine of its
+    # own at each end.
     line = stream_line()
-    stream_d, _ = polyline_distance(line, x, y)
-    stream_sd = stream_d-(34+8*fbm(x, y, scale=500, seed=SEED+6, octaves=2))
-    ravine = smooth(60, 700+200*fbm(x, y, scale=600, seed=SEED+12, octaves=2), stream_d)
+    # Its width swells and narrows along its course, the same either side of
+    # the centre; the banks are ragged in small coves and spits.
+    stream_d, stream_along = polyline_distance(line, x, y)
+    middle = np.abs(stream_along-length(line)/2)
+    half = RIVER_HALF+28*fbm(middle, np.zeros_like(middle), scale=900, seed=SEED+6, octaves=2)
+    stream_sd = stream_d-half-11*fbm(x, y, scale=150, seed=SEED+8, octaves=2)-4*fbm(x, y, scale=50, seed=SEED+11, octaves=2)
+    ravine = smooth(160, 850+200*fbm(x, y, scale=600, seed=SEED+12, octaves=2), stream_d)
 
     # Mountains, none alike: a cliff wall of uneven height at the edge of
     # the open ground, buttresses and gullies cut into it, then high ridges
@@ -259,36 +321,79 @@ def terrain():
     ledges = np.round(fbm(x+800, y+800, scale=500, seed=SEED+17, octaves=2)*4)/4
     faces = (55*ribs+30*ledges+25*crags)*smooth(20, 200, sd)
     # The knolls between a court's gates stand in open ground on most
-    # sides: they are no mountains but broken rocky hills, lower, with a
-    # crest of crags and spurs running out from it.
+    # sides: buttes, no mountains. Steep broken sides rise to a gently
+    # domed top; crags crown its field-side rim.
     knoll = smooth(.55, .72, box_blur((sd < 0).astype(float), 60))
-    tors = 150*smooth(.5, .85, crags+.25*ribs)+45*fbm(x+3300, y-2700, scale=180, seed=SEED+18, octaves=3)
-    skirt = 70*smooth(0, 160, sd)
-    knolls = skirt+smooth(60, 220, sd)*tors
-    mountains = ((wall+faces)*(1-knoll)+knolls*knoll+peaks)*(.25+.75*ravine)
+    # Their footprints keep the gates' shape; above the ground their sides
+    # bulge and recede, so no butte follows the box the gates leave.
+    sd = sd+knoll*smooth(0, 60, sd)*60*fbm(x+4100, y-3900, scale=170, seed=SEED+19, octaves=3)
+    fieldward = np.zeros(x.shape); near_knoll = np.zeros(x.shape, bool)
+    for (kx, ky), _ in KNOLLS:
+        for ox, oy, side in ((kx, ky, 1), (SPAN_X-kx, SPAN_Y-ky, -1)):
+            near = 1-smooth(350, 550, np.hypot(x-ox, y-oy))
+            fieldward = np.maximum(fieldward, near*smooth(-60, 160, side*(x-ox)))
+            near_knoll |= np.hypot(x-ox, y-oy) < 500
+    rim = 60*smooth(.45, .8, crags+.3*ribs)*smooth(110, 150, sd)*(1-smooth(200, 260, sd))*fieldward**2
+    sides = 28*crags*smooth(10, 110, sd)*(1-smooth(100, 140, sd))
+    knolls = KNOLL_RISE*smooth(5, 150, sd)+35*smooth(140, 330, sd)+sides+rim
+    mountains = ((wall+faces)*(1-knoll)+knolls*knoll+peaks*(1-knoll))*(.25+.75*ravine)
 
     # Gentle rolls on the open ground, stronger in the field than in the
     # dales, with knolls and hollows of their own on each half.
     rolls = symmetric(fbm(x+1200, y-600, scale=900, seed=SEED+5, octaves=3))
     rolls = (16*rolls+7*fbm(x-300, y+1500, scale=380, seed=SEED+15, octaves=3))*(1-smooth(-400, 0, sd))
     land = floor+rolls+foothills+mountains
-    land -= 22*(1-smooth(0, 520, stream_sd))*(1-smooth(-50, 300, sd))
+    land -= 8*(1-smooth(0, 650, stream_sd))*(1-smooth(-50, 300, sd))      # the river's broad, shallow valley
     # Scree and talus: the mountains settle under their own weight, the open ground keeps its shape.
     settled = thermal_erosion(land, iterations=24, spacing=10, talus=.95)
     land = land+(settled-land)*smooth(-30, 120, sd)*(1-.8*knoll)
-    bank = np.clip(stream_sd/80, 0, 1)
-    z = np.where(stream_sd > 0, WATER-1+(land-WATER+1)*bank**1.4, WATER-3-10*smooth(0, 20, -stream_sd))
-    ford_d = np.min([np.hypot(x-fx, y-fy) for fx, fy in fords()], axis=0)
-    shelf = 1-smooth(110, 190, ford_d)
-    z = np.where(stream_sd <= 0, z*(1-shelf)+(WATER-FORD_DEPTH)*shelf, z)
-    ramp = 1-smooth(150, 360, ford_d)
-    z = np.where(stream_sd > 0, z*(1-ramp)+np.minimum(z, WATER-FORD_DEPTH+.09*np.maximum(stream_sd, 0))*ramp, z)
+    # The goat paths: each climbs evenly from the ground at its foot to the
+    # top, cut into the face on its uphill side and built out a little on
+    # the other. The paths and the knolls' tops, inside their rims, are
+    # walkable; the knolls' sides are not.
+    trails = knoll_trails(sd)
+    climb = near_knoll & (knoll > .5) & (sd > 145) & (rim < 6)
+    for trail in trails:
+        d, along = polyline_distance(trail, x, y)
+        (ax, ay), (bx, by) = trail[0], trail[-1]
+        foot, top = land[round(ay/10)+BORDER, round(ax/10)+BORDER], land[round(by/10)+BORDER, round(bx/10)+BORDER]
+        grade = foot+(top-foot)*np.clip(along/length(trail), 0, 1)
+        cut = 1-smooth(TRAIL_WIDTH, TRAIL_WIDTH+30, d)
+        land = land*(1-cut)+grade*cut
+        climb |= d < TRAIL_WIDTH+6
+    # Banks: a short drop to the water, then a bed shelving to 16 deep.
+    # Banks: a short, firm bank up from the water to the meadow, steeper in
+    # places, gentler in others; under water the bed drops away quickly.
+    # A little variety along it: the bank's run and steepness, how fast the
+    # bed drops and how deep it goes all wander a little.
+    vary = fbm(x-600, y, scale=300, seed=SEED+7, octaves=3)
+    bank = np.clip(stream_sd/(30+18*vary+6*fbm(x, y-900, scale=90, seed=SEED+13, octaves=2)), 0, 1)
+    steep = .6+.15*fbm(x+1300, y, scale=350, seed=SEED+14, octaves=2)
+    deep = 12+3*fbm(x, y+700, scale=260, seed=SEED+15, octaves=3)
+    drop = 40+14*vary
+    z = np.where(stream_sd > 0, WATER+.5+(land-WATER-.5)*bank**steep, WATER-4-.8*vary-deep*smooth(0, drop, -stream_sd))
+    # The bridges' banks: level under the ramps, so each deck meets them.
+    for (bx, by), (ax, ay) in bridges():
+        along = np.abs((x-bx)*ax+(y-by)*ay); across = np.abs(-(x-bx)*ay+(y-by)*ax)
+        pad = (1-smooth(110, 190, across))*smooth(150, 185, along)*(1-smooth(330, 470, along))
+        z = z*(1-pad)+BRIDGE_BANK*pad
+    # The fords: a gravel riffle across the river where it runs shallow, and
+    # the banks either side worn down into gentle ramps to it.
+    fx, fy = fords()[0]
+    ford_middle = abs(float(polyline_distance(line, np.array([fx]), np.array([fy]))[1][0])-length(line)/2)
+    ford_d = np.abs(middle-ford_middle)
+    shelf = 1-smooth(70, 150, ford_d+20*fbm(x, y, scale=120, seed=SEED+9, octaves=2))
+    riffle = WATER-FORD_DEPTH+.6*fbm(x, y, scale=60, seed=SEED+10, octaves=2)
+    z = np.where(stream_sd <= 0, z*(1-shelf)+riffle*shelf, z)
+    ramp = 1-smooth(90, 190, ford_d)
+    z = np.where(stream_sd > 0, z*(1-ramp)+np.minimum(z, WATER+.8+.1*np.maximum(stream_sd, 0))*ramp, z)
 
     # Construction areas: level, at one height, easing into the bowl.
     for px, py in start_positions():
         blend = (1-smooth(BASE_FLAT, BASE_BLEND, np.hypot(x-px, y-py)))**.8
         z = z*(1-blend)+BASE_Z*blend
-    return dict(x=x, y=y, z=z, sd=sd, knoll=knoll, stream=stream_sd, ford_d=ford_d, shelf=shelf, line=line)
+    return dict(x=x, y=y, z=z, sd=sd, knoll=knoll, climb=climb, trails=trails, stream=stream_sd, ford_d=ford_d, shelf=shelf,
+                line=line, stream_d=stream_d)
 
 
 def wander(points, seed, amount=70, step=200):
@@ -308,6 +413,54 @@ def wander(points, seed, amount=70, step=200):
     return out
 
 
+def knoll_trails(sd):
+    """Each knoll's goat path, both teams: up the knoll's court-facing face
+    from the court floor to its top, at a steady angle across the face. Each
+    point lies where the face reaches a given depth into the rock (`sd`),
+    going deeper and round the face together."""
+    cx, cy = COURT[:2]
+    def depth(px, py):
+        return sd[min(max(round(py/10)+BORDER, 0), sd.shape[0]-1), min(max(round(px/10)+BORDER, 0), sd.shape[1]-1)]
+    out = []
+    for (kx, ky), swing in KNOLLS:
+        for (ox, oy), (tx, ty) in (((kx, ky), (cx, cy)), (turned([(kx, ky)])[0], turned([(cx, cy)])[0])):
+            court = math.atan2(ty-oy, tx-ox)
+            line = []
+            for k in range(13):
+                f = k/12
+                a = court+swing*(1-f)-.25*swing*f
+                target = -40+215*f
+                r = 0
+                while r < 900 and depth(ox+r*math.cos(a), oy+r*math.sin(a)) > target:
+                    r += 5
+                line.append((ox+r*math.cos(a), oy+r*math.sin(a)))
+            out.append(chaikin(line, 3))
+    return out
+
+
+def bend(points, radius=180, step=20, keep=0):
+    """The line resampled every `step` and smoothed over about `radius`, so
+    its corners become long curves as a trodden track takes them. Both ends
+    stay; the last `keep` units also stay straight (a crossing's approach)."""
+    pts = np.array(points, float)
+    seg = np.hypot(*np.diff(pts, axis=0).T)
+    s = np.concatenate([[0], np.cumsum(seg)])
+    n = max(int(s[-1]//step), 2)
+    u = np.linspace(0, s[-1], n+1)
+    line = np.column_stack([np.interp(u, s, pts[:, 0]), np.interp(u, s, pts[:, 1])])
+    sigma = radius/step
+    k = np.arange(-int(3*sigma), int(3*sigma)+1)
+    w = np.exp(-.5*(k/sigma)**2); w /= w.sum()
+    pad = np.concatenate([np.repeat(line[:1], len(k)//2, 0), line, np.repeat(line[-1:], len(k)//2, 0)])
+    smooth_line = np.column_stack([np.convolve(pad[:, i], w, 'valid') for i in (0, 1)])
+    # Fade the smoothing out towards both ends, so the ends stay where they are.
+    f = np.minimum(u, s[-1]-u)
+    hold = np.clip(np.minimum(f/radius, 1), 0, 1)[:, None]
+    if keep:
+        hold *= np.clip((s[-1]-u-keep)/radius, 0, 1)[:, None]
+    return [tuple(p) for p in line*(1-hold)+smooth_line*hold]
+
+
 def lanes():
     """Tracks: down each dale to its own gate, a track along each court
     joining the three, and from each gate to its ford. Each half's tracks
@@ -318,13 +471,17 @@ def lanes():
         out.append(dale[::-1]+[((dale[0][0]+gate[0][0])/2, (dale[0][1]+gate[0][1])/2)]+gate)
     out.append([(cx-60*S, DALES[0][0][1]-40*S), (cx+110*S, cy+520*S), (cx+150*S, cy+90*S), (cx-30*S, cy-480*S),
                 (cx-60*S, DALES[2][0][1]+40*S)])
-    for (gate, _), ford in zip(GATES, fords()):
-        end = gate[-1]
-        out.append([end, ((end[0]+ford[0])/2, (end[1]+ford[1])/2+(ford[1]-CY)*.08), ford])
     lines = []
     for k, p in enumerate(out):
-        lines.append(chaikin(wander(p, SEED+400+k), 3))
-        lines.append(chaikin(wander(turned(p), SEED+500+k), 3))
+        lines.append(bend(wander(p, SEED+400+k, 170, 380)))
+        lines.append(bend(wander(turned(p), SEED+500+k, 170, 380)))
+    # From each gate out to its crossing: wandering over the field, then
+    # straight in square to the river, unwandered, so it meets the crossing.
+    for k, ((gate, _), crossing) in enumerate(zip(GATES, fords())):
+        for team, (end, cross, side) in enumerate(((gate[-1], crossing, -1), (turned(gate)[-1], turned([crossing])[0], 1))):
+            straight = approach(cross, side, end)
+            lead = wander([end, ((end[0]+straight[0][0])/2, (end[1]+straight[0][1])/2), straight[0]], SEED+600+2*k+team, 150, 380)
+            lines.append(bend(lead[:-1]+straight, keep=400))
     return lines
 
 
@@ -354,9 +511,9 @@ def materials(t):
     stream = t['stream']
     labels[(stream < 55+45*mid+20*fine) & (fine > -.2)] = GREEN
     labels[(stream > 30) & (stream < 140+60*mid) & (fine > .25) & (mid > 0)] = GREEN
-    labels[(stream < 18+8*edge) & (stream > -3)] = MUD
-    labels[z < WATER-1.5] = SILT
-    labels[(t['shelf'] > .3) & (z < WATER+1.5)] = TRODDEN
+    labels[(stream < 9+5*edge) & (stream > -3) & (z > WATER-.3)] = MUD      # a thin wet rim
+    labels[z < WATER-.3] = SILT
+    labels[(t['shelf'] > .3+.25*fine) & (z < WATER+.4+.6*edge)] = TRODDEN      # the fords' gravel, under water
     # Foothills and mountains: rocky grass at the cliff foot, grey cliffs,
     # rust-red rock higher up, scree, then snow-streaked crags and snowfields.
     labels[(slope > .22+.1*mid+.06*fine) & (slope < .5)] = ROCKY_GRASS
@@ -382,11 +539,41 @@ def materials(t):
     fade = np.ones(z.shape, bool)
     for px, py in start_positions():
         fade &= np.hypot(x-px, y-py) > BASE_FLAT-60+80*fine
-    labels[(t['lanes'] < 34+8*fine) & dry & (fine > -.35) & fade] = LANE_EDGE
-    labels[(t['lanes'] < 17+5*fine) & dry & fade] = LANE
+    # Old tracks across wild country: a worn, grassy band of uneven width
+    # with bare earth only in patches where the ground is trodden most, and
+    # gaps where the grass has taken them back.
+    wear = fbm(x-2600, y+1400, scale=220, seed=SEED+24, octaves=3)
+    width = 16+8*wear+5*fine
+    # Busier near the crossings and the courts' gates, where every army passes.
+    busy = np.zeros(z.shape)
+    for px, py in fords()+turned(fords()):
+        busy = np.maximum(busy, 1-smooth(250, 700, np.hypot(x-px, y-py)))
+    worn = wear+.5*busy
+    edge_width = width+6*fbm(x+900, y-500, scale=40, seed=SEED+25, octaves=2)
+    labels[(t['lanes'] < edge_width) & dry & (fine > -.5) & fade] = LANE_EDGE
+    labels[(t['lanes'] < .35*edge_width) & dry & (worn > -.1) & (fine > -.1) & fade] = LANE
+    # The goat paths: a thin line of trodden earth, broken where grass grows over it.
+    labels[(t['trail'] < 10+4*fine) & dry & (fine > -.3)] = LANE_EDGE
+    labels[(t['trail'] < 4+3*fine) & dry & (fine > -.1)] = LANE
     # The ruins of Ost-in-Edhil: old paving round the middle ford.
-    ruins = np.hypot(x-CX-40, (y-CY+30)*.8) < 300+180*mid+90*fine
-    labels[ruins & dry & (fine > .15) & (slope < .3)] = PAVING
+    # Under the constructs: old paving, broken up and grown over at its edge,
+    # with rubble round it; trodden earth round the inns and outposts.
+    chip = fbm(x, y, scale=60, seed=SEED+26, octaves=2)
+    for fx, fy, r, kind in t.get('footings', []):
+        # Only the window round each footing.
+        r0, r1 = max(round((fy-r-90)/10)+BORDER, 0), round((fy+r+90)/10)+BORDER+1
+        c0, c1 = max(round((fx-r-90)/10)+BORDER, 0), round((fx+r+90)/10)+BORDER+1
+        w = (slice(r0, r1), slice(c0, c1))
+        d = np.hypot(x[w]-fx, y[w]-fy)+r*.35*chip[w]
+        sub, ok, f, mm = labels[w], dry[w], fine[w], mid[w]
+        if kind == 'stone':
+            # Broken slabs among grass and stones: never one solid floor.
+            c = chip[w]
+            sub[ok & (d < r+55) & (f+.4*mm > -.05)] = RUBBLE
+            sub[ok & (d < r) & (f+.5*c > .05)] = PAVING
+        else:
+            sub[ok & (d < r+40) & (f > -.2)] = LANE_EDGE
+            sub[ok & (d < .7*r) & (f > -.3)] = TRODDEN
     # Fallen leaves under the woods, red and gold.
     labels[(t['woods'] > .6+.2*fine) & dry & (slope < .45) & (fine > -.1)] = LEAVES
     labels[(t['woods'] > .75+.2*fine) & dry & (slope < .45) & (mid > .15)] = RUST
@@ -402,6 +589,7 @@ class Scenery:
         self.m, self.t, self.assets = m, t, assets
         self.keep_clear = keep_clear              # (x, y, radius): sites and their flags
         self.buckets = {}; self.counts = Counter(); self.kinds = {}; self.vegetation = Counter()
+        self.footings = []                         # (x, y, radius, kind): ground worn under constructs
         gy, gx = np.gradient(t['z'], 10); self.slope = np.hypot(gx, gy)
 
     def kind(self, template):
@@ -417,14 +605,14 @@ class Scenery:
         return float(self.t[field][round(y/10)+BORDER, round(x/10)+BORDER])
 
     def put(self, template, x, y, angle=None, layer='', gap=20, lane=40, base=700, slope=.5, wet=False,
-            scale=None, z=0, mountain=False):
+            scale=None, z=0, mountain=False, footing=None):
         """Place one object if the spot is clear: dry (unless `wet`), no
         steeper than `slope`, off the tracks, away from the bases and sites,
         on open ground (unless `mountain`) and `gap` from everything placed."""
         if not (60 < x < SPAN_X-60 and 60 < y < SPAN_Y-60):
             return False
         iy, ix = round(y/10)+BORDER, round(x/10)+BORDER
-        if self.slope[iy, ix] > slope or self.t['lanes'][iy, ix] < lane:
+        if self.slope[iy, ix] > slope or self.t['ways'][iy, ix] < lane:
             return False
         if not wet and (self.t['z'][iy, ix] < WATER+1.5 or self.t['stream'][iy, ix] < 8):
             return False
@@ -455,6 +643,8 @@ class Scenery:
         if angle is None:
             angle = local.random()*math.tau
         add_object(self.m, template, x, y, angle, layer=layer, extra=extra, z=z)
+        if footing:
+            self.footings.append((x, y)+tuple(footing))
         self.buckets.setdefault((cx, cy), []).append((x, y, min(gap, 200)))
         self.counts[layer] += 1
         return True
@@ -470,7 +660,7 @@ def woods_field(t):
     banks = 1-smooth(60, 380, t['stream'])
     openness = smooth(500*S, 900*S, np.abs(x-CX))*.25+.75
     w = smooth(.05, .45, groves+.45*foot+.25*banks-.1)*openness
-    w *= smooth(40, 120, t['lanes'])
+    w *= smooth(40, 120, t['ways'])
     # Round each base the trees keep to the bowl's rim, clear of the building ground.
     for px, py in start_positions():
         r = np.hypot(x-px, y-py)
@@ -486,33 +676,61 @@ BOULDERS = ['DarkRockGrey05', 'DarkRockGrey06', 'DarkRockGrey07', 'DarkRockGrey1
 STONES = ['DarkRockGrey02', 'DarkRockGrey17', 'RockGrey02', 'RockGrey17', 'DarkRockGrey19']
 
 
+def fallen(s, rng, x, y, layer):
+    """Masonry fallen from a ruin: a few blocks and stones round it."""
+    for _ in range(rng.randint(4, 8)):
+        a = rng.random()*math.tau; r = rng.uniform(55, 110)
+        s.put(rng.choice(STONES+['HarlindonRuin07']), x+math.cos(a)*r, y+math.sin(a)*r, layer=layer, gap=18, lane=30,
+              base=BASE_FLAT+20, slope=.6, z=-1)
+
+
 def ruins(s, t, rng):
     """Ost-in-Edhil round the middle ford: a fountain court and a tower on
     the west bank, a broken hall and a second tower on the east, walls of
     arcades breaking off between them, and rubble. Then a broken gatehouse
     at most of the courts' gates, and a lone ruin up some of the dales."""
-    # The city's streets ran on one grid, turned CITY_GRID from north: its
-    # walls and towers still keep to it, except what has fallen. Positions
-    # are (across the grid, along it); walls run along u (ALONG_U) or v.
-    g = CITY_GRID; along_u, along_v = g-math.pi/2, g
-    centre = [('HarlindonRuin13', -330, 120, along_v), ('HarlindonRuin05', -560, 380, along_v),
-              ('HarlindonRuin10', -420, 380, along_u), ('HarlindonRuin12', -600, 200, along_v),
-              ('HarlindonRuin11', -600, -120, along_v+math.pi), ('HarlindonRuin07', -420, -300, along_v+math.pi),
-              ('HarlindonRuin09', -250, -380, along_u), ('HarlindonRuin01', 380, -180, along_v+math.pi/2),
-              ('HarlindonRuin14', 560, 260, along_v+math.pi), ('HarlindonRuin16', 620, -420, along_v+.6),
-              ('HarlindonRuin11', 330, -480, along_u), ('HarlindonRuin12', 650, 0, along_v),
-              ('HarlindonRuin08', 260, 420, along_v), ('HarlindonRuin10', 450, 520, along_u+math.pi),
-              ('HarlindonRuin03', -120, 680, along_v), ('HarlindonRuin17', 150, -700, along_v+math.pi/2)]
-    for template, u, v, angle in centre:
-        dx, dy = u*math.cos(g)-v*math.sin(g), u*math.sin(g)+v*math.cos(g)
-        for _try in range(8):
-            if s.put(template, CX+1.15*dx+rng.uniform(-20, 20), CY+1.15*dy+rng.uniform(-20, 20),
-                     angle=angle+rng.uniform(-.05, .05), layer='OstInEdhil', gap=60, lane=30, base=0, slope=.35, z=-2):
-                break
-    for _ in range(40):
-        a = rng.random()*math.tau; r = rng.uniform(150, 750)
-        s.put(rng.choice(STONES+['HarlindonRuin07']), CX+math.cos(a)*r, CY+math.sin(a)*r, layer='OstInEdhil',
-              gap=25, lane=20, base=0, slope=.4, z=-1)
+    # Ost-in-Edhil's bridgeheads: at each end of the bridge the road passes
+    # between two gate towers through a broken wall along the riverbank;
+    # beyond it a ruined square on one side of the road and a great hall on
+    # the other, and rubble everywhere. Each bank's quarter is its own.
+    (bx, by), (ux, uy) = bridges()[0]
+    quarters = {-1: dict(square=('HarlindonRuin13', 'HarlindonRuin15', 'HarlindonRuin07'), hall='HarlindonRuin17'),
+                1: dict(square=('HarlindonRuin08', 'HarlindonRuin19', 'HarlindonRuin02'), hall='HarlindonRuin01')}
+    for side, quarter in quarters.items():
+        ox, oy = ux*side, uy*side                      # outward along the road
+        rx, ry = -oy, ox                               # along the river
+        # The square goes on the side away from the inn.
+        inn = min(((px, py) for px, py, _ in s.keep_clear if math.dist((px, py), (bx, by)) < 1200),
+                  key=lambda p: math.dist(p, (bx, by)), default=(bx+rx, by+ry))
+        north = 1 if (inn[0]-bx)*rx+(inn[1]-by)*ry < 0 else -1
+        def at(d, c):
+            return bx+ox*d+rx*c, by+oy*d+ry*c
+        facing = math.atan2(oy, ox)
+        def put(template, d, c, angle, r, kind='stone', **kw):
+            px, py = at(d+rng.uniform(-8, 8), c+rng.uniform(-8, 8))
+            return s.put(template, px, py, angle=angle+rng.uniform(-.06, .06), layer='OstInEdhil', gap=30, lane=0,
+                         base=0, slope=1, z=-2, footing=(r, kind), **kw)
+        for c in (-95, 95):                            # the gate towers
+            put('HarlindonRuin05', 380, c, facing-math.pi/2, 55)
+        for sign in (-1, 1):                           # the riverbank wall, broken
+            for k, c in enumerate((200, 375, 550)):
+                if k == 2 and rng.random() < .5:
+                    continue
+                put(rng.choice(['HarlindonRuin10', 'HarlindonRuin11', 'HarlindonRuin12']), 370+rng.uniform(-10, 10),
+                    sign*c, facing, 50)
+        centre, second, third = quarter['square']
+        put(centre, 700, north*300, facing, 120)
+        put(second, 640, north*470, facing+math.pi, 70)
+        put(third, 800, north*190, facing+math.pi/2, 50)
+        put(quarter['hall'], 720, -north*330, facing+math.pi/2, 120)
+        # The road through the quarter was paved, from the bridge to beyond the square.
+        for dd in range(300, 900, 60):
+            s.footings.append(at(dd, rng.uniform(-6, 6))+(42, 'stone'))
+        for _ in range(26):
+            d, c = rng.uniform(380, 900), rng.uniform(-650, 650)
+            px, py = at(d, c)
+            s.put(rng.choice(STONES+['HarlindonRuin07']), px, py, layer='OstInEdhil', gap=25, lane=30, base=0,
+                  slope=.6, z=-1)
     # Gatehouses: where each gate is narrowest, a broken arcade wall runs
     # across it from each cliff, leaving the middle open; some keep a
     # tower at the gap, some only its fallen stump, some nothing.
@@ -524,16 +742,18 @@ def ruins(s, t, rng):
         across = math.atan2(dy, dx)             # turns a wall's local y (its length) across the gate
         for side in (-1, 1):
             r = width+45+rng.uniform(-15, 25)
-            if rng.random() < .85:
+            # A wall is long: none stands within reach of a knoll's path.
+            clear = s.at('trail', mx-dy*side*r, my+dx*side*r) > 140
+            if rng.random() < .85 and clear:
                 s.put(rng.choice(['HarlindonRuin10', 'HarlindonRuin11', 'HarlindonRuin12']), mx-dy*side*r, my+dx*side*r,
                       angle=across+rng.uniform(-.06, .06), layer='Gatehouses', gap=40, lane=0, base=0, slope=2,
-                      z=-3, mountain=True)
+                      z=-3, mountain=True, footing=(55, 'stone'))
             pick = rng.random()
-            if pick < .55:
+            if pick < .55 and clear:
                 r = width-55
                 s.put('HarlindonRuin05' if pick < .3 else 'HarlindonRuin16', mx-dy*side*r, my+dx*side*r,
                       angle=across+rng.choice([0, math.pi])+rng.uniform(-.1, .1), layer='Gatehouses', gap=40,
-                      lane=0, base=0, slope=.8, z=-3, mountain=True)
+                      lane=0, base=0, slope=.8, z=-3, mountain=True, footing=(50, 'stone'))
     # Each base's bowl keeps one old Elven building against its cliff, out
     # of the building ground; no two bowls the same.
     keepsakes = ['HarlindonRuin05', 'HarlindonRuin15', 'HarlindonRuin16', 'HarlindonRuin13', 'HarlindonRuin19',
@@ -546,7 +766,8 @@ def ruins(s, t, rng):
             if s.at('sd', qx, qy) > -30 or s.at('lanes', qx, qy) < 120:
                 continue
             if s.put(template, qx, qy, angle=a+math.pi/2+rng.uniform(-.3, .3), layer='BowlRuins', gap=90, lane=60,
-                     base=BASE_FLAT+60, slope=.35, z=-2):
+                     base=BASE_FLAT+60, slope=.35, z=-2, footing=(60, 'stone')):
+                fallen(s, rng, qx, qy, 'BowlRuins')
                 break
     for k, (line, (bx, by)) in enumerate(dale_lines()):
         if rng.random() < .3:
@@ -556,8 +777,111 @@ def ruins(s, t, rng):
             a = rng.random()*math.tau; r = rng.uniform(150, 260)
             if s.put(rng.choice(['HarlindonRuin02', 'HarlindonRuin03', 'HarlindonRuin17', 'HarlindonRuin19',
                                  'HarlindonRuin15']), px+math.cos(a)*r, py+math.sin(a)*r,
-                     layer='DaleRuins', gap=80, lane=60, slope=.3, z=-2):
+                     layer='DaleRuins', gap=80, lane=60, slope=.3, z=-2, footing=(60, 'stone')):
+                fallen(s, rng, px+math.cos(a)*r, py+math.sin(a)*r, 'DaleRuins')
                 break
+
+
+def riverside(s, t, rng):
+    """The Sirannon's banks, decorated in patches rather than evenly: reed
+    beds that come and go along the water's edge, gathering where the bank is
+    low; rocks heaped where it is steep, some out in the shallows; driftwood
+    caught against the shore; small groves of trees leaning over the water;
+    stepping stones on each ford's downstream side; ripples along the
+    waterline; ducks in the quiet reaches and fish in the deep."""
+    x, y, river = t['x'], t['y'], t['stream']
+    rows, cols = river.shape
+    gy, gx = np.gradient(t['z'], 10); slope = np.hypot(gx, gy)
+    patch = fbm(x+5100, y-2300, scale=320, seed=SEED+70, octaves=3)      # where reeds grow, where rocks lie
+    crossing = np.min([np.hypot(x-fx, y-fy) for fx, fy in fords()+turned(fords())], axis=0)
+    away = crossing > 230                                                   # the crossings stay clear
+
+    def cell(px, py):
+        return min(max(round(py/10)+BORDER, 0), rows-1), min(max(round(px/10)+BORDER, 0), cols-1)
+
+    def flow(px, py):
+        """The river's direction at the nearest bank point, as an angle."""
+        ux, uy = across(px, py)
+        return math.atan2(ux, -uy)
+
+    def seeds(mask, seed, count, apart):
+        cells = np.column_stack(np.nonzero(mask))
+        cells = cells[np.random.default_rng(seed).permutation(len(cells))]
+        chosen = []
+        for iy, ix in cells:
+            if len(chosen) >= count:
+                break
+            p = ((ix-BORDER)*10., (iy-BORDER)*10.)
+            if all(math.dist(p, q) > apart for q in chosen):
+                chosen.append(p)
+        return chosen
+
+    REEDS = ['GladdenFieldsShrub01', 'GladdenFieldsShrub01', 'GladdenFieldsShrub02', 'OptGrass02']
+    # Reed beds: along the edge where the bank is low, each a long clump
+    # lying along the water, thick in the middle and thinning out.
+    for cx, cy in seeds(away & (river > -12) & (river < 4) & (patch > 0), SEED+71, 60, 120):
+        a = flow(cx, cy); ax, ay = math.cos(a), math.sin(a)
+        size = rng.uniform(.7, 1.5)
+        for _ in range(int(rng.uniform(12, 24)*size)):
+            along, out = rng.gauss(0, 38*size), rng.gauss(0, 12)
+            px, py = cx+ax*along-ay*out, cy+ay*along+ax*out
+            if -28 < river[cell(px, py)] < 18:
+                s.put(rng.choice(REEDS), px, py, layer='Riverside', gap=9, lane=25, base=500, slope=.9, wet=True,
+                      scale=rng.uniform(.8, 1.25))
+    # Rocks where the bank is steep or the current strong: a boulder or two,
+    # stones round them, a few out in the shallows.
+    for cx, cy in seeds(away & (river > -25) & (river < 30) & (patch < -.15), SEED+72, 26, 260):
+        for _ in range(rng.randint(1, 2)):
+            px, py = cx+rng.gauss(0, 18), cy+rng.gauss(0, 18)
+            under = river[cell(px, py)] < 0
+            s.put(rng.choice(['DarkRockGrey17', 'DarkRockGrey18', 'DarkRockGrey06', 'DarkRockGrey14']), px, py,
+                  layer='Riverside', gap=30, lane=40, base=500, slope=1.5, wet=True,
+                  scale=rng.uniform(.35, .7), z=-4 if under else -2)
+        for _ in range(rng.randint(3, 7)):
+            px, py = cx+rng.gauss(0, 35), cy+rng.gauss(0, 35)
+            s.put(rng.choice(STONES), px, py, layer='Riverside', gap=12, lane=30, base=500, slope=1.5, wet=True, z=-1)
+    # Driftwood caught on the shore, lying along the flow.
+    for cx, cy in seeds(away & (river > -10) & (river < 6), SEED+73, 9, 700):
+        s.put(rng.choice(['TreeLog', 'PTrunk_S', 'TreeFallDead01']), cx, cy, angle=flow(cx, cy)+rng.uniform(-.5, .5),
+              layer='Riverside', gap=40, lane=40, base=500, slope=1.2, wet=True, scale=rng.uniform(.6, .9), z=-2)
+    # Small groves on the banks, some leaning out over the water.
+    for cx, cy in seeds(away & (river > 25) & (river < 90) & (t['ways'] > 70) & (patch > -.05), SEED+74, 14, 450):
+        for _ in range(rng.randint(2, 4)):
+            a = rng.random()*math.tau; r = abs(rng.gauss(0, 45))
+            s.put(rng.choice(AUTUMN[:7]+CONIFERS[:2]), cx+math.cos(a)*r, cy+math.sin(a)*r, layer='Riverside',
+                  gap=38, lane=50, base=600, slope=.8)
+        for _ in range(rng.randint(3, 6)):
+            a = rng.random()*math.tau; r = abs(rng.gauss(0, 55))
+            s.put(rng.choice(UNDERGROWTH), cx+math.cos(a)*r, cy+math.sin(a)*r, layer='Riverside', gap=16, lane=30,
+                  slope=.8)
+    # Stepping stones along each ford's downstream edge.
+    for fx, fy in (fords()[0], fords()[2])+tuple(turned([fords()[0], fords()[2]])):
+        if river[cell(fx, fy)] > 0:
+            continue
+        ux, uy = across(fx, fy)
+        down = 1 if fy > CY else -1                    # the river flows south: downstream is south
+        dx, dy = uy*down, -ux*down
+        if dy > 0:
+            dx, dy = -dx, -dy
+        for k in range(-4, 5):
+            if rng.random() < .3:
+                continue                                # gaps where the current has rolled a stone away
+            px, py = fx+ux*k*42+dx*55+rng.uniform(-10, 10), fy+uy*k*42+dy*55+rng.uniform(-14, 14)
+            ground = float(t['z'][cell(px, py)])
+            if ground < WATER-4:
+                continue
+            # Each stone's top just breaks the surface of the ford.
+            s.put(rng.choice(['DarkRockGrey17', 'DarkRockGrey02', 'RockGrey17']), px, py, layer='Riverside', gap=20,
+                  lane=0, base=0, slope=2, wet=True, z=WATER-1.5-ground, scale=rng.uniform(.8, 1.15))
+    # Ripples where the water meets the shore, turned along it.
+    for px, py in seeds(away & (river > -14) & (river < -4), SEED+75, 70, 150):
+        s.put('WaterRipples', px, py, angle=flow(px, py), layer='Riverside', gap=12, lane=0, base=500, slope=3,
+              wet=True, z=WATER+.3-float(t['z'][cell(px, py)]))
+    # Ducks in the quiet reaches by the reeds, fish in the deep water.
+    for px, py in seeds(away & (river > -40) & (river < -20) & (patch > .3), SEED+76, 7, 600):
+        s.put('Duck', px, py, layer='Riverside', gap=20, lane=0, base=500, slope=3, wet=True)
+    for px, py in seeds(away & (river < -70), SEED+77, 6, 900):
+        s.put('Fish', px, py, layer='Riverside', gap=20, lane=0, base=500, slope=3, wet=True)
 
 
 def woods(s, t, rng):
@@ -603,7 +927,7 @@ def woods(s, t, rng):
         x, y = (ix-BORDER)*10, (iy-BORDER)*10
         s.put(rng.choice(CONIFERS), x, y, layer='MountainTrees', gap=45, lane=0, base=600, slope=.55, mountain=True)
     # A few trees clinging to the knolls' skirts between the crags.
-    skirts = np.column_stack(np.nonzero((t['knoll'] > .4) & (t['sd'] > -40) & (s.slope < .5)))
+    skirts = np.column_stack(np.nonzero((t['knoll'] > .4) & (t['sd'] > -40) & (s.slope < .5) & ~t['climb']))
     order = np.random.default_rng(SEED+36).permutation(len(skirts))
     for iy, ix in skirts[order]:
         if s.counts['KnollTrees'] >= 110:
@@ -621,14 +945,6 @@ def woods(s, t, rng):
         if rng.random() > .2:
             continue
         s.put(rng.choice(UNDERGROWTH), (ix-BORDER)*10, (iy-BORDER)*10, layer='Undergrowth', gap=22, lane=30, slope=.5)
-    # Rushes on the stream's banks, and a few lone trees in the open.
-    bank = np.column_stack(np.nonzero((t['stream'] > 4) & (t['stream'] < 45) & (t['z'] > WATER-1)))
-    order = np.random.default_rng(SEED+35).permutation(len(bank))
-    for iy, ix in bank[order][:4000]:
-        if rng.random() > .25:
-            continue
-        s.put(rng.choice(['GladdenFieldsShrub01', 'GladdenFieldsShrub02', 'OptGrass02']), (ix-BORDER)*10,
-              (iy-BORDER)*10, layer='StreamBanks', gap=16, lane=30, wet=True, slope=.6)
     # Drifts of tussocks and bushes out in the open grass, each its own clump.
     drift = fbm(t['x']-1700, t['y']+900, scale=260, seed=SEED+37, octaves=3)
     open_ground = (w < .1) & (t['sd'] < -120) & (t['lanes'] > 60) & (drift > .15) & (t['stream'] > 120)
@@ -690,7 +1006,7 @@ def sites(m, t):
     each team's north ford, an inn on the ruins beside the middle ford, a
     creep lair at the field's far ends, and Gollum's spawn points."""
     placed = []
-    for template, (px, py), angle in [('Outpost', (CX-470*S, CY+1750*S), -.4), ('Inn', (CX-380, CY-300), .9)]:
+    for template, (px, py), angle in [('Outpost', (CX-470*S, CY+1750*S), -.4), ('Inn', (CX-560, CY-380), .9)]:
         for (sx, sy), a in (((px, py), angle), ((SPAN_X-px, SPAN_Y-py), angle+math.pi)):
             fx, fy = neutral_site(m, template, sx, sy, angle=a, layer='Sites')
             placed.append((template, sx, sy))
@@ -734,22 +1050,35 @@ def build(b):
     print('Shaping the dales, courts and field...', flush=True)
     t = terrain()
     t['lanes'] = lane_field(t, lanes())
+    t['trail'] = lane_field(t, t['trails'])
+    t['ways'] = np.minimum(t['lanes'], t['trail'])     # what scenery keeps off
     m = create(WIDTH, HEIGHT, BORDER, title=b.project.title, description=b.project.description,
                player_count=b.project.players)
     t['woods'] = woods_field(t)
     placed = sites(m, t)
     level_sites(t, placed)
     keep = [(px, py, 70 if template == 'CaptureFlag' else 190) for template, px, py in placed]
+    for i, ((bx, by), (ax, ay)) in enumerate(bridges()):
+        # The deck's walking surface follows its model, from an origin 1 below the banks.
+        add_object(m, BRIDGE, bx, by, math.atan2(ay, ax)-math.pi/2, layer='Bridges',
+                   z=BRIDGE_BANK-1-float(t['z'][round(by/10)+BORDER, round(bx/10)+BORDER]),
+                   extra=[('objectName', 3, f'Sirannon_Bridge_{i+1}')])
+        keep += [(bx+ax*d, by+ay*d, r) for d, r in ((-320, 70), (-170, 130), (0, 130), (170, 130), (320, 70))]
     s = Scenery(m, t, b.assets, keep)
     rng = random.Random(SEED+300)
     print('Raising the ruins, planting the woods...', flush=True)
     ruins(s, t, rng)
+    riverside(s, t, rng)
     woods(s, t, rng)
+    t['footings'] = s.footings+[(px, py, 150 if template != 'WargLair' else 110, 'earth')
+                                for template, px, py in placed if template != 'CaptureFlag']
     labels = materials(t)
     sounds(m, t)
 
     gy, gx = np.gradient(t['z'], 10)
-    blocked = (t['z'] < WATER-5) | (t['sd'] > 60) | (np.hypot(gx, gy) > .9)
+    # Steep ground is blocked, but not the river's short banks: units walk down them into the fords.
+    steep = (np.hypot(gx, gy) > .9) & (t['stream'] > 70)
+    blocked = ((t['z'] < WATER-5) | (t['sd'] > 60) | steep) & ~t['climb']
     set_heights(m, t['z'])
     # Steep rock faces take one cliff texture, mapped along the faces so it
     # does not stretch down them (mapkit.cliffs).
@@ -765,6 +1094,16 @@ def build(b):
     set_materials(m, PALETTE, labels, blocked, cell_sizes=terrain_cell_sizes(PALETTE), corner_blends=True, cliffs=cliffs,
                   cliff_scale=1.6)
     water_plane(m, 'Sirannon', WATER)
+    # The river's flowing surface over the standing water, out onto both banks.
+    rows, cols = t['z'].shape
+    def height_at(px, py):
+        return float(t['z'][min(max(round(py/10)+BORDER, 0), rows-1), min(max(round(px/10)+BORDER, 0), cols-1)])
+    # Its width is measured from the finished terrain at every cross-section,
+    # out to the shoreline on both sides and a little onto the bank, so the
+    # strip covers the water exactly and its pale edge meets the shore.
+    course = [p for p in t['line'] if -250 < p[1] < SPAN_Y+250]
+    add_river(m, 'Sirannon', course, width=bank_width(course, height_at, WATER, rise=1.5, least=120, reach=300, step=40),
+              height=WATER+1, step=60)
     starts(m, start_positions())
 
     sky = add_sky(m, weather, WIDTH*10, HEIGHT*10, BORDER*10)

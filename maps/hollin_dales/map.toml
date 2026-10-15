@@ -3,4 +3,8 @@ title = "The Hollin Dales"
 native_name = "map mp the hollin dales"
 players = 6
 description = "3 vs 3 in autumn Eregion: each player holds a dale of their own under the Misty Mountains. A team's three dales meet only in its gate-court, whose three gates open onto the ruins of Ost-in-Edhil."
-weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+weather = "haze"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+# Map properties set in the viewer's Properties dialog; the build applies them over the map's own.
+[properties.ini.WaterTransparency]
+ReflectionOn = true
