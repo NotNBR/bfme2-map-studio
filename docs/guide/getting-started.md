@@ -58,8 +58,9 @@ requires the verified executable described in [the runtime](../game/runtime.md#r
 The shared quickload DLL accelerates its terrain textures automatically.
 `mw patch install` also applies it to your configured ROTWK installation.
 `mw play MAP --check` runs a short hidden gameplay test and closes it afterward.
-ROTWK uses its normal camera and fog; the studio's free-camera hooks, fog reveal,
-native screenshots and native pathfinding capture remain BFME2 1.06 features.
+ROTWK test games have the same free-camera zoom, tilt, scrolling and reset
+controls as BFME2. ROTWK keeps its normal fog; automatic fog reveal, the
+native screenshot command and native pathfinding capture remain BFME2 1.06 features.
 Model rendering and local walkability estimates work in either profile.
 
 ## Open a map

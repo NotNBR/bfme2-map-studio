@@ -11,9 +11,10 @@ With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
 directly in a player-versus-easy-AI skirmish. The isolated runtime uses BFME2
 assets plus retail ROTWK and official 2.01 patches, excluding community mods.
 It needs the [verified ROTWK executable](../game/runtime.md#rotwk-201); other
-hashes are rejected before hooks run. ROTWK keeps its normal camera and fog;
-the free camera, automatic fog reveal (`--fog` controls BFME2 only),
-`mw capture` and `mw walkable --native` remain BFME2 1.06 features. The shared
+hashes are rejected before hooks run. The [free camera](#camera) works in
+ROTWK test games too. ROTWK keeps its normal fog; automatic fog reveal
+(`--fog` controls BFME2 only), `mw capture` and `mw walkable --native` remain
+BFME2 1.06 features. The shared
 loading fix accelerates ROTWK test games automatically; `mw patch install`
 also supports the verified ROTWK engine in your configured game folder.
 
@@ -55,7 +56,9 @@ too.
 
 ### Camera
 
-Test games have a free camera, to look at the map from any distance and angle:
+BFME2 and ROTWK test games have a free camera, to look at the map from any
+distance and angle. It is enabled by `mw play` and **Test In-Game**; the
+normal-game menu and the installed loading patch keep the game's own camera.
 
 | Input | Does |
 | --- | --- |

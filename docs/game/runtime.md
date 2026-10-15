@@ -42,8 +42,12 @@ The isolated menu uses the standalone build, which handles subsequent loads
 itself; `mw patch install` can install that build into the configured ROTWK
 folder too. Both installers require the verified engine hash.
 
-ROTWK keeps its own camera and fog: BFME2's camera DLL is not injected, and
-native screenshot/pathfinding capture is rejected.
+Direct ROTWK test games also load the shared camera DLL, which selects its
+own verified ROTWK hook layout. Zoom, tilt, scroll scaling, terrain clearance,
+reset and scripted-camera protection use the same behavior as BFME2. The
+normal-game menu still uses only the standalone loading DLL: the two DLLs
+would otherwise compete for its view-update hook. ROTWK keeps normal fog;
+the native screenshot command and pathfinding capture are still rejected.
 
 [Validation record](../history/rotwk-integration.md) records the asset and
 gameplay checks. The rest of this page describes the BFME2 runtime.
@@ -90,6 +94,16 @@ from it; it also moves the clip planes out, which the game keeps at 10 to
 when no menu took it), watches the mouse for the middle-button drag, and
 scales the scroll offset. `mw capture` uses the same DLL to place the camera
 and copy the frame.
+
+For ROTWK, the camera hooks are at RVAs `0x8546A` (update), `0x89F96`
+(build transform), `0x25E803`/`0x25E82A` (zoom), `0x8D26B` (reset),
+`0x41370` (mouse events), and `0x8C774` (scroll). The view layout and calling
+conventions were checked against local disassembly, then exercised in a
+hidden live skirmish. The DLL checks image size and every hook's original
+instructions before changing code, and rolls back installed hooks if one
+fails. The launcher additionally requires the full engine hash documented
+above. The [validation record](../history/rotwk-integration.md#camera-fixes)
+contains the measured input and screenshot checks.
 
 ## Headless runs
 

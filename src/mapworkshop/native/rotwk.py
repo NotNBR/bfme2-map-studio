@@ -127,7 +127,7 @@ def skirmish_setup(game, tid, ctx):
 
 
 def configure(game, skirmish=True):
-    """Use ROTWK addresses only; camera/capture DLLs remain BFME2-specific."""
+    """Use ROTWK startup addresses; shared DLLs validate their own hooks."""
     # This hash-pinned engine supports direct invocation, as the local runtime
     # harness established. Its retail launcher stalls before GameEngine::init.
     game.executable = 'game.dat'

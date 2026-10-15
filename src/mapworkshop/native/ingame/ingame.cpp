@@ -1,5 +1,5 @@
 // GPL-3.0-only. The test game's add-on (mapworkshop.native.runtime loads it
-// into BFME2 1.06 with a remote LoadLibraryA at the first engine frame):
+// into BFME2 1.06 or the verified ROTWK 2.01 engine at the first frame):
 //  - a free camera (mwCamera): the mouse wheel zooms from close up to the
 //    whole map, and dragging with the middle button held tilts the view from
 //    the horizon to straight down, while sideways still rotates it as in the
@@ -54,6 +54,23 @@ static const float EASE_RATE = 14;                 // 1/s: 95% of a zoom step in
 static const float CLEARANCE = 20;                 // the camera stays this high above the ground
 
 static U8 *base;
+// The camera/view layouts and calling conventions agree in these two
+// engines. Addresses do not. The launcher verifies the full engine hash;
+// this DLL also checks image size and every hook's original instructions.
+struct Engine {
+    U32 imageSize, logic, tactical, terrain, client, device;
+    U32 lookAt, height, transform;
+    U32 end, update, build, zoomIn, zoomOut, reset, mouse, scroll, buildHandler;
+};
+static const Engine engines[] = {
+    {0xADA000, 0x9FE78C, 0x9FEA3C, 0x9FEC50, 0x9FE77C, 0x9EDA34,
+     0x8D55D, 0x8D2B8, 0x8BE6B,
+     0x122BE0, 0x85B36, 0x8A653, 0x25EA2E, 0x25EA55, 0x8D925, 0x41A10, 0x8CE2E, 0xB5FBBB},
+    {0xAD3000, 0x9E412C, 0x9E447C, 0x9E4690, 0x9E4388, 0x9D3474,
+     0x8CEA3, 0x8CBFE, 0x8B7B1,
+     0x1225E0, 0x8546A, 0x89F96, 0x25E803, 0x25E82A, 0x8D26B, 0x41370, 0x8C774, 0xB73DCB}
+};
+static const Engine *engine;
 static void *updateOriginal, *endOriginal, *buildOriginal, *zoomInOriginal, *zoomOutOriginal, *resetOriginal,
             *mouseOriginal, *scrollOriginal;
 static U32 capacity;
@@ -74,14 +91,14 @@ typedef float (__fastcall *GroundFn)(void*, void*, float, float, V3*);
 typedef void (__cdecl *EndFn)(bool);
 
 static bool inMatch() {
-    void *logic = field<void*>(base, 0x9FE78C);          // TheGameLogic; +0x110 game mode, 2 in a skirmish
+    void *logic = field<void*>(base, engine->logic);    // +0x110 game mode, 2 in a skirmish
     return logic && field<int>(logic, 0x110) == 2;
 }
 
-static void *tactical() { return field<void*>(base, 0x9FEA3C); }   // TheTacticalView
+static void *tactical() { return field<void*>(base, engine->tactical); }
 
 static float ground(float x, float y) {
-    void *terrain = field<void*>(base, 0x9FEC50);
+    void *terrain = field<void*>(base, engine->terrain);
     return terrain ? ((GroundFn)field<U32*>(terrain, 0)[6])(terrain, 0, x, y, 0) : 0;
 }
 
@@ -90,7 +107,7 @@ static float clamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? 
 // A scripted camera move or cinematic is under way: the flags
 // W3DView::setHeightAboveGround (0x8D2B8) checks before taking the player's zoom.
 static bool scripted(void *view) {
-    void *client = field<void*>(base, 0x9FE77C);         // TheGameClient
+    void *client = field<void*>(base, engine->client);  // TheGameClient
     return (client && field<U8>(client, 0xC0) && field<U8>(view, 0x44)) || field<U8>(view, 0x2503)
         || field<int>(view, 0x2354) || field<U8>(view, 0x1DC) || field<U8>(view, 0x204) || field<U8>(view, 0x228)
         || field<U8>(view, 0x27D) || field<U8>(view, 0x27C);
@@ -235,26 +252,26 @@ static void __fastcall updateHook(void *view, void *) {
         typedef void (__fastcall *LookAtFn)(void*, void*, const V3*);
         typedef void (__fastcall *HeightFn)(void*, void*, float);
         V3 focus = {mwPhoto.x, mwPhoto.y, ground(mwPhoto.x, mwPhoto.y)};
-        address<LookAtFn>(0x8D55D)(view, 0, &focus);
-        address<HeightFn>(0x8D2B8)(view, 0, mwPhoto.height);
+        address<LookAtFn>(engine->lookAt)(view, 0, &focus);
+        address<HeightFn>(engine->height)(view, 0, mwPhoto.height);
     }
     U32 builds = mwCamera.builds;
     ((ViewFn)updateOriginal)(view, 0);
     // A cinematic photo: rebuild every frame, so the game cannot keep its own.
     if (mwPhoto.enabled && mwPhoto.pitch > 0 && view == tactical() && inMatch())
-        address<ViewFn>(0x8BE6B)(view, 0);
+        address<ViewFn>(engine->transform)(view, 0);
     // The game rebuilds its camera only when something moved it: rebuild for
     // new input and while the zoom eases (setCameraTransform, 0x8BE6B).
     if (view == tactical() && builds == mwCamera.builds && controls(view)
         && (wanted || (mwCamera.active && mwCamera.distance != mwCamera.target)))
-        address<ViewFn>(0x8BE6B)(view, 0);
+        address<ViewFn>(engine->transform)(view, 0);
 }
 
 static void captureFrame() {
     if (!mwCapture.request) return;
     mwCapture.request = 0;
     mwCapture.status = 0x80004005;
-    void *device = field<void*>(base, 0x9EDA34);          // the IDirect3DDevice9
+    void *device = field<void*>(base, engine->device);  // the IDirect3DDevice9
     if (!device) return;
     U32 *vt = field<U32*>(device, 0);
     void *target = 0, *copy = 0;
@@ -345,20 +362,28 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
     DisableThreadLibraryCalls(instance);
     base = (U8*)GetModuleHandleA(0);
+    if (base != (U8*)0x400000) return FALSE;
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER*)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 0x1000) return FALSE;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE || nt->OptionalHeader.Magic != 0x10b) return FALSE;
+    for (int i = 0; i < sizeof(engines)/sizeof(engines[0]); i++)
+        if (nt->OptionalHeader.SizeOfImage == engines[i].imageSize) engine = &engines[i];
+    if (!engine) return FALSE;
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&lastBuild);
     Site sites[] = {
-        {0x122BE0, {0x64, 0xa1, 0, 0, 0, 0}, 6, endHook, &endOriginal},             // mov eax, fs:[0]
-        {0x85B36, {0x81, 0xc1, 0xb4, 0, 0, 0}, 6, updateHook, &updateOriginal},     // add ecx, 0B4h
-        {0x8A653, {0xb8, 0xbb, 0xfb, 0xb5, 0}, 5, buildHook, &buildOriginal},       // mov eax, 0B5FBBBh
-        {0x25EA2E, {0x56, 0x57, 0x8b, 0xf9, 0x8b, 0x37}, 6, zoomInHook, &zoomInOriginal},    // push esi; push edi;
-        {0x25EA55, {0x56, 0x57, 0x8b, 0xf9, 0x8b, 0x37}, 6, zoomOutHook, &zoomOutOriginal},  // mov edi, ecx; mov esi, [edi]
-        {0x8D925, {0x55, 0x8b, 0xec, 0x53, 0x56}, 5, resetHook, &resetOriginal},    // push ebp; mov ebp, esp; push ebx; push esi
-        {0x41A10, {0x8b, 0x81, 0x10, 0x60, 0, 0}, 6, mouseHook, &mouseOriginal},    // mov eax, [ecx+6010h]
-        {0x8CE2E, {0x55, 0x8b, 0xec, 0x83, 0xec, 0x64}, 6, scrollHook, &scrollOriginal},     // push ebp; mov ebp, esp; sub esp, 64h
+        {engine->end, {0x64, 0xa1, 0, 0, 0, 0}, 6, endHook, &endOriginal},
+        {engine->update, {0x81, 0xc1, 0xb4, 0, 0, 0}, 6, updateHook, &updateOriginal},
+        {engine->build, {0xb8, 0, 0, 0, 0}, 5, buildHook, &buildOriginal},
+        {engine->zoomIn, {0x56, 0x57, 0x8b, 0xf9, 0x8b, 0x37}, 6, zoomInHook, &zoomInOriginal},
+        {engine->zoomOut, {0x56, 0x57, 0x8b, 0xf9, 0x8b, 0x37}, 6, zoomOutHook, &zoomOutOriginal},
+        {engine->reset, {0x55, 0x8b, 0xec, 0x53, 0x56}, 5, resetHook, &resetOriginal},
+        {engine->mouse, {0x8b, 0x81, 0x10, 0x60, 0, 0}, 6, mouseHook, &mouseOriginal},
+        {engine->scroll, {0x55, 0x8b, 0xec, 0x83, 0xec, 0x64}, 6, scrollHook, &scrollOriginal},
     };
+    memcpy(sites[2].bytes + 1, &engine->buildHandler, 4);
     const int count = sizeof(sites)/sizeof(sites[0]);
-    if (base != (U8*)0x400000) return FALSE;
     for (int i = 0; i < count; i++)
         if (memcmp(base + sites[i].rva, sites[i].bytes, sites[i].length)) return FALSE;
     for (int i = 0; i < count; i++) {

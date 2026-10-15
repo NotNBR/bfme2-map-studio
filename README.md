@@ -35,8 +35,8 @@ You need **Windows**, your own copy of **BFME2 patched to 1.06**,
 **OpenGL 4.3** support. An optional **Rise of the Witch-king** profile adds the
 expansion's assets to BFME2's library, with separate builds and caches; see
 [ROTWK setup](docs/guide/getting-started.md#rise-of-the-witch-king). ROTWK 2.01
-supports direct skirmish tests with the verified engine; free-camera and native
-capture tools require BFME2 1.06. BFME1 support has not been tested.
+supports direct skirmish tests and the free camera with the verified engine;
+native capture tools require BFME2 1.06. BFME1 support has not been tested.
 
 1. [Download the source](https://github.com/NotNBR/bfme2-map-studio/archive/refs/heads/main.zip)
    and extract it, or clone the repository:

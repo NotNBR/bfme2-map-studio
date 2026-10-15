@@ -78,7 +78,8 @@ def pathfind(project, progress=print):
 def play(project, graphics='Medium', progress=print, fog=False):
     """Start the selected game in a skirmish on the project's current build,
     you against an easy AI, in a 1600 x 1200 window. BFME2 reveals the map
-    unless `fog`; ROTWK keeps its normal fog and camera. Returns once the game reports
+    unless `fog`; ROTWK keeps its normal fog. Both profiles enable the free
+    camera. Returns once the game reports
     that the skirmish is playable: the launcher process (for watch(); close
     its stdout if you do not watch it) and the seconds the start took. Raises
     RuntimeError when the launcher ends before that."""

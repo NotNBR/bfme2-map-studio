@@ -64,5 +64,33 @@ hooks; the earlier standalone comparison injected the same DLL explicitly.
 
 The repository suite passed 271 tests (four skipped), plus syntax, import
 layer, documentation and index checks. Source and both DLL builds live in
-the quickload submodule. Native screenshot/pathfinding capture and the free
-camera remain BFME2-only.
+the quickload submodule. At that stage, native screenshot/pathfinding capture
+and the free camera remained BFME2-only.
+
+## Camera fixes
+
+The shared `ingame.dll` subsequently gained a ROTWK layout for its camera
+hooks. Local disassembly confirmed matching camera structures and calling
+conventions, with separate function and global addresses. The studio still
+verifies the engine hash before launch; the DLL checks image size and all
+eight hook instruction sequences before installing any hooks.
+
+A hidden Water Lab skirmish exercised the real hooked engine entry points:
+12 zoom-out calls reached distance 2,638.25; four zoom-in calls reduced it
+to 1,508.43. A 50-pixel middle-button drag increased pitch from 0.6545 to
+0.9045 radians. All three mouse events also reached the original input
+queue. Scrolling moved the focus, reset returned camera control to the game,
+and a scripted-move flag prevented the wheel from taking control.
+
+The DLL's frame readback saved zoomed, tilted and reset views; all three
+were visually inspected. The run had no first-chance exceptions. The loading
+fix remained active alongside the camera DLL, completing all 1,260 terrain
+textures with no failures. Evidence is in the ignored profile folder
+`renders/camera-check/report.json` and its three PNGs. These checks validate
+the free camera and frame readback, not the public photo-camera command or
+fog-reveal hooks; those commands still require BFME2.
+
+The identical input/readback sequence passed against BFME2 with matching
+zoom distances and pitch changes, zero first-chance exceptions, and all
+1,260 loading jobs completed. The repository suite passed 271 tests (four
+skipped), plus syntax, import-layer, documentation and index checks.

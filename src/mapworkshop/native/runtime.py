@@ -18,7 +18,7 @@ starts a skirmish on an installed map, you against an easy AI, and by
 default loads it faster: loading.dll (native/loading/loading.cpp) runs the
 terrain textures' D3DX compression on worker threads, with the same calls and
 input as the game, so the same result (Brightwater Fold at Medium: gameplay
-4.5 s after the start instead of 12). BFME2 also loads ingame.dll
+4.5 s after the start instead of 12). Both profiles also load ingame.dll
 (native/ingame/ingame.cpp): the free camera you steer in test games (the
 wheel zooms out to the whole map, the middle button tilts) and the
 screenshot hooks of native.capture.
@@ -388,7 +388,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     this detail level (not yet running: add breakpoints, then game.run()).
     `headless`: on a hidden desktop, with DXVK (see the module notes).
     `fast`: with fast_loading (False loads the map as the game alone does).
-    BFME2 also loads ingame.dll; ROTWK keeps its normal camera."""
+    Both profiles also load ingame.dll for the test game's free camera."""
     running = debugger.running_games()
     if running:
         raise RuntimeError(f'A game is already running ({running[0][1]}); close it before starting {GAME_LABEL}')
@@ -403,6 +403,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     if PROFILE == 'rotwk':
         from mapworkshop.native import rotwk
         rotwk.configure(game)
+        ingame(game)
         if fast:
             fast_loading(game)
         return game
