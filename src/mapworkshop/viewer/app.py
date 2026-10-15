@@ -236,7 +236,7 @@ def main(argv=None):
                  fps_limit=args.fps, next_frame=0.0, building=False, build_line='',
                  summary=None, summary_key=None, summary_busy=False, requested=source,
                  request=None, upload=None, walk_request=None, limits=False, normal_maps=None, clouds=True,
-                 status_sample=0.0, focus_status='', load_title='', toast=None)
+                 status_sample=0.0, focus_status='', load_title='', toast=None, build_started=0.0, build_title='')
     scene = dict(renderer=None)
     out_dir = RENDERS
     watched = [source, source.parent/'map.ini']
@@ -492,8 +492,11 @@ def main(argv=None):
             set_status("a game map: nothing to build (start your own with `mw new`)", 5)
             return
         if state['building']:
+            # The build toast is up; say why nothing new starts.
+            set_status('already building - the build will reload the map', 4)
             return
-        state['building'], state['build_line'] = True, 'starting'
+        state['building'], state['build_line'] = True, 'Starting'
+        state['build_started'], state['build_title'] = time.perf_counter(), f'Building {owner.title}'
         lines = []
 
         def on_line(line):
@@ -504,11 +507,17 @@ def main(argv=None):
         def work():
             code = project.run(owner, on_line=on_line)
             state['building'] = False
+            seconds = time.perf_counter()-state['build_started']
             if code:
                 print('\n'.join(lines[-40:]))
                 error = next((l.strip() for l in reversed(lines) if l.strip()), 'see the terminal')
                 set_status(f'build failed: {error[:120]}', 15)
+                state['toast'] = dict(kind='failed', title=f'{owner.title}: build failed', detail=error,
+                                      until=time.perf_counter()+15.0)
             else:
+                # The reload that follows replaces this with its own toast.
+                state['toast'] = dict(kind='done', title=f'Built {owner.title}', detail=f'Done in {seconds:.0f} s',
+                                      until=time.perf_counter()+3.0)
                 # The build ends with what it changed since the previous build (mapkit.mapdiff).
                 start = next((i for i, l in enumerate(lines) if l.startswith('Changes since')), len(lines))
                 changes = [l.strip() for l in lines[start + 1:] if l.strip()]
@@ -847,14 +856,19 @@ def main(argv=None):
         set_status(f'Walkability ready: {len(r.walkable["cut_off"])} cut-off areas', 5)
 
     def draw_toast(size):
-        """The loading toast at the top left, below the toolbar rows: the
-        load's progress while it runs, then briefly how it ended."""
+        """The toast at the top left, below the toolbar rows: a load's
+        progress or a build's latest output line while they run, then
+        briefly how they ended."""
         top = toolbar.height + (mark_bar.height if state['marking'] and scene['renderer'] is not None else 0)
         now = time.perf_counter()
         if toast_shown():
             fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
             alpha = min(1.0, (now-state['load_started']-TOAST_DELAY)/0.15)
             toolbar.draw_toast(size, scale(), top, state['load_title'], step, fraction, 'loading', alpha)
+        elif state['building']:
+            elapsed = now-state['build_started']
+            toolbar.draw_toast(size, scale(), top, f'{state["build_title"]}  ·  {elapsed:.0f} s', state['build_line'],
+                               None, 'loading', min(1.0, elapsed/0.15))
         elif state['toast'] and now < state['toast']['until']:
             toast = state['toast']
             toolbar.draw_toast(size, scale(), top, toast['title'], toast['detail'], None, toast['kind'],

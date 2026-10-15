@@ -467,9 +467,40 @@ def run(project, args=(), on_line=None):
     return process.wait()
 
 
+class _Output:
+    """stdout of a build run by run(): when its reader goes away (the viewer
+    closed mid-build), every print would raise OSError (Errno 22 on Windows)
+    and fail the build; the output goes to nowhere instead and the build
+    finishes and publishes."""
+
+    def __init__(self, stream):
+        self.stream = stream
+
+    def _detach(self):
+        import os
+        self.stream = open(os.devnull, 'w', encoding='utf-8')
+
+    def write(self, text):
+        try:
+            return self.stream.write(text)
+        except OSError:
+            self._detach()
+            return len(text)
+
+    def flush(self):
+        try:
+            self.stream.flush()
+        except OSError:
+            self._detach()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 3 or sys.argv[1] != 'build':
         raise SystemExit('usage: python -m mapworkshop.project build <map> [project arguments]')
+    sys.stdout = _Output(sys.stdout)
     try:
         build(find(sys.argv[2]), sys.argv[3:])
     except LookupError as error:
