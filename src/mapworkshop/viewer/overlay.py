@@ -1,4 +1,4 @@
-"""Screen-space overlay for map marks (render.marks) in the viewer.
+"""Screen-space overlay for map marks (viewer.marks) in the viewer.
 
 Mark outlines are draped on the terrain in map coordinates, projected with
 the camera every frame and drawn on top of the scene as thick lines, a

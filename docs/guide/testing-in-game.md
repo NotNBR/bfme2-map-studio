@@ -55,7 +55,7 @@ the terrain, and the map's edge shows as black.
 `mw walkable <map> --native` starts the game headless (no window appears),
 reads its pathfinding grid at logic frame 10 (about 7 seconds) and compares it
 with the local estimate; `--compare` compares with the grid saved last time
-without starting the game. See [the viewer](../viewer.md#walkable-areas) for
+without starting the game. See [walkability](projects-and-builds.md#walkability) for
 what the estimate leaves out.
 
 ## Screenshots from the game: `mw capture`

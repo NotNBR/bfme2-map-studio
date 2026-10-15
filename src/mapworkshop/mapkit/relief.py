@@ -1,4 +1,11 @@
-"""Authored Ithilien landforms, with protected river beds, starts and road valleys."""
+"""Relief helpers, and Ithilien Frontier's authored landforms.
+
+distance_to(mask): the eight-neighbour chamfer distance from every terrain
+sample to the nearest masked one, in samples (the Greywater Marches build
+uses it). smooth: smoothstep on [0, 1]. sculpt(m):
+Ithilien Frontier's new relief over the stock map, with its river beds,
+starts and road valleys protected.
+"""
 
 import numpy as np
 from PIL import Image, ImageDraw

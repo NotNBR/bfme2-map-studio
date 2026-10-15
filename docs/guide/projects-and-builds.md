@@ -140,9 +140,26 @@ Python process. `mw dev` rebuilds on every save with the viewer open
 | `mw graphics --map FILE` | diagnostic plans: placement atlas, heights, slope, passability ([map graphics](map-graphics.md)) |
 | `mw play MAP`, `mw capture MAP` | the game itself ([testing in-game](testing-in-game.md)) |
 
-`mw walkable` is an estimate from terrain, water, object footprints and walking
-meshes; [the viewer](../viewer.md#walkable-areas) describes its limits, and
-`--native` reads the game's own grid instead.
+### Walkability
+
+`mw walkable <map>` estimates where units can walk without starting the game
+([mapkit/walkable.py](../../src/mapworkshop/mapkit/walkable.py)) and lists the
+walkable areas no player start can reach, with their positions; the viewer
+(key **7**) and `mw render --walkable` draw it. Terrain flags, water depth,
+inherited object geometry and the models' walking meshes supply the estimate.
+Bridge edges and connections are approximate; spawned fortresses, units,
+scripts and dynamic gate and wall states are not simulated. Reachability
+combines decks and ground in a top-down grid, so overpasses can join routes
+that are separate in the game. It is an editing aid, not proof that a
+particular unit can follow a route ([navigation](../game/navigation.md) has
+what the game was measured to do).
+
+`--native` reads the game's own grid from a short headless skirmish (about 7
+seconds, [testing in the game](testing-in-game.md)) and reports it;
+`--compare` compares the estimate against the last native capture without
+launching anything. Native captures are tied to the map file's hash, so a
+changed build needs a new one. Without `--native`, the command and the viewer
+always use the local estimate.
 
 ## Where things live
 

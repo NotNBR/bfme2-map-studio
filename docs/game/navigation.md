@@ -7,7 +7,7 @@ maps with four isolated corridors, each crossed by `GondorFighter`,
 orders, with the units' positions read from the game
 ([how it was measured](../history/bfme-workshop-experiments.md#navigation-lab),
 with the map hashes). The workshop's own estimate, `mw walkable`, models these
-rules; [the viewer](../viewer.md#walkable-areas) describes its limits.
+rules; [walkability](../guide/projects-and-builds.md#walkability) describes its limits.
 
 ## In short
 
