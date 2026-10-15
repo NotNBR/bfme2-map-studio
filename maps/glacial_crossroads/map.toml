@@ -1,0 +1,6 @@
+id = "glacial-crossroads"
+title = "Glacial Crossroads"
+native_name = "map mp glacial crossroads"
+players = 16
+description = "Phase-one 16-site high mountain landscape with a central ice field. Terrain review draft."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

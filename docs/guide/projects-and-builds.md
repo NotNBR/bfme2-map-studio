@@ -30,6 +30,14 @@ id other than the one made from the title). Its `map.py` makes a level grass
 plane with the player starts, sky and lighting, and shows where heights,
 textures and objects go.
 
+For larger terrain studies, a project's `map.py` can call
+`blank.create(..., experimental_large=True)`. This explicitly raises the
+constructor's guard from 2,048 to 4,096 stored samples per axis, including
+borders; each cell is 10 world units. The default and `mw new` size range
+stay unchanged. The larger bound matches the document reader, not a verified
+game limit. Build, render and check connectivity before relying on a larger
+draft; native loading and performance require separate game verification.
+
 `map.toml`:
 
 ```toml

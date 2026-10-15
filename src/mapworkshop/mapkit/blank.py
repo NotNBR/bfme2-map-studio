@@ -310,11 +310,18 @@ def starts(m, points):
 
 
 def create(width=840,height=950,border=30,title='The Ashen March',elevation=100,player_count=2,
-           description='A ruined frontier beneath the shadow of Mordor.'):
+           description='A ruined frontier beneath the shadow of Mordor.', *, experimental_large=False):
+    """Create an empty document. Dimensions are terrain cells, 10 units each.
+
+    The default guard is 2048 stored samples per axis, including borders.
+    experimental_large=True explicitly permits up to the reader's 4096-sample
+    bound. This enables terrain studies; it does not certify native game limits.
+    """
     if not isinstance(player_count,int) or not 2<=player_count<=8:
         raise ValueError('A skirmish map needs 2..8 player sides')
-    if min(width,height)<64 or max(width+2*border,height+2*border)>2048:
-        raise ValueError('Supported experimental sample dimensions: 64..2048')
+    limit = 4096 if experimental_large else 2048
+    if border < 0 or min(width,height)<64 or max(width+2*border,height+2*border)>limit:
+        raise ValueError(f'Supported experimental sample dimensions: 64..{limit}')
     m=object.__new__(Map);m.names={};m.chunks=[];m._object_count=0
     w,h=width+2*border,height+2*border
     add_section(m,'HeightMapData',5,dict(border=border,borders=[(width,height)],

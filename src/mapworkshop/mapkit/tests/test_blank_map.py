@@ -11,6 +11,26 @@ from mapworkshop.mapkit.checks.analyze import analyze
 
 
 class BlankDocumentTests(unittest.TestCase):
+    def test_large_grid_requires_opt_in_and_roundtrips_at_reader_boundary(self):
+        # Thin documents exercise both large axes without huge allocations.
+        for width, height in [(4090, 64), (64, 4090)]:
+            with self.assertRaises(ValueError):
+                create(width, height, 3)
+            m = create(width, height, 3, experimental_large=True)
+            z = np.full((height+6, width+6), 120.)
+            z[-4, -4] = 1650.
+            set_heights(m, z)
+            blocked = np.zeros(z.shape, bool)
+            blocked[-4, -4] = True
+            set_materials(m, ['A'], np.zeros(z.shape, dtype='u2'), blocked=blocked)
+            loaded = Map(m.encode())
+            self.assertEqual(loaded.heightmap()['borders'], [(width, height)])
+            self.assertEqual(loaded.heightmap()['elevations'][-4, -4]*.0390625, 1650.)
+            np.testing.assert_array_equal(loaded.blend()['arrays']['impassable'], blocked)
+        for width, height in [(4091, 64), (64, 4091)]:
+            with self.assertRaises(ValueError):
+                create(width, height, 3, experimental_large=True)
+
     def test_new_plane_is_empty_and_all_supported_sections_decode(self):
         m=create(71,83,3)
         data=m.encode(); report=analyze(data)

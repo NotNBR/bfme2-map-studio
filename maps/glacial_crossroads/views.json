@@ -1,0 +1,45 @@
+{
+  "views": {
+    "overview": {
+      "target": [
+        14250.0,
+        14250.0,
+        700
+      ],
+      "distance": 39750.0,
+      "elevation": 60,
+      "heading": 0,
+      "fov": 59
+    },
+    "high-corner": {
+      "target": [
+        7050.0,
+        21750.0,
+        1150
+      ],
+      "distance": 13800.0,
+      "elevation": 38,
+      "heading": 320
+    },
+    "ice-terrace": {
+      "target": [
+        14250.0,
+        17850.0,
+        180
+      ],
+      "distance": 12300.0,
+      "elevation": 35,
+      "heading": 0
+    },
+    "base-scale": {
+      "target": [
+        14250.0,
+        19530.0,
+        240
+      ],
+      "distance": 3450.0,
+      "elevation": 52,
+      "heading": 0
+    }
+  }
+}
