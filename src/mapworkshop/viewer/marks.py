@@ -60,7 +60,7 @@ class Marks:
 
     def checkpoint(self):
         """Remember the current marks for undo()."""
-        self.history.append((json.loads(json.dumps(self._plain())), self.next_id))
+        self.history.append((json.loads(json.dumps(self.plain())), self.next_id))
         del self.history[:-self.UNDO_STEPS]
 
     def undo(self):
@@ -129,7 +129,8 @@ class Marks:
         self.next_id = 1
         self.save()
 
-    def _plain(self):
+    def plain(self):
+        """The marks without the viewer's cached fields."""
         return [{k: v for k, v in m.items() if not k.startswith('_')} for m in self.items]
 
     def save(self):
@@ -137,7 +138,7 @@ class Marks:
         data = dict(map=self.map_path.stem, map_path=str(self.map_path.resolve()),
                     updated=time.strftime('%Y-%m-%d %H:%M:%S'),
                     coordinates='map units: x east, y north (map object coordinates); z terrain height',
-                    marks=self._plain())
+                    marks=self.plain())
         temp = self.path.with_suffix('.tmp')
         temp.write_text(json.dumps(data, indent=2), encoding='utf-8')
         os.replace(temp, self.path)

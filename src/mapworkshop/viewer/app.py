@@ -66,106 +66,30 @@ import sys
 import time
 from pathlib import Path
 
+import glfw
+import moderngl
 import numpy as np
 
+from mapworkshop import game, project
 from mapworkshop.config import RENDERS
-from mapworkshop.render.camera import look_at, perspective
-
-ORBIT_DEGREES_PER_PIXEL = 0.25
-SMOOTHING = 16.0          # 1/s; higher follows input faster
-TOAST_DELAY = 0.25        # s a reload runs before its toast shows, so quick ones do not flash
-MIN_DISTANCE, MAX_DISTANCE = 60.0, 40000.0
-
-
-def smooth(current, goal, dt, rate=SMOOTHING):
-    return current + (goal-current)*(1-math.exp(-rate*dt))
-
-
-class Camera:
-    """Orbit camera with separate goal and current state for smooth motion."""
-
-    def __init__(self, surface, playable):
-        self.surface = surface          # (x, y) -> visible height (terrain or water)
-        self.playable = playable
-        self.fov = 50.0
-        self.reset()
-        self.snap()
-
-    def reset(self):
-        w, h = self.playable
-        self.goal = dict(x=w/2, y=h/2, distance=max(w, h)*0.75, heading=0.0, elevation=55.0)
-
-    def snap(self):
-        self.cur = dict(self.goal)
-        self.cur['z'] = self.ground(self.cur['x'], self.cur['y'])
-
-    def ground(self, x, y):
-        return float(self.surface(x, y))
-
-    def update(self, dt):
-        for key in ('x', 'y', 'heading', 'elevation'):
-            self.cur[key] = smooth(self.cur[key], self.goal[key], dt)
-        # Zoom is smoothed in log space so it feels uniform at every scale.
-        self.cur['distance'] = math.exp(smooth(math.log(self.cur['distance']), math.log(self.goal['distance']), dt))
-        self.cur['z'] = smooth(self.cur['z'], self.ground(self.cur['x'], self.cur['y']), dt, 8.0)
-
-    def matrices(self, aspect, state=None):
-        s = state or self.cur
-        e, h = math.radians(s['elevation']), math.radians(s['heading'])
-        target = np.array([s['x'], s['y'], s['z']])
-        eye = target + np.array([-math.sin(h)*math.cos(e), -math.cos(h)*math.cos(e), math.sin(e)])*s['distance']
-        # Never look from inside the terrain.
-        floor = self.ground(eye[0], eye[1])+15.0
-        if eye[2] < floor:
-            eye[2] = floor
-        fov_y = 2*math.degrees(math.atan(math.tan(math.radians(self.fov)/2)/aspect))
-        near = max(2.0, s['distance']*0.01)
-        proj = perspective(fov_y, aspect, near, s['distance']*20+30000)
-        return dict(view_projection=proj @ look_at(eye, target), eye=eye, target=target)
-
-    def ray(self, cursor, size):
-        """World-space ray through a window position (pixels, origin top-left)."""
-        cam = self.matrices(size[0]/size[1])
-        inv = np.linalg.inv(cam['view_projection'])
-        nx = 2*cursor[0]/size[0]-1
-        ny = 1-2*cursor[1]/size[1]
-        near = inv @ np.array([nx, ny, -1, 1.0]); near = near[:3]/near[3]
-        far = inv @ np.array([nx, ny, 1, 1.0]); far = far[:3]/far[3]
-        return near, (far-near)/np.linalg.norm(far-near)
-
-    def pick(self, cursor, size):
-        """Terrain point under the cursor (ray march + bisection), or None."""
-        origin, direction = self.ray(cursor, size)
-        reach = self.cur['distance']*6+20000
-        t = np.linspace(0, reach, 1500)
-        points = origin+np.outer(t, direction)
-        below = points[:, 2] <= self.surface(points[:, 0], points[:, 1])
-        hits = np.nonzero(below)[0]
-        if not len(hits):
-            return None
-        i = hits[0]
-        lo, hi = t[max(i-1, 0)], t[i]
-        for _ in range(20):
-            mid = (lo+hi)/2
-            p = origin+direction*mid
-            if p[2] <= self.surface(p[0], p[1]):
-                hi = mid
-            else:
-                lo = mid
-        return origin+direction*hi
-
-    def plane_hit(self, cursor, size, z):
-        origin, direction = self.ray(cursor, size)
-        if abs(direction[2]) < 1e-6:
-            return None
-        t = (z-origin[2])/direction[2]
-        return origin+direction*t if t > 0 else None
-
+from mapworkshop.mapkit.weather import PRESETS, SUNS
+from mapworkshop.viewer import marks as marklib
+from mapworkshop.viewer.camera import Camera
+from mapworkshop.viewer.commands import Command, Commands
+from mapworkshop.viewer.jobs import Build, MarksSummary, Status, Walkability, play
+from mapworkshop.viewer.marking import CLICK_PIXELS, TOOLS, MarkEditor, summary_lines
+from mapworkshop.viewer.overlay import MarkOverlay
+from mapworkshop.viewer.session import TOAST_DELAY, Session
+from mapworkshop.viewer.toolbar import Toolbar
 
 FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')
+DOUBLE_CLICK = 0.3        # s between the clicks of a double-click
+# The View menu: command ids in groups; None separates them.
+VIEW_MENU = ('objects', 'water', 'shadows', None, 'clouds', 'normal_maps', 'fx', None,
+             'grid', 'border', 'walkable', 'flow', None, 'animate', 'limits')
 
 
-def main(argv=None):
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: the last one)')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
@@ -182,17 +106,11 @@ def main(argv=None):
     parser.add_argument('--exit-after', type=float, help=argparse.SUPPRESS)  # smoke tests
     parser.add_argument('--snapshot', type=Path, help=argparse.SUPPRESS)   # smoke tests: save the window
     parser.add_argument('--marking', action='store_true', help=argparse.SUPPRESS)  # start with Mark on
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    import threading
-    import glfw
-    import moderngl
-    from mapworkshop import game, project
-    from mapworkshop.render.engine import MapRenderer
-    from mapworkshop.render.assets import GameAssets
-    from mapworkshop.viewer.loading import LatestTask, Upload, map_title as title_for
-    from mapworkshop.viewer import marks as marklib
 
+def main(argv=None):
+    args = parse_args(argv)
     try:
         source = project.map_path(args.map or args.map_option)
     except LookupError as error:
@@ -211,195 +129,225 @@ def main(argv=None):
         glfw.terminate()
         raise SystemExit('Could not open an OpenGL 4.3 window')
     glfw.make_context_current(window)
-    # Frames are paced by the limiter below; VSync only when chosen.
+    # Frames are paced by the limiter in run(); VSync only when chosen.
     glfw.swap_interval(1 if args.fps == 'vsync' else 0)
     ctx = moderngl.create_context(require=430)
     # Release the previous scene's GPU objects once a reload replaces it.
     ctx.gc_mode = 'auto'
     print(__doc__)
-    from mapworkshop.mapkit.weather import PRESETS, SUNS
-    from mapworkshop.viewer.toolbar import Toolbar
-    from mapworkshop.viewer.marks import Marks
-    from mapworkshop.viewer.overlay import MarkOverlay
-    shared = {}
-    cpu_shared = {}
-    loader, walk_loader = LatestTask(), LatestTask()
-    base_assets = []             # owned by the single preparation worker
-    owners = {p.map_file.resolve(): p for p in project.projects()}
-    camera = Camera(lambda x, y: np.zeros_like(np.asarray(x, float)), (1000, 1000))
-    state = dict(grid=False, border=False, top=None, drag=None, last=None, shots=0,
-                 last_click=0.0, fps=0.0, help=True, status='', status_until=0.0,
-                 reload=False, changed_at=None, lod=args.lod, weather=args.weather, source=source,
-                 loading=False, animate=True, time=0.0, sun=args.sun,
-                 marking=args.marking, tool=None, selected=None, hovered=None, drawing=None, press=None,
-                 edited=False, cursor=None,
-                 fps_limit=args.fps, next_frame=0.0, building=False, build_line='',
-                 summary=None, summary_key=None, summary_busy=False, requested=source,
-                 request=None, upload=None, walk_request=None, limits=False, normal_maps=None, clouds=True,
-                 status_sample=0.0, focus_status='', load_title='', toast=None, build_started=0.0, build_title='')
-    scene = dict(renderer=None)
-    out_dir = RENDERS
-    watched = [source, source.parent/'map.ini']
-    toolbar = Toolbar(ctx, [
-        dict(kind='dropdown', id='map', label='Map'), dict(kind='button', id='properties', label='Properties'),
-        dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
-        dict(kind='gap'),
-        dict(kind='dropdown', id='lod', label='Detail'),
-        dict(kind='dropdown', id='weather', label='Weather'),
-        dict(kind='dropdown', id='sun', label='Sun'), dict(kind='gap'),
-        dict(kind='dropdown', id='view', title='View'), dict(kind='toggle', id='marking', label='Mark'),
-        dict(kind='gap'),
-        dict(kind='button', id='top', label='Top view'), dict(kind='button', id='reset', label='Reset view'),
-        dict(kind='button', id='shot', label='Screenshot'),
-        dict(kind='status', id='status'), dict(kind='dropdown', id='fps', align='right')])
-    # The marking row, shown below the main one while Mark is on.
-    # A tool stays armed until Esc or a second click on it; with none the
-    # mouse navigates and selects marks.
-    tools = [('pin', 'Pin'), ('circle', 'Circle'), ('rect', 'Rectangle'), ('freehand', 'Freehand')]
-    hints = {None: 'pick a tool to draw; click a mark to select it',
-             'pin': 'click the terrain to drop pins - Esc when done',
-             'circle': 'drag from the centre outwards - Esc when done',
-             'rect': 'drag from corner to corner, lined up with the screen - Esc when done',
-             'freehand': 'hold the left button and draw - Esc when done'}
-    mark_bar = Toolbar(ctx, [dict(kind='toggle', id='tool_'+key, label=label) for key, label in tools] +
-                       [dict(kind='gap'), dict(kind='button', id='delete', label='Delete'),
-                        dict(kind='button', id='clear', label='Clear all'), dict(kind='gap'),
-                        dict(kind='button', id='copy', label='Copy for agent'), dict(kind='status', id='hint')],
-                       top=lambda: toolbar.height)
-    overlay = MarkOverlay(ctx)
-    scene['marks'] = Marks(source)
-    # The View menu: (id, label) in groups; None separates them.
-    view_items = [('objects', 'Objects'), ('water', 'Water'), ('shadows', 'Shadows'), None,
-                  ('clouds', 'Cloud shadows'), ('normal_maps', 'Normal maps'), ('fx', 'Fog and rain/snow'), None,
-                  ('grid', 'Grid'), ('border', 'Map border'), ('walkable', 'Walkable (local estimate)'),
-                  ('flow', 'River flow arrows'), None,
-                  ('animate', 'Animate'), ('limits', 'Game object limits (1,200 trees, 2,000 shrubs)')]
+    viewer = Viewer(args, source, window, ctx)
+    # CPU preparation and Pillow's UI text both use Python. A shorter
+    # timeslice prevents repeated 5 ms GIL waits while drawing toolbar text.
+    previous_switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(0.001)
+    try:
+        viewer.run()
+    finally:
+        viewer.close()
+        glfw.terminate()
+        sys.setswitchinterval(previous_switch_interval)
+    return 0
 
-    def map_title(path):
-        return title_for(path, owners)
 
-    def view_state(name):
-        r = scene['renderer']
-        if r is None:
-            return False
-        if name in ('objects', 'water', 'shadows', 'walkable', 'flow'):
-            return r.visible[name]
-        if name == 'fx':
-            return r.visible['weather']
-        if name in ('normal_maps', 'clouds'):
-            return r.options[name]
-        if name == 'limits':
-            return r.options['vegetation_limits']
-        return state[name]
+class Viewer:
+    """The viewer window: the scene (session), the camera, marks editing,
+    the toolbar rows and the background jobs, tied to GLFW's input."""
 
-    def menu_entries(menu):
+    def __init__(self, args, source, window, ctx):
+        self.args, self.window, self.ctx = args, window, ctx
+        self.status = Status()
+        self.session = Session(source, self.status, lod=args.lod, weather=args.weather, sun=args.sun)
+        self.camera = Camera(lambda x, y: np.zeros_like(np.asarray(x, float)), (1000, 1000))
+        self.build = Build(self.status, lambda toast: setattr(self.session, 'toast', toast))
+        self.walkability = Walkability(self.status)
+        self.summary = MarksSummary()
+        self.overlay = MarkOverlay(ctx)
+        self.editor = MarkEditor(self.overlay, self, self.status, marking=args.marking)
+        self.editor.marks = self.session.marks
+        self.view = dict(grid=False, border=False, animate=True)
+        self.time = 0.0                    # the game clocks' time: animation, water, clouds
+        self.fps, self.fps_limit, self.next_frame = 0.0, args.fps, 0.0
+        self.nav = None                    # a navigation drag: ('orbit', last position) or ('pan', anchor)
+        self.press = None                  # where the last button press was
+        self.last_click = 0.0
+        self.cursor = None
+        self.focus_text, self.focus_sample = '', 0.0
+        self.properties = None             # the Properties window (viewer.properties)
+        self.properties_saved = None       # the project its Save wrote, for the frame loop to build
+        self.toolbar = Toolbar(ctx, [
+            dict(kind='dropdown', id='map', label='Map'), dict(kind='button', id='properties', label='Properties'),
+            dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
+            dict(kind='gap'),
+            dict(kind='dropdown', id='lod', label='Detail'),
+            dict(kind='dropdown', id='weather', label='Weather'),
+            dict(kind='dropdown', id='sun', label='Sun'), dict(kind='gap'),
+            dict(kind='dropdown', id='view', title='View'), dict(kind='toggle', id='marking', label='Mark'),
+            dict(kind='gap'),
+            dict(kind='button', id='top', label='Top view'), dict(kind='button', id='reset', label='Reset view'),
+            dict(kind='button', id='shot', label='Screenshot'),
+            dict(kind='status', id='status'), dict(kind='dropdown', id='fps', align='right')])
+        # The marking row, shown below the main one while Mark is on.
+        self.mark_bar = Toolbar(ctx, [dict(kind='toggle', id='tool_'+key, label=label) for key, label in TOOLS] +
+                                [dict(kind='gap'), dict(kind='button', id='delete', label='Delete'),
+                                 dict(kind='button', id='clear', label='Clear all'), dict(kind='gap'),
+                                 dict(kind='button', id='copy', label='Copy for agent'),
+                                 dict(kind='status', id='hint')],
+                                top=lambda: self.toolbar.height)
+        self.commands = self._commands()
+        self.cursors = {name: glfw.create_standard_cursor(shape) for name, shape in (
+            ('draw', glfw.CROSSHAIR_CURSOR), ('move', glfw.RESIZE_ALL_CURSOR), ('rotate', glfw.POINTING_HAND_CURSOR),
+            ('ew', glfw.RESIZE_EW_CURSOR), ('ns', glfw.RESIZE_NS_CURSOR),
+            ('nesw', glfw.RESIZE_NESW_CURSOR), ('nwse', glfw.RESIZE_NWSE_CURSOR))}
+        glfw.set_mouse_button_callback(window, self.on_mouse_button)
+        glfw.set_cursor_pos_callback(window, self.on_cursor)
+        glfw.set_scroll_callback(window, self.on_scroll)
+        glfw.set_key_callback(window, self.on_key)
+
+    @property
+    def renderer(self):
+        return self.session.renderer
+
+    # Commands ------------------------------------------------------------------
+    def _commands(self):
+        c = Commands(lambda name: getattr(glfw, 'KEY_' + name))
+        visible = lambda name: lambda: self.renderer.visible[name]
+        option = lambda name: lambda: self.renderer.options[name]
+        view = lambda name: lambda: self.view[name]
+        c.add(
+            # The View menu's layers and options.
+            Command('objects', lambda: self.flip_visible('objects'), 'Objects', ('1',), visible('objects')),
+            Command('water', lambda: self.flip_visible('water'), 'Water', ('2',), visible('water')),
+            Command('shadows', lambda: self.flip_visible('shadows'), 'Shadows', ('3',), visible('shadows')),
+            Command('normal_maps', lambda: self.flip_option('normal_maps'), 'Normal maps', ('4',),
+                    option('normal_maps')),
+            Command('clouds', lambda: self.flip_option('clouds'), 'Cloud shadows', ('5',), option('clouds')),
+            Command('fx', lambda: self.flip_visible('weather'), 'Fog and rain/snow', ('6',), visible('weather')),
+            Command('walkable', self.flip_walkable, 'Walkable (local estimate)', ('7',), visible('walkable')),
+            Command('flow', lambda: self.flip_visible('flow'), 'River flow arrows', ('8',), visible('flow')),
+            Command('grid', lambda: self.flip_view('grid'), 'Grid', ('G',), view('grid')),
+            Command('border', lambda: self.flip_view('border'), 'Map border', ('B',), view('border')),
+            Command('animate', lambda: self.flip_view('animate'), 'Animate', checked=view('animate')),
+            Command('limits', self.flip_limits, 'Game object limits (1,200 trees, 2,000 shrubs)',
+                    checked=option('vegetation_limits')),
+            # Toolbar buttons and keys. Build, Test In-Game and Properties need
+            # no scene: they work while the first load is still running or after it failed.
+            Command('build', lambda: self.build.start(self.session.owner), keys=('Ctrl+B',), needs_scene=False),
+            Command('play', lambda: play(self.session.owner, self.status), needs_scene=False),
+            Command('properties', self.open_properties, needs_scene=False),
+            Command('reload', self.request_reload, keys=('F5',), needs_scene=False),
+            Command('back', self.back, keys=('Esc',), needs_scene=False),
+            Command('top', self.camera.toggle_top, keys=('T',)),
+            Command('reset', self.camera.reset, keys=('Space', 'Home')),
+            Command('shot', self.screenshot, keys=('P',)),
+            Command('help', lambda: print(__doc__), keys=('F1',)),
+            # Marks.
+            Command('delete', self.editor.delete_selected, keys=('Del', 'Backspace'), when=lambda: self.editor.marking),
+            Command('undo', self.editor.undo, keys=('Ctrl+Z',)),
+            Command('clear', self.editor.clear),
+            Command('copy', self.copy_for_agent))
+        return c
+
+    def flip_visible(self, name):
+        self.renderer.visible[name] = not self.renderer.visible[name]
+
+    def flip_walkable(self):
+        self.flip_visible('walkable')
+        self.walkability.request(self.renderer)
+
+    def flip_option(self, name):
+        """Normal maps or cloud shadows: switched on the scene, and kept for the next load."""
+        self.session.options[name] = not self.renderer.options[name]
+        self.renderer.set_option(name, self.session.options[name])
+
+    def flip_limits(self):
+        self.session.options['limits'] = not self.session.options['limits']
+        self.session.reload = True
+
+    def flip_view(self, name):
+        self.view[name] = not self.view[name]
+
+    def request_reload(self):
+        self.session.reload = True
+
+    def back(self):
+        """Esc steps back: close a menu, then the marking levels
+        (MarkEditor.escape); with nothing left to step back from it quits."""
+        if self.toolbar.open_menu:
+            self.toolbar.open_menu = None
+        elif self.renderer is None or not self.editor.escape():
+            glfw.set_window_should_close(self.window, True)
+        if self.renderer is not None and self.editor.drag is None and self.nav is None:
+            self.update_pointer(self.toolbar_target(self.cursor_pos()), self.cursor_pos())
+
+    # Toolbar and menus ------------------------------------------------------------
+    def menu_entries(self, menu):
+        o = self.session.options
         if menu == 'map':
-            owners.clear()
-            owners.update((p.map_file.resolve(), p) for p in project.projects())
-            current = state['requested']
+            self.session.refresh_owners()
+            current = self.session.requested
             own = [(str(p.map_file), p.title, p.map_file.resolve() == current)
-                   for p in owners.values() if p.map_file.exists()]
-            stock = sorted(((str(m), map_title(m), m == current) for m in game.stock_maps()),
+                   for p in self.session.owners.values() if p.map_file.exists()]
+            stock = sorted(((str(m), self.session.title(m), m == current) for m in game.stock_maps()),
                            key=lambda e: e[1].lower())
-            folder = [('folder', 'Open project folder', None)] if owners.get(state['source']) else []
+            folder = [('folder', 'Open project folder', None)] if self.session.owner else []
             return own + [(None, '', None)] + stock + [(None, '', None)] + folder + [('browse', 'Browse...', None)]
         if menu == 'lod':
-            return [(v, v.title(), state['lod'] == v) for v in ('low', 'medium', 'high')]
+            return [(v, v.title(), o['lod'] == v) for v in ('low', 'medium', 'high')]
         if menu == 'weather':
-            return [('map', "Map's own", state['weather'] == 'map'), (None, '', None)] + \
-                   [(v, v.title(), state['weather'] == v) for v in PRESETS]
+            return [('map', "Map's own", o['weather'] == 'map'), (None, '', None)] + \
+                   [(v, v.title(), o['weather'] == v) for v in PRESETS]
         if menu == 'fps':
             label = lambda v: dict(vsync='VSync (monitor rate)', unlimited='Unlimited').get(v, f'{v} fps')
-            return [(v, label(v), state['fps_limit'] == v) for v in FPS_LIMITS[:-2]] + [(None, '', None)] + \
-                   [(v, label(v), state['fps_limit'] == v) for v in FPS_LIMITS[-2:]]
+            return [(v, label(v), self.fps_limit == v) for v in FPS_LIMITS[:-2]] + [(None, '', None)] + \
+                   [(v, label(v), self.fps_limit == v) for v in FPS_LIMITS[-2:]]
         if menu == 'sun':
-            return [('own', "Weather's own", state['sun'] == 'own'), (None, '', None)] + \
-                   [(k, v['label'], state['sun'] == k) for k, v in SUNS.items()]
-        return [(None, '', None) if item is None else (item[0], item[1], bool(view_state(item[0])))
-                for item in view_items]
+            return [('own', "Weather's own", o['sun'] == 'own'), (None, '', None)] + \
+                   [(k, v['label'], o['sun'] == k) for k, v in SUNS.items()]
+        return self.commands.menu(VIEW_MENU, self.renderer is not None)
 
-    def browse_map():
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        path = filedialog.askopenfilename(title='Open a BFME2 map', initialdir=str(state['source'].parent.parent),
-                                          filetypes=[('BFME2 maps', '*.map'), ('All files', '*.*')])
-        root.destroy()
-        return Path(path) if path else None
-
-    def open_map(path):
-        state['requested'] = Path(path).resolve()
-        watched[:] = [state['requested'], state['requested'].parent/'map.ini']
-        state['signature'] = signature()
-        state['changed_at'] = None
-        state['reload'] = 'map'
-
-    def toolbar_state():
-        r = scene['renderer']
-        if state['loading'] and r is None:
+    def toolbar_state(self):
+        r, o = self.renderer, self.session.options
+        message = self.status.current()
+        if self.session.loading and r is None:
             status = ''
-        elif state['building']:
-            status = f'building: {state["build_line"]}'
-        elif time.perf_counter() < state['status_until']:
-            status = state['status']
+        elif self.build.running:
+            status = f'building: {self.build.line}'
+        elif message is not None:
+            status = message
         elif r is None:
             status = 'Choose a map to load'
         else:
-            if time.perf_counter() >= state['status_sample']:
-                c = camera.cur
-                state['focus_status'] = f'focus {c["x"]:.0f}, {c["y"]:.0f}   distance {c["distance"]:.0f}'
-                state['status_sample'] = time.perf_counter() + 0.15
-            status = state['focus_status']
-        weather = "Map's own" if state['weather'] == 'map' else state['weather'].title()
-        sun = "Weather's own" if state['sun'] == 'own' else SUNS[state['sun']]['label']
-        return dict(map=map_title(state['source']), lod=state['lod'].title(), weather=weather, sun=sun,
-                    marking=state['marking'], status=status,
-                    fps=f'{state["fps"]:.0f} fps' + ('' if state['fps_limit'] in ('vsync', 'unlimited')
-                                                     else f' / {state["fps_limit"]}'))
+            if time.perf_counter() >= self.focus_sample:
+                c = self.camera.cur
+                self.focus_text = f'focus {c["x"]:.0f}, {c["y"]:.0f}   distance {c["distance"]:.0f}'
+                self.focus_sample = time.perf_counter() + 0.15
+            status = self.focus_text
+        weather = "Map's own" if o['weather'] == 'map' else o['weather'].title()
+        sun = "Weather's own" if o['sun'] == 'own' else SUNS[o['sun']]['label']
+        return dict(map=self.session.title(), lod=o['lod'].title(), weather=weather, sun=sun,
+                    marking=self.editor.marking, status=status,
+                    fps=f'{self.fps:.0f} fps' + ('' if self.fps_limit in ('vsync', 'unlimited')
+                                                 else f' / {self.fps_limit}'))
 
-    def marks_bar_state():
-        count = len(scene['marks'].items)
-        hint = hints[state['tool']]
-        if state['selected'] is not None:
-            mark = scene['marks'].get(state['selected'])
-            resize = dict(circle=', handles resize', rect=', square handles resize, the round one rotates')
-            hint = (f'mark {state["selected"]} selected: drag to move{resize.get(mark and mark["kind"], "")}, '
-                    'Del deletes, Ctrl+Z undoes')
-        return dict({f'tool_{key}': state['tool'] == key for key, _ in tools},
-                    hint=f'{hint}   |   {count} mark{"s" if count != 1 else ""}')
-
-    def scale():
-        ww = glfw.get_window_size(window)[0] or 1
-        return glfw.get_framebuffer_size(window)[0]/ww
-
-    def toolbar_target(pos):
-        k = scale()
-        target = toolbar.target_at(pos[0]*k, pos[1]*k)
-        if target is None and state['marking']:
-            target = mark_bar.target_at(pos[0]*k, pos[1]*k)
+    def toolbar_target(self, pos):
+        k = self.scale()
+        target = self.toolbar.target_at(pos[0]*k, pos[1]*k)
+        if target is None and self.editor.marking:
+            target = self.mark_bar.target_at(pos[0]*k, pos[1]*k)
         return target
 
-    def toggle_top():
-        if state['top'] is None:
-            state['top'] = (camera.goal['elevation'], camera.goal['heading'])
-            camera.goal['elevation'], camera.goal['heading'] = 89.5, round(camera.goal['heading']/360)*360
-        else:
-            camera.goal['elevation'] = state['top'][0]
-            state['top'] = None
-
-    def toolbar_click(target):
+    def toolbar_click(self, target):
         """Act on a toolbar click; an error shows in the status bar (and the
         terminal) instead of closing the viewer."""
         try:
-            handle_click(target)
+            self.handle_click(target)
         except Exception as error:
             import traceback
             traceback.print_exc()
-            set_status(f'{target[1] if isinstance(target, tuple) else target} failed: {error}', 10)
+            self.status.set(f'{target[1] if isinstance(target, tuple) else target} failed: {error}', 10)
 
-    def handle_click(target):
+    def handle_click(self, target):
+        toolbar = self.toolbar
         if target == 'menu':
             return
         if target in ('bar', 'panel'):
@@ -408,925 +356,390 @@ def main(argv=None):
         kind = target[0]
         if kind == 'menu_scroll':
             toolbar.scroll_menu(target[2]*5)
-            return
-        if kind == 'dropdown':
+        elif kind == 'dropdown':
             menu = target[1]
             if toolbar.open_menu and toolbar.open_menu[0] == menu:
                 toolbar.open_menu = None
             else:
-                toolbar.open_menu = (menu, menu_entries(menu))
-            return
-        if kind == 'menu':
-            _, menu, value = target
-            if menu == 'view':
-                # The View menu stays open so several layers can be switched.
-                toggle(value)
-                toolbar.open_menu = (menu, menu_entries(menu))
-                return
+                toolbar.open_menu = (menu, self.menu_entries(menu))
+        elif kind == 'menu':
+            self.choose(target[1], target[2])
+        else:
             toolbar.open_menu = None
-            if menu == 'fps':
-                state['fps_limit'] = value
-                glfw.swap_interval(1 if value == 'vsync' else 0)
-                state['next_frame'] = 0.0
-                set_status(f'frame rate: {value}', 2)
+            if kind == 'toggle' and target[1] == 'marking':
+                self.editor.toggle_marking()
+            elif kind == 'toggle':
+                self.editor.set_tool(target[1][len('tool_'):])
+            elif kind == 'button':
+                self.commands.run(target[1], self.renderer is not None)
+
+    def choose(self, menu, value):
+        """A menu entry was clicked."""
+        if menu == 'view':
+            # The View menu stays open so several layers can be switched.
+            self.commands.run(value, self.renderer is not None)
+            self.toolbar.open_menu = (menu, self.menu_entries(menu))
+            return
+        self.toolbar.open_menu = None
+        if menu == 'fps':
+            self.fps_limit = value
+            glfw.swap_interval(1 if value == 'vsync' else 0)
+            self.next_frame = 0.0
+            self.status.set(f'frame rate: {value}', 2)
+        elif menu == 'map':
+            if value == 'folder':
+                # The menu may have been opened for the map shown before.
+                owner = self.session.owner
+                if owner is None:
+                    self.status.set('this map is not a project: it has no project folder', 4)
+                else:
+                    import os
+                    os.startfile(owner.folder)
                 return
-            if menu == 'map':
-                if value == 'folder':
-                    # The menu may have been opened for the map shown before.
-                    owner = owners.get(state['source'])
-                    if owner is None:
-                        set_status('this map is not a project: it has no project folder', 4)
-                    else:
-                        import os
-                        os.startfile(owner.folder)
-                    return
-                path = browse_map() if value == 'browse' else Path(value)
-                if path:
-                    open_map(path)
-            elif state[menu] != value:
-                state[menu] = value
-                if menu == 'lod':
-                    state['normal_maps'] = None
-                state['reload'] = 'options'
-            return
-        toolbar.open_menu = None
-        if kind == 'toggle':
-            name = target[1]
-            if name == 'marking':
-                state['marking'] = not state['marking']
-                state['tool'] = state['drawing'] = state['selected'] = state['hovered'] = None
-            elif name.startswith('tool_'):
-                state['tool'] = None if state['tool'] == name[5:] else name[5:]
-                state['drawing'] = state['selected'] = None
-            return
-        if kind == 'button':
-            action = target[1]
-            # Build and Test In-Game need no scene: they work while the first load
-            # is still running or after it failed.
-            if action == 'build':
-                start_build()
-            elif action == 'play':
-                play()
-            elif action == 'properties':
-                open_properties()
-            elif scene['renderer'] is None:
-                return
-            elif action == 'delete':
-                delete_selected()
-            elif action == 'clear':
-                scene['marks'].clear()
-                state['selected'] = state['hovered'] = None
-                set_status('all marks cleared - Ctrl+Z brings them back', 5)
-            elif action == 'top':
-                toggle_top()
-            elif action == 'reset':
-                camera.reset()
-            elif action == 'copy':
-                copy_for_agent()
-            elif action == 'shot':
-                screenshot()
+            path = self.browse_map() if value == 'browse' else Path(value)
+            if path:
+                self.session.open_map(path)
+        elif self.session.options[menu] != value:
+            self.session.options[menu] = value
+            if menu == 'lod':
+                self.session.options['normal_maps'] = None
+            self.session.reload = True
 
-    def start_build():
-        owner = owners.get(state['source'])
-        if owner is None:
-            set_status("a game map: nothing to build (start your own with `mw new`)", 5)
-            return
-        if state['building']:
-            # The build toast is up; say why nothing new starts.
-            set_status('already building - the build will reload the map', 4)
-            return
-        state['building'], state['build_line'] = True, 'Starting'
-        state['build_started'], state['build_title'] = time.perf_counter(), f'Building {owner.title}'
-        lines = []
+    def browse_map(self):
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        path = filedialog.askopenfilename(title='Open a BFME2 map', initialdir=str(self.session.source.parent.parent),
+                                          filetypes=[('BFME2 maps', '*.map'), ('All files', '*.*')])
+        root.destroy()
+        return Path(path) if path else None
 
-        def on_line(line):
-            lines.append(line)
-            if line.strip():
-                state['build_line'] = line.strip()[:100]
-
-        def work():
-            code = project.run(owner, on_line=on_line)
-            state['building'] = False
-            seconds = time.perf_counter()-state['build_started']
-            if code:
-                print('\n'.join(lines[-40:]))
-                error = next((l.strip() for l in reversed(lines) if l.strip()), 'see the terminal')
-                set_status(f'build failed: {error[:120]}', 15)
-                state['toast'] = dict(kind='failed', title=f'{owner.title}: build failed', detail=error,
-                                      until=time.perf_counter()+15.0)
-            else:
-                # The reload that follows replaces this with its own toast.
-                state['toast'] = dict(kind='done', title=f'Built {owner.title}', detail=f'Done in {seconds:.0f} s',
-                                      until=time.perf_counter()+3.0)
-                # The build ends with what it changed since the previous build (mapkit.mapdiff).
-                start = next((i for i, l in enumerate(lines) if l.startswith('Changes since')), len(lines))
-                changes = [l.strip() for l in lines[start + 1:] if l.strip()]
-                if changes:
-                    print('\n'.join(lines[start:]))
-                set_status('built - reloading' + (f': {changes[0][:110]}' if changes else '...'), 6 if changes else 3)
-        threading.Thread(target=work, daemon=True).start()
-
-    def open_properties():
+    def open_properties(self):
         """The Properties window (viewer.properties) for the map shown: editable
         for a project, read-only for a game map. Saving rebuilds the project."""
+        from mapworkshop.render.assets import GameAssets
         from mapworkshop.viewer.properties import PropertiesDialog
-        dialog = state.get('properties')
-        if dialog is not None and dialog.is_open:
-            dialog.lift()
+        if self.properties is not None and self.properties.is_open:
+            self.properties.lift()
             return
-        r = scene['renderer']
+        r = self.renderer
         assets = r.assets if r is not None else GameAssets()
         ini_texts = dict(Weather=assets.ini_text('weather.ini'), WaterTransparency=assets.ini_text('water.ini'))
 
         def saved(updated):
-            state['properties_saved'] = updated
-        state['properties'] = PropertiesDialog(state['source'], owners.get(state['source']), ini_texts, saved)
-        state['properties'].open()
+            self.properties_saved = updated
+        self.properties = PropertiesDialog(self.session.source, self.session.owner, ini_texts, saved)
+        self.properties.open()
 
-    def play():
-        """Test In-Game: BFME2 straight in a skirmish on the current project
-        (native.play), or, when that cannot run (no BFME2 1.06) or for a game
-        map, the normal game at its menu."""
-        owner = owners.get(state['source'])
-
-        def normal_game(note=''):
-            if owner:
-                game.install(owner.build_dir, owner.native_name)
-            game.launch()
-            set_status(note + (f'{owner.title} installed in the game\'s maps; ' if owner else '') + 'starting BFME2...', 10)
-
-        def work():
-            try:
-                from mapworkshop import native
-                try:
-                    native.ready(progress=lambda line: set_status(line[:140], 600))
-                except RuntimeError as error:
-                    normal_game(f'{error}: ')
-                    return
-                # Each step holds the status until the next: the game says
-                # when the skirmish is playable and when it has closed.
-                process, seconds = native.play(owner, progress=lambda line: set_status(line[:140], 600))
-                set_status(f'{owner.title} is playable in BFME2 ({seconds:.0f} s to start)', 600)
-                native.watch(process)
-                set_status(f'the test game on {owner.title} has closed', 8)
-            except Exception as error:
-                set_status(str(error)[:140], 15)
-
-        try:
-            if owner is None:
-                normal_game()
-            else:
-                set_status(f'installing {owner.title} for a test game...', 10)
-                threading.Thread(target=work, daemon=True).start()
-        except Exception as error:
-            set_status(str(error)[:140], 10)
-
-    def marks_result():
-        data = json.loads(scene['marks'].path.read_text(encoding='utf-8'))
-        r = scene['renderer']
-        return marklib.describe(data, assets=r.assets, m=r.map, terrain=r.terrain)
-
-    def copy_for_agent():
-        if not scene['marks'].items:
-            set_status('no marks to copy: draw some first', 4)
+    def copy_for_agent(self):
+        marks = self.session.marks
+        if not marks.items:
+            self.status.set('no marks to copy: draw some first', 4)
             return
         try:
-            text = marklib.agent_text(marks_result())
+            r = self.renderer
+            data = json.loads(marks.path.read_text(encoding='utf-8'))
+            text = marklib.agent_text(marklib.describe(data, assets=r.assets, m=r.map, terrain=r.terrain))
         except Exception as error:
-            set_status(f'could not read the marks: {error}'[:140], 8)
+            self.status.set(f'could not read the marks: {error}'[:140], 8)
             return
-        glfw.set_clipboard_string(window, text)
-        set_status(f'copied {len(scene["marks"].items)} marks for an agent - paste them into your request', 6)
+        glfw.set_clipboard_string(self.window, text)
+        self.status.set(f'copied {len(marks.items)} marks for an agent - paste them into your request', 6)
 
-    def marks_key():
-        return (id(scene['renderer']), str(scene['marks'].path), json.dumps([{k: v for k, v in m.items() if not k.startswith('_')}
-                                                     for m in scene['marks'].items]))
-
-    def update_summary():
-        """Describe the marks in the background whenever they change."""
-        key = marks_key()
-        if key == state['summary_key'] or state['summary_busy'] or not scene['marks'].items:
-            return
-        state['summary_busy'] = True
-        r = scene['renderer']
-        data = json.loads(json.dumps(dict(map_path=str(state['source']), map=state['source'].stem,
-                                         marks=[{k: v for k, v in mark.items() if not k.startswith('_')}
-                                                for mark in scene['marks'].items])))
-        assets, m, terrain = r.assets, r.map, r.terrain
-
-        def work():
-            try:
-                state['summary'] = (key, marklib.describe(data, assets=assets, m=m, terrain=terrain))
-            except Exception as error:
-                print('Marks summary failed:', error)
-            finally:
-                state['summary_key'], state['summary_busy'] = key, False
-        threading.Thread(target=work, daemon=True).start()
-
-    def summary_lines():
-        lines = []
-        result = state['summary'][1] if state['summary'] and state['summary'][0] == marks_key() else None
-        for mark in scene['marks'].items:
-            entry = next((m for m in result['marks'] if m['id'] == mark['id']), None) if result else None
-            if entry is None:
-                lines.append((f'#{mark["id"]} {mark["kind"]}', 'head'))
-                lines.append(('reading...', 'muted'))
-                continue
-            x, y, _ = entry['center']
-            lines.append((f'#{mark["id"]} {mark["kind"]} at {x:.0f}, {y:.0f}', 'head'))
-            names = [o['template'] for o in entry['objects']]
-            if names:
-                lines.append(('objects: ' + ', '.join(names), 'body'))
-            if entry['vegetation']:
-                total = sum(entry['vegetation'].values())
-                lines.append((f'vegetation: {total} (' + ', '.join(
-                    f'{n} {t}' for t, n in sorted(entry['vegetation'].items(), key=lambda kv: -kv[1])) + ')', 'muted'))
-            if not names and not entry['vegetation']:
-                lines.append(('no objects', 'muted'))
-        if len(lines) > 17:
-            # Keep the newest marks, which are the ones being worked on.
-            hidden = len(lines)-16
-            lines = [(f'{hidden} earlier lines not shown', 'muted')] + lines[-16:]
-        return lines + [('Copy for agent puts all of it on the clipboard.', 'muted')]
-
-    def delete_selected():
-        if state['selected'] is None:
-            set_status('nothing selected: click a mark first', 3)
-            return
-        scene['marks'].remove(state['selected'])
-        set_status(f'mark {state["selected"]} deleted - Ctrl+Z brings it back', 4)
-        state['selected'] = state['hovered'] = None
-
-    def undo_marks():
-        state['drawing'] = state['drag'] = None
-        if not scene['marks'].undo():
-            set_status('nothing to undo', 2)
-            return
-        if not scene['marks'].get(state['selected']):
-            state['selected'] = None
-        state['hovered'] = None
-        set_status('mark change undone', 2)
-
-    def ground_hit(pos, z=None):
-        """Map point under the cursor: the terrain, or the plane at height z."""
-        hit = camera.pick(pos, window_size())
-        if hit is None and z is not None:
-            hit = camera.plane_hit(pos, window_size(), z)
-        return hit
-
-    def toggle(name):
-        """Flip a View menu layer or option (the renderer's or the viewer's)."""
-        r = scene['renderer']
-        if r is None:
-            return
-        if name in ('objects', 'water', 'shadows', 'flow'):
-            r.visible[name] = not r.visible[name]
-        elif name == 'walkable':
-            r.visible['walkable'] = not r.visible['walkable']
-            request_walkability()
-        elif name == 'fx':
-            r.visible['weather'] = not r.visible['weather']
-        elif name in ('normal_maps', 'clouds'):
-            state[name] = not r.options[name]
-            r.set_option(name, state[name])
-        elif name == 'limits':
-            state['limits'] = not state['limits']
-            state['reload'] = 'options'
-        else:
-            state[name] = not state[name]
-
-    def signature():
-        result = []
-        for path in watched:
-            try:
-                info = path.stat()
-                result.append((info.st_mtime_ns, info.st_size))
-            except OSError:
-                result.append(None)
-        return tuple(result)
-
-    state['signature'] = signature()
-
-    def start_load():
-        if state['request']:
-            state['request'].cancelled.set()
-        if state['upload']:
-            state['upload'].close()
-            state['upload'] = None
-        source = state['requested']
-        options = dict(lod=state['lod'], weather=state['weather'], sun=state['sun'],
-                       vegetation_limits=state['limits'], normal_maps=state['normal_maps'], clouds=state['clouds'])
-        state['load_signature'] = signature()
-        state['load_started'] = time.perf_counter()
-        state['loading'] = True
-        state['load_title'] = load_title(source)
-        state['toast'] = None
-
-        def prepare(request):
-            if not base_assets:
-                request.report(0.0, 'Indexing game assets')
-                base_assets.append(GameAssets())
-            request.report(0.08, 'Reading map')
-            return MapRenderer.prepare(source, assets=base_assets[0], shared=cpu_shared,
-                                       progress=request.report, **options)
-        state['request'] = loader.submit(prepare)
-
-    def load_title(source):
-        """What the loading toast calls this load: the map, or the settings
-        that changed on it."""
-        r = scene['renderer']
-        if r is None or source != state['source']:
-            return map_title(source)
-        changed = []
-        if state['lod'] != r.options['lod']:
-            changed.append(f'Detail {state["lod"].title()}')
-        if state['weather'] != (r.weather_preset or 'map'):
-            changed.append('Weather')
-        if state['sun'] != (r.sun or 'own'):
-            changed.append('Sun')
-        if state['limits'] != r.options['vegetation_limits']:
-            changed.append('Object limits')
-        return 'Applying ' + ', '.join(changed) if changed else f'Reloading {map_title(source)}'
-
-    def toast_shown():
-        """Whether the loading toast is up: the load has run long enough not
-        to flash."""
-        return state['loading'] and time.perf_counter()-state['load_started'] >= TOAST_DELAY
-
-    def request_walkability():
-        if state['walk_request']:
-            state['walk_request'][1].cancelled.set()
-            state['walk_request'] = None
-        r = scene['renderer']
-        if r is None or not r.visible['walkable'] or hasattr(r, '_walk'):
-            return
-        calculate = r.walkability_task()
-        request = walk_loader.submit(lambda request: calculate())
-        state['walk_request'] = r, request
-        set_status('Computing walkability...', 60)
-
-    def advance_load():
-        request = state['request']
-        if request is None or not request.done.is_set():
-            return
-        try:
-            if request.error:
-                raise request.error
-            if request.cancelled.is_set():
-                return
-            if state['upload'] is None:
-                state['upload'] = Upload(request.take(), ctx, shared)
-            if not state['upload'].advance():
-                return
-            new = state['upload'].renderer
-            state['upload'] = None
-            # Do not install an obsolete snapshot if a writer changed files
-            # while the worker or GPU upload was in progress.
-            if signature() != state['load_signature']:
-                state['reload'] = True
-                state['request'] = None
-                return
-            old = scene['renderer']
-            shown = toast_shown()
-            new.defer_walkability = True
-            if old:
-                new.visible.update(old.visible)
-            if state['normal_maps'] is not None:
-                new.set_option('normal_maps', state['normal_maps'])
-            new.set_option('clouds', state['clouds'])
-            changed_map = state['source'] != state['requested']
-            marks = Marks(state['requested']) if changed_map else scene['marks']
-            state['source'] = state['requested']
-            scene['renderer'] = new
-            if changed_map:
-                scene['marks'] = marks
-                state['selected'] = state['drawing'] = state['drag'] = None
-            for mark in scene['marks'].items:
-                mark.pop('_world', None)
-            state['summary_key'] = None
-            camera.surface, camera.playable = new.surface_at, new.playable
-            if changed_map or old is None:
-                camera.reset()
-                camera.snap()
-            owner = owners.get(state['source'])
-            if owner:
-                try:
-                    project.remember(owner)
-                except OSError as error:
-                    print('Could not remember last map:', error)
-            seconds = time.perf_counter()-state['load_started']
-            set_status(f'Loaded {map_title(state["source"])} ({seconds:.1f} s)', 5)
-            if shown:
-                state['toast'] = dict(kind='done', title=state['load_title'], detail=f'Done in {seconds:.1f} s',
-                                      until=time.perf_counter()+1.6)
-            print(f'Loaded {state["source"].name} in {seconds:.2f} s')
-            request_walkability()
-        except Exception as error:
-            state['toast'] = dict(kind='failed', title=state['load_title'], detail=str(error),
-                                  until=time.perf_counter()+6.0)
-            if state['upload']:
-                state['upload'].close()
-                state['upload'] = None
-            state['requested'] = state['source']
-            watched[:] = [state['source'], state['source'].parent/'map.ini']
-            state['signature'] = signature()
-            active = scene['renderer']
-            if active:
-                state.update(lod=active.options['lod'], weather=active.weather_preset or 'map',
-                             sun=active.sun or 'own', limits=active.options['vegetation_limits'],
-                             normal_maps=active.options['normal_maps'], clouds=active.options['clouds'])
-            set_status(f'Load failed: {str(error)[:120]}', 15)
-            print('Load failed:', error)
-        state['loading'] = False
-        state['request'] = None
-
-    def advance_walkability():
-        pending = state['walk_request']
-        if not pending or not pending[1].done.is_set():
-            return
-        r, request = pending
-        state['walk_request'] = None
-        if request.cancelled.is_set() or r is not scene['renderer'] or not r.visible['walkable']:
-            return
-        if request.error:
-            r.visible['walkable'] = False
-            set_status(f'Walkability failed: {request.error}', 10)
-            return
-        r.install_walkability(request.take())
-        set_status(f'Walkability ready: {len(r.walkable["cut_off"])} cut-off areas', 5)
-
-    def draw_toast(size):
-        """The toast at the top left, below the toolbar rows: a load's
-        progress or a build's latest output line while they run, then
-        briefly how they ended."""
-        top = toolbar.height + (mark_bar.height if state['marking'] and scene['renderer'] is not None else 0)
-        now = time.perf_counter()
-        if toast_shown():
-            fraction, step = state['request'].progress if state['request'] else (0.0, 'Starting')
-            alpha = min(1.0, (now-state['load_started']-TOAST_DELAY)/0.15)
-            toolbar.draw_toast(size, scale(), top, state['load_title'], step, fraction, 'loading', alpha)
-        elif state['building']:
-            elapsed = now-state['build_started']
-            toolbar.draw_toast(size, scale(), top, f'{state["build_title"]}  ·  {elapsed:.0f} s', state['build_line'],
-                               None, 'loading', min(1.0, elapsed/0.15))
-        elif state['toast'] and now < state['toast']['until']:
-            toast = state['toast']
-            toolbar.draw_toast(size, scale(), top, toast['title'], toast['detail'], None, toast['kind'],
-                               min(1.0, (toast['until']-now)/0.4))
-
-    def set_status(text, seconds):
-        state['status'] = text
-        state['status_until'] = time.perf_counter()+seconds
-
-    def window_size():
-        return glfw.get_window_size(window)
-
-    def cursor_pos():
-        return glfw.get_cursor_pos(window)
-
-    def on_mouse_button(win, button, action, mods):
-        pos = cursor_pos()
-        if scene['renderer'] is None:
-            # The Map menu remains usable even before the first scene is ready.
-            target = toolbar_target(pos)
-            if action == glfw.PRESS and button == glfw.MOUSE_BUTTON_LEFT and target is not None:
-                toolbar_click(target)
-            return
-        if action == glfw.PRESS:
-            target = toolbar_target(pos)
-            if target is not None:
-                if button == glfw.MOUSE_BUTTON_LEFT:
-                    toolbar_click(target)
-                return
-            if toolbar.open_menu:
-                toolbar.open_menu = None
-                return
-            state['press'] = pos
-            if button == glfw.MOUSE_BUTTON_LEFT and state['marking']:
-                # A handle of the selected mark resizes it; with no tool a
-                # mark's tag, pin or outline (or the inside of the selected
-                # area) moves it; an armed tool draws; anything else navigates.
-                tool, k = state['tool'], scale()
-                at = (pos[0]*k, pos[1]*k)
-                handle = overlay.handle_at(at, k)
-                mark = scene['marks'].get(state['selected'])
-                if handle == 'rotate' and mark:
-                    hit = ground_hit(pos)
-                    if hit is not None:
-                        c = marklib.center(mark)
-                        start = (mark.get('angle', 0.0), math.atan2(hit[1]-c[1], hit[0]-c[0]))
-                        state['drag'], state['edited'] = ('rotate', (c, start, float(hit[2]))), False
-                    return
-                if handle is not None and mark:
-                    hit = ground_hit(pos)
-                    z = float(hit[2]) if hit is not None else camera.cur['z']
-                    state['drag'], state['edited'] = ('resize', (marklib.handles(mark)[(handle+2) % 4], z)), False
-                    return
-                grab = overlay.grab_at(at, state['selected'], k) if tool is None else None
-                if grab is not None:
-                    state['selected'] = grab
-                    state['drag'], state['edited'] = ('move', ground_hit(pos)), False
-                    return
-                if tool is not None:
-                    hit = ground_hit(pos)
-                    if hit is None:
-                        return
-                    x, y = float(hit[0]), float(hit[1])
-                    if tool == 'pin':
-                        mark = scene['marks'].add('pin', [(x, y)])
-                        state['selected'] = mark['id']
-                        set_status(f'pin {mark["id"]} at ({x:.0f}, {y:.0f})', 3)
-                        return
-                    state['drawing'] = dict(kind=tool, points=[[x, y], [x, y]], radius=0.0, start=(x, y),
-                                            angle=screen_angle() if tool == 'rect' else 0.0)
-                    state['drag'] = ('draw', hit)
-                    return
-            if button == glfw.MOUSE_BUTTON_LEFT:
-                now = time.perf_counter()
-                if now-state['last_click'] < 0.3:
-                    hit = camera.pick(pos, window_size())
-                    if hit is not None:
-                        camera.goal['x'], camera.goal['y'] = float(hit[0]), float(hit[1])
-                        camera.goal['distance'] = max(MIN_DISTANCE, min(camera.goal['distance'], 1500.0))
-                    state['last_click'] = 0.0
-                    return
-                state['last_click'] = now
-                state['drag'] = ('orbit', pos)
-            elif button in (glfw.MOUSE_BUTTON_RIGHT, glfw.MOUSE_BUTTON_MIDDLE):
-                hit = camera.pick(pos, window_size())
-                anchor = hit if hit is not None else camera.plane_hit(pos, window_size(), camera.cur['z'])
-                state['drag'] = ('pan', anchor)
-        elif action == glfw.RELEASE:
-            drag, state['drag'] = state['drag'], None
-            if drag and drag[0] == 'draw' and state['drawing']:
-                finish_drawing()
-            elif drag and drag[0] in ('move', 'resize', 'rotate'):
-                if state['edited']:
-                    scene['marks'].save()
-            elif drag and drag[0] == 'orbit' and state['marking'] and state['tool'] is None:
-                # A click that did not orbit selects the mark under it.
-                press = state['press']
-                if press and math.hypot(pos[0]-press[0], pos[1]-press[1]) < 4:
-                    k = scale()
-                    state['selected'] = overlay.mark_at((pos[0]*k, pos[1]*k), k)
-            update_pointer(toolbar_target(pos), pos)
-
-    def finish_drawing():
-        d, state['drawing'] = state['drawing'], None
-        marks = scene['marks']
-        (x0, y0), (x1, y1) = d['points'][0], d['points'][-1]
-        if d['kind'] == 'circle' and d['radius'] >= 5:
-            mark = marks.add('circle', [d['points'][0]], radius=d['radius'])
-        elif d['kind'] == 'rect' and abs(x1-x0) >= 5 and abs(y1-y0) >= 5:
-            mark = marks.add('rect', d['points'], angle=d['angle'])
-        elif d['kind'] == 'freehand' and len(d['points']) >= 3:
-            mark = marks.add('freehand', d['points'][1:])
-        else:
-            return
-        state['selected'] = mark['id']
-        set_status(f'{mark["kind"]} {mark["id"]} added', 3)
-
-    cursors = {name: glfw.create_standard_cursor(shape) for name, shape in (
-        ('draw', glfw.CROSSHAIR_CURSOR), ('move', glfw.RESIZE_ALL_CURSOR), ('rotate', glfw.POINTING_HAND_CURSOR),
-        ('ew', glfw.RESIZE_EW_CURSOR), ('ns', glfw.RESIZE_NS_CURSOR),
-        ('nesw', glfw.RESIZE_NESW_CURSOR), ('nwse', glfw.RESIZE_NWSE_CURSOR))}
-
-    def screen_angle():
-        """The angle (radians, counter-clockwise) that lines a new rectangle up
-        with the screen; 0 within 10 degrees of the map axes."""
-        a = math.remainder(-math.radians(camera.cur['heading']), math.pi/2)
-        return 0.0 if abs(a) < math.radians(10) else a
-
-    def update_pointer(target, pos):
-        """Highlight the mark under the cursor and show with the cursor what
-        a press there does: draw, move a mark, resize or rotate it."""
-        hovered = cursor = None
-        if target is None and state['marking'] and scene['renderer'] is not None and not toolbar.open_menu:
-            k = scale()
-            at = (pos[0]*k, pos[1]*k)
-            handle = overlay.handle_at(at, k)
-            if handle is not None:
-                hovered, cursor = state['selected'], overlay.handle_direction(handle)
-            elif state['tool'] is not None:
-                cursor = 'draw'
-            else:
-                hovered = overlay.mark_at(at, k)
-                if overlay.grab_at(at, state['selected'], k) is not None:
-                    cursor = 'move'
-        state['hovered'] = hovered
-        if cursor != state.get('cursor'):
-            state['cursor'] = cursor
-            glfw.set_cursor(window, cursors.get(cursor))
-
-    def on_cursor(win, x, y):
-        drag = state['drag']
-        if drag is None:
-            target = toolbar_target((x, y))
-            toolbar.hover = mark_bar.hover = target if isinstance(target, tuple) else None
-            update_pointer(target, (x, y))
-            return
-        kind, anchor = drag
-        if kind == 'draw':
-            d = state['drawing']
-            hit = ground_hit((x, y), float(anchor[2]))
-            if d is None or hit is None:
-                return
-            px, py = float(hit[0]), float(hit[1])
-            if d['kind'] == 'circle':
-                cx, cy = d['points'][0]
-                d['radius'] = math.hypot(px-cx, py-cy)
-            elif d['kind'] == 'rect':
-                d['points'] = marklib.rect_points(d['start'], (px, py), d['angle'])
-            else:
-                lx, ly = d['points'][-1]
-                if math.hypot(px-lx, py-ly) >= max(6.0, camera.cur['distance']*0.006):
-                    d['points'].append([px, py])
-            return
-        if kind == 'move':
-            if anchor is None or state['selected'] is None:
-                return
-            hit = camera.plane_hit((x, y), window_size(), float(anchor[2]))
-            if hit is not None:
-                if not state['edited']:
-                    scene['marks'].checkpoint()
-                    state['edited'] = True
-                scene['marks'].move(state['selected'], float(hit[0]-anchor[0]), float(hit[1]-anchor[1]), save=False)
-                state['drag'] = ('move', hit)
-            return
-        if kind == 'resize':
-            fixed, z = anchor
-            hit = ground_hit((x, y), z)
-            if hit is not None and state['selected'] is not None:
-                if not state['edited']:
-                    scene['marks'].checkpoint()
-                    state['edited'] = True
-                scene['marks'].resize(state['selected'], fixed, float(hit[0]), float(hit[1]), save=False)
-            return
-        if kind == 'rotate':
-            c, (start, grip), z = anchor
-            hit = ground_hit((x, y), z)
-            if hit is not None and state['selected'] is not None:
-                if not state['edited']:
-                    scene['marks'].checkpoint()
-                    state['edited'] = True
-                angle = start + math.atan2(hit[1]-c[1], hit[0]-c[0]) - grip
-                if glfw.get_key(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS or \
-                        glfw.get_key(window, glfw.KEY_RIGHT_SHIFT) == glfw.PRESS:
-                    angle = round(angle/math.radians(15))*math.radians(15)
-                scene['marks'].rotate(state['selected'], angle, save=False)
-                set_status(f'turned {math.degrees(math.remainder(angle, 2*math.pi)):.0f} degrees'
-                           ' (Shift snaps to 15)', 2)
-            return
-        if kind == 'orbit':
-            dx, dy = x-anchor[0], y-anchor[1]
-            camera.goal['heading'] = (camera.goal['heading']+dx*ORBIT_DEGREES_PER_PIXEL)
-            camera.goal['elevation'] = min(89.5, max(5.0, camera.goal['elevation']+dy*ORBIT_DEGREES_PER_PIXEL))
-            state['drag'] = ('orbit', (x, y))
-        elif kind == 'pan' and anchor is not None:
-            # Keep the grabbed ground point under the cursor (1:1, unsmoothed).
-            hit = camera.plane_hit((x, y), window_size(), float(anchor[2]))
-            if hit is not None:
-                shift = anchor[:2]-hit[:2]
-                for key, value in zip(('x', 'y'), shift):
-                    camera.goal[key] += float(value)
-                    camera.cur[key] += float(value)
-
-    def on_scroll(win, dx, dy):
-        target = toolbar_target(cursor_pos())
-        if target is not None:
-            if target == 'menu' or (isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')):
-                toolbar.scroll_menu(-dy*3)
-            return
-        factor = 0.82**dy
-        old = camera.goal['distance']
-        new = min(MAX_DISTANCE, max(MIN_DISTANCE, old*factor))
-        hit = camera.pick(cursor_pos(), window_size())
-        if hit is not None:
-            # Zoom towards the point under the cursor.
-            k = 1-new/old
-            camera.goal['x'] += float((hit[0]-camera.goal['x'])*k)
-            camera.goal['y'] += float((hit[1]-camera.goal['y'])*k)
-        camera.goal['distance'] = new
-
-    def screenshot():
-        out_dir.mkdir(parents=True, exist_ok=True)
-        w, h = glfw.get_framebuffer_size(window)
-        cam = camera.matrices(w/h)
-        color = ctx.renderbuffer((w, h), 4, samples=args.samples)
-        depth = ctx.depth_renderbuffer((w, h), samples=args.samples)
+    def screenshot(self):
+        RENDERS.mkdir(parents=True, exist_ok=True)
+        ctx, samples = self.ctx, self.args.samples
+        w, h = glfw.get_framebuffer_size(self.window)
+        cam = self.camera.matrices(w/h)
+        color = ctx.renderbuffer((w, h), 4, samples=samples)
+        depth = ctx.depth_renderbuffer((w, h), samples=samples)
         fbo = ctx.framebuffer([color], depth)
         resolve = ctx.framebuffer([ctx.renderbuffer((w, h), 4)])
-        scene['renderer'].draw(cam, (w, h), fbo, grid=state['grid'], border=state['border'], shadow_radius=6000,
-                               time=state['time'])
+        self.renderer.draw(cam, (w, h), fbo, grid=self.view['grid'], border=self.view['border'], shadow_radius=6000,
+                           time=self.time)
         ctx.copy_framebuffer(resolve, fbo)
         pixels = np.flipud(np.frombuffer(resolve.read(components=4), np.uint8).reshape(h, w, 4))[..., :3]
         for item in (fbo, resolve, color, depth):
             item.release()
-        path = out_dir/f'{state["source"].stem}-{time.strftime("%Y%m%d-%H%M%S")}.png'
-        scene['renderer'].save(np.ascontiguousarray(pixels), path)
+        path = RENDERS/f'{self.session.source.stem}-{time.strftime("%Y%m%d-%H%M%S")}.png'
+        self.renderer.save(np.ascontiguousarray(pixels), path)
         print('Saved', path)
 
-    toggles = {glfw.KEY_1: 'objects', glfw.KEY_2: 'water', glfw.KEY_3: 'shadows', glfw.KEY_6: 'weather',
-               glfw.KEY_8: 'flow'}
-    options = {glfw.KEY_4: 'normal_maps', glfw.KEY_5: 'clouds'}
+    # The world, for MarkEditor ------------------------------------------------------
+    def ground_hit(self, pos, z=None):
+        """Map point under the cursor: the terrain, or the plane at height z."""
+        hit = self.camera.pick(pos, self.window_size())
+        if hit is None and z is not None:
+            hit = self.camera.plane_hit(pos, self.window_size(), z)
+        return hit
 
-    def on_key(win, key, scancode, action, mods):
+    def plane_hit(self, pos, z):
+        return self.camera.plane_hit(pos, self.window_size(), z)
+
+    def focus_z(self):
+        return self.camera.cur['z']
+
+    def focus_distance(self):
+        return self.camera.cur['distance']
+
+    def screen_angle(self):
+        return self.camera.screen_angle()
+
+    def shift_held(self):
+        return self.key_down(glfw.KEY_LEFT_SHIFT, glfw.KEY_RIGHT_SHIFT)
+
+    # Input ---------------------------------------------------------------------------
+    def scale(self):
+        """Framebuffer pixels per window pixel."""
+        ww = glfw.get_window_size(self.window)[0] or 1
+        return glfw.get_framebuffer_size(self.window)[0]/ww
+
+    def window_size(self):
+        return glfw.get_window_size(self.window)
+
+    def cursor_pos(self):
+        return glfw.get_cursor_pos(self.window)
+
+    def key_down(self, *keys):
+        return any(glfw.get_key(self.window, k) == glfw.PRESS for k in keys)
+
+    def on_mouse_button(self, win, button, action, mods):
+        pos = self.cursor_pos()
+        target = self.toolbar_target(pos)
+        if self.renderer is None:
+            # The Map menu remains usable even before the first scene is ready.
+            if action == glfw.PRESS and button == glfw.MOUSE_BUTTON_LEFT and target is not None:
+                self.toolbar_click(target)
+            return
+        if action == glfw.PRESS:
+            if target is not None:
+                if button == glfw.MOUSE_BUTTON_LEFT:
+                    self.toolbar_click(target)
+                return
+            if self.toolbar.open_menu:
+                self.toolbar.open_menu = None
+                return
+            self.press = pos
+            if button == glfw.MOUSE_BUTTON_LEFT:
+                k = self.scale()
+                if self.editor.press(pos, (pos[0]*k, pos[1]*k), k):
+                    return
+                now = time.perf_counter()
+                if now-self.last_click < DOUBLE_CLICK:
+                    hit = self.camera.pick(pos, self.window_size())
+                    if hit is not None:
+                        self.camera.fly_to(hit)
+                    self.last_click = 0.0
+                    return
+                self.last_click = now
+                self.nav = ('orbit', pos)
+            elif button in (glfw.MOUSE_BUTTON_RIGHT, glfw.MOUSE_BUTTON_MIDDLE):
+                hit = self.camera.pick(pos, self.window_size())
+                anchor = hit if hit is not None else self.camera.plane_hit(pos, self.window_size(), self.camera.cur['z'])
+                self.nav = ('pan', anchor)
+        elif action == glfw.RELEASE:
+            nav, self.nav = self.nav, None
+            self.editor.release()
+            press = self.press
+            if nav and nav[0] == 'orbit' and press and math.hypot(pos[0]-press[0], pos[1]-press[1]) < CLICK_PIXELS:
+                # A click that did not orbit selects the mark under it.
+                k = self.scale()
+                self.editor.click((pos[0]*k, pos[1]*k), k)
+            self.update_pointer(target, pos)
+
+    def update_pointer(self, target, pos):
+        """Show with the cursor what a press here does (MarkEditor.pointer)."""
+        k = self.scale()
+        active = target is None and self.renderer is not None and not self.toolbar.open_menu
+        cursor = self.editor.pointer((pos[0]*k, pos[1]*k), k, active)
+        if cursor != self.cursor:
+            self.cursor = cursor
+            glfw.set_cursor(self.window, self.cursors.get(cursor))
+
+    def on_cursor(self, win, x, y):
+        if self.editor.drag is not None:
+            self.editor.move((x, y))
+            return
+        if self.nav is None:
+            target = self.toolbar_target((x, y))
+            self.toolbar.hover = self.mark_bar.hover = target if isinstance(target, tuple) else None
+            self.update_pointer(target, (x, y))
+            return
+        kind, anchor = self.nav
+        if kind == 'orbit':
+            self.camera.orbit(x-anchor[0], y-anchor[1])
+            self.nav = ('orbit', (x, y))
+        elif kind == 'pan' and anchor is not None:
+            hit = self.camera.plane_hit((x, y), self.window_size(), float(anchor[2]))
+            if hit is not None:
+                self.camera.pan(anchor, hit)
+
+    def on_scroll(self, win, dx, dy):
+        target = self.toolbar_target(self.cursor_pos())
+        if target is not None:
+            if target == 'menu' or (isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')):
+                self.toolbar.scroll_menu(-dy*3)
+            return
+        self.camera.zoom(dy, self.camera.pick(self.cursor_pos(), self.window_size()))
+
+    def on_key(self, win, key, scancode, action, mods):
         if action != glfw.PRESS:
             return
-        if scene['renderer'] is None:
-            if key == glfw.KEY_ESCAPE and toolbar.open_menu:
-                toolbar.open_menu = None
-            elif key == glfw.KEY_ESCAPE:
-                glfw.set_window_should_close(window, True)
-            elif key == glfw.KEY_F5:
-                state['reload'] = True
-            elif key == glfw.KEY_B and mods & glfw.MOD_CONTROL:
-                start_build()
+        command = self.commands.for_key(key, bool(mods & glfw.MOD_CONTROL))
+        if command is not None:
+            self.commands.run(command, self.renderer is not None)
+
+    # The frame loop ------------------------------------------------------------------
+    def installed(self, event):
+        """A new scene is shown: fit the camera to it and start what depends on it."""
+        r = self.renderer
+        if event['changed_map']:
+            self.editor.reset()
+            self.editor.marks = self.session.marks
+        self.summary.invalidate()
+        self.camera.surface, self.camera.playable = r.surface_at, r.playable
+        if event['changed_map'] or event['first']:
+            self.camera.reset()
+            self.camera.snap()
+        self.walkability.request(r)
+
+    def drive(self, dt):
+        """Continuous keyboard movement, scaled by zoom level."""
+        down = self.key_down
+        ctrl = down(glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL)
+        speed = (3 if down(glfw.KEY_LEFT_SHIFT, glfw.KEY_RIGHT_SHIFT) else 1)*(0.3 if ctrl else 1)
+        self.camera.drive(dt, forward=down(glfw.KEY_W, glfw.KEY_UP)-down(glfw.KEY_S, glfw.KEY_DOWN),
+                          right=down(glfw.KEY_D, glfw.KEY_RIGHT)-down(glfw.KEY_A, glfw.KEY_LEFT),
+                          turn=down(glfw.KEY_E)-down(glfw.KEY_Q), tilt=down(glfw.KEY_R)-down(glfw.KEY_F),
+                          # Ctrl+Z undoes instead.
+                          zoom=0 if ctrl else down(glfw.KEY_X)-down(glfw.KEY_Z), speed=speed)
+
+    def draw(self, size):
+        fw, fh = size
+        r, k = self.renderer, self.scale()
+        cam = self.camera.matrices(fw/fh)
+        if r is not None:
+            r.draw(cam, size, self.ctx.screen, grid=self.view['grid'], border=self.view['border'],
+                   shadow_radius=4000.0, shadow_size=4096, time=self.time)
+            # Every frame, so picking never sees marks that are gone.
+            self.overlay.draw(self.session.marks.items, self.editor.drawing, self.editor.selected, cam,
+                              r.surface_at, size, k, self.editor.hovered)
+        else:
+            self.ctx.screen.use()
+            self.ctx.viewport = (0, 0, fw, fh)
+            self.ctx.clear(0.08, 0.09, 0.10)
+        toolbar = self.toolbar
+        if toolbar.open_menu and toolbar.open_menu[0] != 'map':
+            # Keep check marks current (keyboard toggles, a finished reload).
+            toolbar.open_menu = (toolbar.open_menu[0], self.menu_entries(toolbar.open_menu[0]))
+        toolbar.draw(size, k, self.toolbar_state())
+        toolbar.panel_rect = None
+        marks = self.session.marks
+        if self.editor.marking and r is not None:
+            self.mark_bar.draw(size, k, self.editor.bar_state())
+            if marks.items:
+                self.summary.update(r, marks, self.session.source)
+                toolbar.draw_panel(size, k, 'Marks', summary_lines(marks.items, self.summary.get(r, marks)),
+                                   toolbar.height + self.mark_bar.height)
+        self.draw_toast(size)
+        # Last, so the mark row, the panel and the loading toast never cover it.
+        toolbar.draw_menu(size, k)
+
+    def draw_toast(self, size):
+        """The toast at the top left, below the toolbar rows: a load's
+        progress or a build's latest output line while they run, then
+        briefly how they ended."""
+        session, build = self.session, self.build
+        top = self.toolbar.height + (self.mark_bar.height if self.editor.marking and self.renderer is not None else 0)
+        now = time.perf_counter()
+        if session.toast_shown(now):
+            fraction, step = session.request.progress if session.request else (0.0, 'Starting')
+            alpha = min(1.0, (now-session.load_started-TOAST_DELAY)/0.15)
+            self.toolbar.draw_toast(size, self.scale(), top, session.load_title, step, fraction, 'loading', alpha)
+        elif build.running:
+            elapsed = now-build.started
+            self.toolbar.draw_toast(size, self.scale(), top, f'{build.title}  ·  {elapsed:.0f} s', build.line,
+                                    None, 'loading', min(1.0, elapsed/0.15))
+        elif session.toast and now < session.toast['until']:
+            toast = session.toast
+            self.toolbar.draw_toast(size, self.scale(), top, toast['title'], toast['detail'], None, toast['kind'],
+                                    min(1.0, (toast['until']-now)/0.4))
+
+    def pace(self):
+        """Wait for the next frame under the frame rate cap."""
+        if self.fps_limit in ('vsync', 'unlimited'):
             return
-        if key == glfw.KEY_ESCAPE:
-            # Esc steps back: close a menu, cancel a drawing, drop the
-            # selection, put the tool away, leave the marking row; with
-            # nothing left to undo it quits.
-            if toolbar.open_menu:
-                toolbar.open_menu = None
-            elif state['drawing'] is not None:
-                state['drawing'] = None
-                state['drag'] = None
-            elif state['selected'] is not None:
-                state['selected'] = None
-            elif state['tool'] is not None:
-                state['tool'] = None
-            elif state['marking']:
-                state['marking'] = False
-            else:
-                glfw.set_window_should_close(window, True)
-            if state['drag'] is None:
-                update_pointer(toolbar_target(cursor_pos()), cursor_pos())
-        elif key in (glfw.KEY_DELETE, glfw.KEY_BACKSPACE) and state['marking']:
-            delete_selected()
-        elif key == glfw.KEY_Z and mods & glfw.MOD_CONTROL:
-            undo_marks()
-        elif key == glfw.KEY_7:
-            toggle('walkable')
-        elif key in toggles:
-            name = toggles[key]
-            scene['renderer'].visible[name] = not scene['renderer'].visible[name]
-        elif key in options:
-            name = options[key]
-            toggle(name)
-        elif key == glfw.KEY_F5:
-            state['reload'] = True
-        elif key == glfw.KEY_B and mods & glfw.MOD_CONTROL:
-            start_build()
-        elif key == glfw.KEY_G:
-            state['grid'] = not state['grid']
-        elif key == glfw.KEY_B:
-            state['border'] = not state['border']
-        elif key in (glfw.KEY_SPACE, glfw.KEY_HOME):
-            camera.reset()
-        elif key == glfw.KEY_T:
-            toggle_top()
-        elif key == glfw.KEY_P:
-            screenshot()
-        elif key == glfw.KEY_F1:
-            print(__doc__)
+        # Sleep most of the way to the next frame, then spin the last
+        # millisecond or two (sleep alone overshoots by up to a few ms).
+        period = 1.0/int(self.fps_limit)
+        target = self.next_frame + period
+        current = time.perf_counter()
+        if target < current - period:
+            target = current
+        if target - current > 0.002:
+            time.sleep(target - current - 0.0015)
+        while time.perf_counter() < target:
+            time.sleep(0)    # yield to background work (builds, the marks panel)
+        self.next_frame = target
 
-    glfw.set_mouse_button_callback(window, on_mouse_button)
-    glfw.set_cursor_pos_callback(window, on_cursor)
-    glfw.set_scroll_callback(window, on_scroll)
-    glfw.set_key_callback(window, on_key)
-
-    # CPU preparation and Pillow's UI text both use Python. A shorter
-    # timeslice prevents repeated 5 ms GIL waits while drawing toolbar text.
-    previous_switch_interval = sys.getswitchinterval()
-    sys.setswitchinterval(0.001)
-    try:
-        start_load()
+    def run(self):
+        session, window = self.session, self.window
+        session.start_load()
         previous = time.perf_counter()
         frames, fps_time = 0, previous
         started = previous
-        watch_time = previous
         while not glfw.window_should_close(window):
             glfw.poll_events()
             now = time.perf_counter()
-            # Watch for map changes; reload once the files stop changing (a
-            # writer may still be busy) or immediately on F5.
-            if now-watch_time > 0.25:
-                watch_time = now
-                current = signature()
-                if current != state['signature']:
-                    state['signature'] = current
-                    state['changed_at'] = now
-                    set_status('map changed - reloading...', 2)
-                elif state['changed_at'] is not None and now-state['changed_at'] > 0.5:
-                    state['changed_at'] = None
-                    state['reload'] = True
-            if state['reload']:
-                state['reload'] = False
-                start_load()
-            if state.get('properties_saved'):
+            session.poll(now)
+            if session.reload:
+                session.start_load()
+            if self.properties_saved:
                 # The Properties window wrote map.toml: rebuild with it.
-                updated = state.pop('properties_saved')
-                owners[updated.map_file.resolve()] = updated
-                set_status('map properties saved to map.toml - building', 4)
-                start_build()
-            advance_load()
-            advance_walkability()
+                updated, self.properties_saved = self.properties_saved, None
+                session.owners[updated.map_file.resolve()] = updated
+                self.status.set('map properties saved to map.toml - building', 4)
+                self.build.start(session.owner)
+            event = session.advance(self.ctx)
+            if event:
+                self.installed(event)
+            self.walkability.advance(self.renderer)
             now = time.perf_counter()
             dt = min(now-previous, 0.1)
             previous = now
-            # Continuous keyboard movement, scaled by zoom level.
-            pressed = lambda *keys: any(glfw.get_key(window, k) == glfw.PRESS for k in keys)
-            speed = camera.goal['distance']*1.1
-            if pressed(glfw.KEY_LEFT_SHIFT, glfw.KEY_RIGHT_SHIFT):
-                speed *= 3
-            if pressed(glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL):
-                speed *= 0.3
-            forward = (pressed(glfw.KEY_W, glfw.KEY_UP)-pressed(glfw.KEY_S, glfw.KEY_DOWN))
-            right = (pressed(glfw.KEY_D, glfw.KEY_RIGHT)-pressed(glfw.KEY_A, glfw.KEY_LEFT))
-            if forward or right:
-                h = math.radians(camera.goal['heading'])
-                camera.goal['x'] += (math.sin(h)*forward+math.cos(h)*right)*speed*dt
-                camera.goal['y'] += (math.cos(h)*forward-math.sin(h)*right)*speed*dt
-            camera.goal['heading'] += (pressed(glfw.KEY_E)-pressed(glfw.KEY_Q))*90*dt
-            camera.goal['elevation'] = min(89.5, max(5.0, camera.goal['elevation']+(pressed(glfw.KEY_R)-pressed(glfw.KEY_F))*60*dt))
-            if (pressed(glfw.KEY_Z) or pressed(glfw.KEY_X)) and not pressed(glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL):
-                camera.goal['distance'] = min(MAX_DISTANCE, max(MIN_DISTANCE,
-                    camera.goal['distance']*math.exp((pressed(glfw.KEY_X)-pressed(glfw.KEY_Z))*1.5*dt)))
-            w, h = camera.playable
-            camera.goal['x'] = min(w, max(0.0, camera.goal['x']))
-            camera.goal['y'] = min(h, max(0.0, camera.goal['y']))
-            camera.update(dt)
-            if state['animate']:
-                state['time'] += dt
-
+            self.drive(dt)
+            self.camera.update(dt)
+            if self.view['animate']:
+                self.time += dt
             fw, fh = glfw.get_framebuffer_size(window)
             if fw and fh:
-                cam = camera.matrices(fw/fh)
-                if scene['renderer'] is not None:
-                    scene['renderer'].draw(cam, (fw, fh), ctx.screen, grid=state['grid'], border=state['border'],
-                                           shadow_radius=4000.0, shadow_size=4096, time=state['time'])
-                else:
-                    ctx.screen.use()
-                    ctx.viewport = (0, 0, fw, fh)
-                    ctx.clear(0.08, 0.09, 0.10)
-                if scene['renderer'] is not None:
-                    # Every frame, so picking never sees marks that are gone.
-                    overlay.draw(scene['marks'].items, state['drawing'], state['selected'], cam,
-                                 scene['renderer'].surface_at, (fw, fh), scale(), state['hovered'])
-                if toolbar.open_menu and toolbar.open_menu[0] != 'map':
-                    # Keep check marks current (keyboard toggles, a finished reload).
-                    toolbar.open_menu = (toolbar.open_menu[0], menu_entries(toolbar.open_menu[0]))
-                toolbar.draw((fw, fh), scale(), toolbar_state())
-                toolbar.panel_rect = None
-                if state['marking'] and scene['renderer'] is not None:
-                    mark_bar.draw((fw, fh), scale(), marks_bar_state())
-                    if scene['marks'].items:
-                        update_summary()
-                        toolbar.draw_panel((fw, fh), scale(), 'Marks', summary_lines(),
-                                           toolbar.height + mark_bar.height)
-                draw_toast((fw, fh))
-                # Last, so the mark row, the panel and the loading toast never cover it.
-                toolbar.draw_menu((fw, fh), scale())
+                self.draw((fw, fh))
                 glfw.swap_buffers(window)
-            limit = state['fps_limit']
-            if limit not in ('vsync', 'unlimited'):
-                # Sleep most of the way to the next frame, then spin the last
-                # millisecond or two (sleep alone overshoots by up to a few ms).
-                period = 1.0/int(limit)
-                target = state['next_frame'] + period
-                current = time.perf_counter()
-                if target < current - period:
-                    target = current
-                if target - current > 0.002:
-                    time.sleep(target - current - 0.0015)
-                while time.perf_counter() < target:
-                    time.sleep(0)    # yield to background work (builds, the marks panel)
-                state['next_frame'] = target
+            self.pace()
             frames += 1
-            if args.exit_after and now-started > args.exit_after:
-                print(f'Smoke test: {state["fps"]:.0f} fps')
-                if args.snapshot and fw and fh:
+            if self.args.exit_after and now-started > self.args.exit_after:
+                print(f'Smoke test: {self.fps:.0f} fps')
+                if self.args.snapshot and fw and fh:
                     from PIL import Image
-                    pixels = np.frombuffer(ctx.screen.read(components=3), np.uint8).reshape(fh, fw, 3)
-                    Image.fromarray(np.flipud(pixels)).save(args.snapshot)
+                    pixels = np.frombuffer(self.ctx.screen.read(components=3), np.uint8).reshape(fh, fw, 3)
+                    Image.fromarray(np.flipud(pixels)).save(self.args.snapshot)
                 glfw.set_window_should_close(window, True)
             if now-fps_time > 0.5:
-                state['fps'] = frames/(now-fps_time)
+                self.fps = frames/(now-fps_time)
                 frames, fps_time = 0, now
-                c = camera.cur
-                status = f'{state["status"]}  |  ' if now < state['status_until'] else 'live  |  '
-                glfw.set_window_title(window, f'{state["source"].stem}  |  {status}{state["fps"]:.0f} fps  |  '
+                c = self.camera.cur
+                message = self.status.current(now)
+                status = f'{message}  |  ' if message is not None else 'live  |  '
+                o = session.options
+                glfw.set_window_title(window, f'{session.source.stem}  |  {status}{self.fps:.0f} fps  |  '
                                       f'heading {c["heading"] % 360:.0f}  elevation {c["elevation"]:.0f}  |  '
-                                      f'lod {state["lod"]}  weather {state["weather"]}  |  F1 controls')
-    finally:
-        loader.close()
-        walk_loader.close()
-        if state['upload']:
-            state['upload'].close()
-        glfw.terminate()
-        sys.setswitchinterval(previous_switch_interval)
-    return 0
+                                      f'lod {o["lod"]}  weather {o["weather"]}  |  F1 controls')
+
+    def close(self):
+        self.session.close()
+        self.walkability.close()
 
 
 if __name__ == '__main__':
