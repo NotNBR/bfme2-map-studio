@@ -1,0 +1,6 @@
+id = "bridge-battle"
+title = "Battle of the Sirannon Bridge"
+native_name = "map mp bridge battle"
+players = 6
+description = "Film set: the Hollin Dales with Gondor and Mordor armies drawn up at the bridge of Ost-in-Edhil, scripted to clash."
+weather = "haze"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
