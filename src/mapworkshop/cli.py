@@ -69,7 +69,9 @@ def parser():
     s = sub.add_parser('config', help='Show or change settings')
     s.add_argument('key', nargs='?')
     s.add_argument('value', nargs='?')
-    sub.add_parser('test', help='Run the tests and repository checks')
+    s = sub.add_parser('test', help='Run the tests and repository checks')
+    s.add_argument('--corpus', action='store_true', help='Also read and rewrite every stock map (needs the game data; slow)')
+    s.add_argument('-v', '--verbose', action='store_true', help='List every test')
     s = sub.add_parser('walkable', help='Estimate walking routes without starting the game')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
     s.add_argument('--native', action='store_true', help='Read the grid from the game first (starts it on the map; about 7 seconds)')
@@ -484,7 +486,7 @@ def _changed_since_build(p):
 
 def cmd_test(args, extra):
     from mapworkshop import selftest
-    return selftest.main(extra)
+    return selftest.main([*extra, *(['--corpus'] if args.corpus else []), *(['-v'] if args.verbose else [])])
 
 
 PASSTHROUGH = {'view': 'mapworkshop.viewer.app', 'marks': 'mapworkshop.viewer.marks',
