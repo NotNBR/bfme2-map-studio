@@ -59,7 +59,7 @@ class EditorTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
         self.overlay = Overlay()
-        self.editor = MarkEditor(self.overlay, World(), Status(), marking=True)
+        self.editor = MarkEditor(self.overlay, World(), Status())
         self.editor.marks = Marks('test.map')
 
     def drag(self, start, end):
@@ -69,9 +69,20 @@ class EditorTests(unittest.TestCase):
         e.release()
         return consumed
 
-    def test_presses_navigate_until_marking_is_on(self):
-        self.editor.toggle_marking()
-        self.assertFalse(self.editor.press((10, 10), (10, 10), 1.0))
+    def test_hidden_marks_leave_presses_to_navigation_until_a_tool_is_picked(self):
+        e = self.editor
+        e.toggle_visible()
+        self.assertFalse(e.press((10, 10), (10, 10), 1.0))
+        e.set_tool('pin')
+        self.assertTrue(e.visible)
+        self.assertTrue(e.press((10, 10), (10, 10), 1.0))
+
+    def test_navigate_puts_the_tool_away(self):
+        e = self.editor
+        e.set_tool('circle')
+        e.set_tool(None)
+        self.assertIsNone(e.tool)
+        self.assertEqual(e.hint(), None)
 
     def test_with_no_tool_a_press_beside_the_marks_navigates(self):
         self.assertFalse(self.editor.press((10, 10), (10, 10), 1.0))
@@ -125,9 +136,8 @@ class EditorTests(unittest.TestCase):
         e.selected = 7
         steps = []
         while e.escape():
-            steps.append((e.drawing is not None, e.selected, e.tool, e.marking))
-        self.assertEqual(steps, [(False, 7, 'circle', True), (False, None, 'circle', True),
-                                 (False, None, None, True), (False, None, None, False)])
+            steps.append((e.drawing is not None, e.selected, e.tool))
+        self.assertEqual(steps, [(False, 7, 'circle'), (False, None, 'circle'), (False, None, None)])
 
     def test_delete_needs_a_selection_and_undo_brings_the_mark_back(self):
         e = self.editor

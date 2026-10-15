@@ -214,6 +214,7 @@ class MarkOverlay:
         to_ndc = lambda x, y: (2*x/size[0] - 1, 1 - 2*y/size[1])
         a, b = to_ndc(x0, y0 + h), to_ndc(x0 + w, y0)
         self.blit['rect'].value = (a[0], a[1], b[0], b[1])
+        self.blit['alpha'].value = 1.0      # the toolbar's shader fades toasts with it; 0 when unset
         texture.use(0)
         self.blit['tex'].value = 0
         self.blit_vao.render(self.mgl.TRIANGLE_STRIP)

@@ -39,6 +39,7 @@ class Build:
         self.line = ''            # the build's latest output line, for the status text and the toast
         self.started = 0.0
         self.title = ''           # the toast's title while it runs
+        self.outcome = None       # the last build: (succeeded, seconds, time.time() it ended)
 
     def start(self, owner):
         from mapworkshop import project
@@ -60,8 +61,9 @@ class Build:
 
         def work():
             code = project.run(owner, on_line=on_line)
-            self.running = False
             seconds = time.perf_counter()-self.started
+            self.outcome = (not code, seconds, time.time())
+            self.running = False
             if code:
                 print('\n'.join(lines[-40:]))
                 error = next((l.strip() for l in reversed(lines) if l.strip()), 'see the terminal')

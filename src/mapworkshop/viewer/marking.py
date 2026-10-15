@@ -1,4 +1,4 @@
-"""Editing marks in the viewer: the Mark row's tools, selecting a mark and
+"""Editing marks in the viewer: the palette's tools, selecting a mark and
 moving, resizing or rotating it, deleting and undoing, and Esc stepping
 back.
 
@@ -17,9 +17,7 @@ import math
 
 from mapworkshop.viewer import marks as marklib
 
-TOOLS = (('pin', 'Pin'), ('circle', 'Circle'), ('rect', 'Rectangle'), ('freehand', 'Freehand'))
-HINTS = {None: 'pick a tool to draw; click a mark to select it',
-         'pin': 'click the terrain to drop pins - Esc when done',
+HINTS = {'pin': 'click the terrain to drop pins - Esc when done',
          'circle': 'drag from the centre outwards - Esc when done',
          'rect': 'drag from corner to corner, lined up with the screen - Esc when done',
          'freehand': 'hold the left button and draw - Esc when done'}
@@ -29,13 +27,14 @@ CLICK_PIXELS = 4          # a press and release closer than this is a click, not
 class MarkEditor:
     """The marking state. `marks` is the shown map's Marks; set it when the
     map changes. A tool stays armed until Esc or a second click on it; with
-    none, the mouse navigates and selects marks."""
+    none, the mouse navigates and selects marks. While the marks are hidden
+    (View > Marks) the mouse only navigates."""
 
-    def __init__(self, overlay, world, status, marking=False):
+    def __init__(self, overlay, world, status):
         self.overlay, self.world, self.status = overlay, world, status
         self.marks = None
-        self.marking = marking    # the Mark row is shown
-        self.tool = None          # the armed tool: a TOOLS key, or None
+        self.visible = True       # the marks are drawn and can be edited
+        self.tool = None          # the armed tool: 'pin', 'circle', 'rect' or 'freehand', or None
         self.selected = None      # mark ids
         self.hovered = None
         self.drawing = None       # the mark being drawn: dict(kind, points, radius, start, angle)
@@ -43,14 +42,18 @@ class MarkEditor:
         self.edited = False       # the drag has changed the mark (and set an undo checkpoint)
 
     # Modes ------------------------------------------------------------------
-    def toggle_marking(self):
-        self.marking = not self.marking
-        self.tool = self.drawing = self.selected = self.hovered = None
+    def toggle_visible(self):
+        """Show or hide the marks; hiding them also puts the tool away."""
+        self.visible = not self.visible
+        self.tool = self.drawing = self.selected = self.hovered = self.drag = None
 
     def set_tool(self, key):
-        """Arm a tool; the armed one again puts it away."""
+        """Arm a tool (None: navigate); the armed one again puts it away.
+        Arming one shows hidden marks."""
         self.tool = None if self.tool == key else key
         self.drawing = self.selected = None
+        if self.tool is not None:
+            self.visible = True
 
     def reset(self):
         """Forget the selection and any drawing: another map is shown."""
@@ -58,16 +61,13 @@ class MarkEditor:
 
     def escape(self):
         """Step back one level: cancel a drawing, drop the selection, put the
-        tool away, close the Mark row. False when there was nothing to step
-        back from."""
+        tool away. False when there was nothing to step back from."""
         if self.drawing is not None:
             self.drawing = self.drag = None
         elif self.selected is not None:
             self.selected = None
         elif self.tool is not None:
             self.tool = None
-        elif self.marking:
-            self.marking = False
         else:
             return False
         return True
@@ -81,7 +81,7 @@ class MarkEditor:
         A handle of the selected mark resizes or rotates it; with no tool a
         mark's tag, pin or outline (or the inside of the selected area) moves
         it; an armed tool draws."""
-        if not self.marking:
+        if not self.visible:
             return False
         handle = self.overlay.handle_at(at, k)
         mark = self.marks.get(self.selected)
@@ -186,7 +186,7 @@ class MarkEditor:
 
     def click(self, at, k):
         """A click that did not orbit: select the mark under it."""
-        if self.marking and self.tool is None:
+        if self.visible and self.tool is None:
             self.selected = self.overlay.mark_at(at, k)
 
     def pointer(self, at, k, active):
@@ -195,7 +195,7 @@ class MarkEditor:
         'rotate', or None. `active`: the cursor is over the scene, not a
         toolbar or menu."""
         hovered = cursor = None
-        if active and self.marking:
+        if active and self.visible:
             handle = self.overlay.handle_at(at, k)
             if handle is not None:
                 hovered, cursor = self.selected, self.overlay.handle_direction(handle)
@@ -246,18 +246,15 @@ class MarkEditor:
         self.hovered = None
         self.status.set('mark change undone', 2)
 
-    # The Mark row and the marks panel --------------------------------------------
-    def bar_state(self):
-        """The Mark row's toggles and its hint text."""
-        count = len(self.marks.items)
-        hint = HINTS[self.tool]
+    def hint(self):
+        """What the mouse does now, for the status text: with a tool armed or
+        a mark selected; else None."""
         if self.selected is not None:
             mark = self.marks.get(self.selected)
             resize = dict(circle=', handles resize', rect=', square handles resize, the round one rotates')
-            hint = (f'mark {self.selected} selected: drag to move{resize.get(mark and mark["kind"], "")}, '
+            return (f'mark {self.selected} selected: drag to move{resize.get(mark and mark["kind"], "")}, '
                     'Del deletes, Ctrl+Z undoes')
-        return dict({f'tool_{key}': self.tool == key for key, _ in TOOLS},
-                    hint=f'{hint}   |   {count} mark{"s" if count != 1 else ""}')
+        return HINTS.get(self.tool) if self.tool else None
 
 
 def summary_lines(items, result):
@@ -286,4 +283,4 @@ def summary_lines(items, result):
         # Keep the newest marks, which are the ones being worked on.
         hidden = len(lines)-16
         lines = [(f'{hidden} earlier lines not shown', 'muted')] + lines[-16:]
-    return lines + [('Copy for agent puts all of it on the clipboard.', 'muted')]
+    return lines + [("Copy for agent (the palette's last button) puts all of it on the clipboard.", 'muted')]

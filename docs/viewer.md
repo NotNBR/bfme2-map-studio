@@ -24,6 +24,7 @@ The controls are those of a 3D editor, not the game's:
 | Q / E, R / F, Z / X | Rotate, tilt, zoom |
 | Space / Home, T | Reset to the whole map, toggle top-down |
 | 1 2 3 4 5 6 7 8 | Objects, water, shadows, normal maps, clouds, weather, walkable, river flow arrows |
+| M | Show or hide the marks |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, reload, build, controls |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change |
 | Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); quit when nothing is left |
@@ -80,7 +81,9 @@ capture. The default CLI and viewer always use the local calculation.
   first load is still running or after it failed. The status bar shows the
   build's progress, and the scene reloads when the build is done. A failed
   build shows the start of its error there (the full output goes to the
-  terminal) and leaves the previous build in place.
+  terminal) and leaves the previous build in place. A chip at the right of
+  the toolbar shows a running build, then when the last one ended and how
+  long it took, or that it failed.
 - **Test In-Game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
   ([making maps](making-maps.md#testing-in-game)). The status bar says when
@@ -89,19 +92,23 @@ capture. The default CLI and viewer always use the local calculation.
   ([camera](making-maps.md#camera)). When the game is
   not BFME2 1.06, or for one of the game's own maps, it starts the normal
   game at its menu.
-- **Detail**: Low, Medium or High, as `--lod`.
-- **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**, **Haze**,
-  **Rain**, **Snow** and **Dusk** apply the
-  [weather presets](../src/mapworkshop/mapkit/weather.py) (fog, falling rain or
-  snow, lighting and the preset's sky dome) without changing the map.
-- **Sun**: **Weather's own**, or a light rig over the weather. The Mordor suns
-  (Ember, Copper, Blood red, Sulphur glow, High sun through ash, Dusk violet) bring
-  the Minas Morgul sky and a matching fog tint.
+- **Preview** shows the map another way without changing it. Its button shows
+  the current choice, for example `Medium · Map's own`, and the menu stays open
+  while you switch:
+  - **Detail**: Low, Medium or High, as `--lod`.
+  - **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**,
+    **Haze**, **Rain**, **Snow** and **Dusk** apply the
+    [weather presets](../src/mapworkshop/mapkit/weather.py) (fog, falling rain
+    or snow, lighting and the preset's sky dome). The map's own weather is set
+    in **Properties**.
+  - **Sun**: **Weather's own**, or a light rig over the weather. The Mordor suns
+    (Ember, Copper, Blood red, Sulphur glow, High sun through ash, Dusk violet)
+    bring the Minas Morgul sky and a matching fog tint.
 - **View**: check marks that stay open while you switch them: objects, water,
-  shadows; cloud shadows, normal maps, fog and rain/snow; grid, map border;
-  animate and **game object limits**. The limits keep only the first 1,200 trees
-  and 2,000 shrubs, as the game's buffers do. Off (the default) draws every one.
-- **Mark** shows the marking row (see below).
+  shadows; cloud shadows, normal maps, fog and rain/snow; grid, map border,
+  walkable, river flow arrows, marks; animate and **game object limits**. The
+  limits keep only the first 1,200 trees and 2,000 shrubs, as the game's
+  buffers do. Off (the default) draws every one.
 - **Top view**, **Reset view** and **Screenshot** (saved to `local/renders/`).
 - **Frame rate**, at the right edge: the measured rate and the cap, for example
   `60 fps / 60`. Click it to cap at 30, 60 (the default), 90, 120 or 144 fps,
@@ -128,11 +135,12 @@ opens the viewer and rebuilds whenever you save a file in the project folder.
 
 ## Marking the map for an agent
 
-**Mark** opens a second toolbar row for pointing at places on the map. The
-mouse keeps navigating until you pick a tool; the tool then stays armed (a
-crosshair cursor) so you can draw several marks, until Esc or a second click
-on it puts it away. Right drag and the wheel still pan and zoom while a tool
-is armed.
+The palette at the top left of the view holds the tools for pointing at
+places on the map; hover a button to see its name. The mouse navigates
+(**Navigate**, the arrow) until you pick a tool; the tool then stays armed (a
+crosshair cursor) so you can draw several marks, until Esc, a second click on
+it or Navigate puts it away. Right drag and the wheel still pan and zoom while
+a tool is armed.
 
 - **Pin**: click a point.
 - **Circle**: drag from the centre outwards.
@@ -140,7 +148,8 @@ is armed.
   so turn the view to line it up with a diagonal road first; within 10 degrees
   of north it lines up with the map axes.
 - **Freehand**: hold the button and draw. A path whose ends meet is an area.
-- **Delete**, **Clear all** and **Copy for agent**.
+- **Undo**, **Delete** (the selected mark), **Clear all** and, last, **Copy
+  for agent** (the clipboard).
 
 With no tool armed, the mark under the cursor lights up; click it to select
 it. A new mark is selected as soon as it is drawn. Drag a selected mark (or
@@ -154,9 +163,10 @@ corners.
 
 Marks are red, numbered and draped on the terrain. They are kept per map in
 `local/marks/<map>.json`, rewritten on every change. A panel at the right lists
-each mark with the objects inside it. Esc steps back one level: it closes an
-open menu, cancels a drawing, drops the selection, puts the tool away, closes
-the row and only then quits.
+each mark with the objects inside it. **View → Marks** (key M) hides the marks
+and the panel; picking a tool shows them again. Esc steps back one level: it
+closes an open menu, cancels a drawing, drops the selection, puts the tool
+away and only then quits.
 
 **Copy for agent** puts the marks on the clipboard. Paste them into an agent's
 prompt with your request ("add a forest in mark 2", "remove the bridge at

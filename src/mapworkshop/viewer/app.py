@@ -17,10 +17,11 @@ Keyboard
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
-  8 river flow arrows
+  8 river flow arrows  M marks
   G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
+  Del        delete the selected mark;  Ctrl+Z  undo a mark change
   Esc        steps back: closes a menu, cancels a drawing, drops the selection,
-             puts the mark tool away, closes the marking row, then quits
+             puts the mark tool away, then quits
 
 Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
@@ -29,27 +30,30 @@ Toolbar
              Save and build writes them into map.toml and rebuilds; a game map
              is shown read-only
   Build      rebuild the current project; the scene reloads when it is done and
-             a failed build shows its error in the status bar
+             a failed build shows its error in the status bar. The chip at the
+             right shows a running build, then when the last one ended
   Test In-Game  start BFME2 straight in a skirmish on the current project (mw play)
-  Detail     game detail level (Low, Medium, High)
-  Weather    the map's own weather, or a preset (clear, haze, rain, snow, dusk)
-  Sun        the weather's own sun, or a light rig over it
+  Preview    how the map is shown, without changing it: detail level (Low,
+             Medium, High), the map's own weather or a preset (clear, haze, rain,
+             snow, dusk), the weather's own sun or a light rig over it
   View       layers: objects, water, shadows; cloud shadows, normal maps, fog and
-             rain/snow; grid, map border; animate; the game's object limits
-  Mark       the marking row: Pin, Circle, Rectangle, Freehand, Delete, Clear
-             all and Copy for agent. The mouse keeps navigating until you pick a
-             tool; the tool then draws until Esc (or a second click on it). Click
-             a mark to select it: drag it to move it, drag its square handles to
-             resize it (a rectangle's round handle rotates it, Shift snaps to
-             15 degrees), Del deletes it, Ctrl+Z undoes. Rectangles are drawn
-             lined up with the screen. Marks are red, numbered and
-             saved per map, and a panel lists what each one covers. Copy for agent
-             puts the marks, their map coordinates, the objects inside and the
-             map's source project on the clipboard, to paste into an agent ("add
-             a forest in mark 2"); `mw marks` prints the same.
+             rain/snow; grid, map border, walkable, river flow, marks; animate;
+             the game's object limits
   Buttons    top view, reset view, screenshot
   FPS        the frame rate at the right; click it to cap it (30-144), follow the
              monitor (VSync) or run unlimited. Default 60 (--fps).
+
+Marks palette (top left of the view)
+  Navigate, Pin, Circle, Rectangle, Freehand; Undo, Delete, Clear all; Copy for
+  agent. The mouse navigates until you pick a tool; the tool then draws until
+  Esc (or a second click on it). Click a mark to select it: drag it to move it,
+  drag its square handles to resize it (a rectangle's round handle rotates it,
+  Shift snaps to 15 degrees), Del deletes it, Ctrl+Z undoes. Rectangles are
+  drawn lined up with the screen. Marks are red, numbered and saved per map, and
+  a panel lists what each one covers. Copy for agent puts the marks, their map
+  coordinates, the objects inside and the map's source project on the
+  clipboard, to paste into an agent ("add a forest in mark 2"); `mw marks`
+  prints the same.
 
 Live reload: the viewer watches the map file and its map.ini. When either
 changes (a build, `mw dev`, an editor save) the scene reloads in place and the
@@ -77,8 +81,9 @@ from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.camera import Camera
 from mapworkshop.viewer.commands import Command, Commands
 from mapworkshop.viewer.jobs import Build, MarksSummary, Status, Walkability, play
-from mapworkshop.viewer.marking import CLICK_PIXELS, TOOLS, MarkEditor, summary_lines
+from mapworkshop.viewer.marking import CLICK_PIXELS, MarkEditor, summary_lines
 from mapworkshop.viewer.overlay import MarkOverlay
+from mapworkshop.viewer.palette import Palette
 from mapworkshop.viewer.session import TOAST_DELAY, Session
 from mapworkshop.viewer.toolbar import Toolbar
 
@@ -86,7 +91,7 @@ FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')
 DOUBLE_CLICK = 0.3        # s between the clicks of a double-click
 # The View menu: command ids in groups; None separates them.
 VIEW_MENU = ('objects', 'water', 'shadows', None, 'clouds', 'normal_maps', 'fx', None,
-             'grid', 'border', 'walkable', 'flow', None, 'animate', 'limits')
+             'grid', 'border', 'walkable', 'flow', 'marks', None, 'animate', 'limits')
 
 
 def parse_args(argv=None):
@@ -105,7 +110,6 @@ def parse_args(argv=None):
                              "sulphur, ash, violet")
     parser.add_argument('--exit-after', type=float, help=argparse.SUPPRESS)  # smoke tests
     parser.add_argument('--snapshot', type=Path, help=argparse.SUPPRESS)   # smoke tests: save the window
-    parser.add_argument('--marking', action='store_true', help=argparse.SUPPRESS)  # start with Mark on
     return parser.parse_args(argv)
 
 
@@ -162,7 +166,7 @@ class Viewer:
         self.walkability = Walkability(self.status)
         self.summary = MarksSummary()
         self.overlay = MarkOverlay(ctx)
-        self.editor = MarkEditor(self.overlay, self, self.status, marking=args.marking)
+        self.editor = MarkEditor(self.overlay, self, self.status)
         self.editor.marks = self.session.marks
         self.view = dict(grid=False, border=False, animate=True)
         self.time = 0.0                    # the game clocks' time: animation, water, clouds
@@ -174,25 +178,22 @@ class Viewer:
         self.focus_text, self.focus_sample = '', 0.0
         self.properties = None             # the Properties window (viewer.properties)
         self.properties_saved = None       # the project its Save wrote, for the frame loop to build
+        # Map actions, then how the map is previewed and what is shown, then
+        # the camera; at the right the status text, the last build and the
+        # frame rate.
         self.toolbar = Toolbar(ctx, [
             dict(kind='dropdown', id='map', label='Map'), dict(kind='button', id='properties', label='Properties'),
             dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
             dict(kind='gap'),
-            dict(kind='dropdown', id='lod', label='Detail'),
-            dict(kind='dropdown', id='weather', label='Weather'),
-            dict(kind='dropdown', id='sun', label='Sun'), dict(kind='gap'),
-            dict(kind='dropdown', id='view', title='View'), dict(kind='toggle', id='marking', label='Mark'),
+            dict(kind='dropdown', id='preview', label='Preview'),
+            dict(kind='dropdown', id='view', title='View'),
             dict(kind='gap'),
             dict(kind='button', id='top', label='Top view'), dict(kind='button', id='reset', label='Reset view'),
             dict(kind='button', id='shot', label='Screenshot'),
-            dict(kind='status', id='status'), dict(kind='dropdown', id='fps', align='right')])
-        # The marking row, shown below the main one while Mark is on.
-        self.mark_bar = Toolbar(ctx, [dict(kind='toggle', id='tool_'+key, label=label) for key, label in TOOLS] +
-                                [dict(kind='gap'), dict(kind='button', id='delete', label='Delete'),
-                                 dict(kind='button', id='clear', label='Clear all'), dict(kind='gap'),
-                                 dict(kind='button', id='copy', label='Copy for agent'),
-                                 dict(kind='status', id='hint')],
-                                top=lambda: self.toolbar.height)
+            dict(kind='status', id='status'), dict(kind='chip', id='build_chip', align='right'),
+            dict(kind='dropdown', id='fps', align='right')])
+        # The marking tools, at the top left of the 3D view.
+        self.palette = Palette(ctx, top=lambda: self.toolbar.height)
         self.commands = self._commands()
         self.cursors = {name: glfw.create_standard_cursor(shape) for name, shape in (
             ('draw', glfw.CROSSHAIR_CURSOR), ('move', glfw.RESIZE_ALL_CURSOR), ('rotate', glfw.POINTING_HAND_CURSOR),
@@ -224,6 +225,7 @@ class Viewer:
             Command('fx', lambda: self.flip_visible('weather'), 'Fog and rain/snow', ('6',), visible('weather')),
             Command('walkable', self.flip_walkable, 'Walkable (local estimate)', ('7',), visible('walkable')),
             Command('flow', lambda: self.flip_visible('flow'), 'River flow arrows', ('8',), visible('flow')),
+            Command('marks', self.editor.toggle_visible, 'Marks', ('M',), lambda: self.editor.visible),
             Command('grid', lambda: self.flip_view('grid'), 'Grid', ('G',), view('grid')),
             Command('border', lambda: self.flip_view('border'), 'Map border', ('B',), view('border')),
             Command('animate', lambda: self.flip_view('animate'), 'Animate', checked=view('animate')),
@@ -241,7 +243,7 @@ class Viewer:
             Command('shot', self.screenshot, keys=('P',)),
             Command('help', lambda: print(__doc__), keys=('F1',)),
             # Marks.
-            Command('delete', self.editor.delete_selected, keys=('Del', 'Backspace'), when=lambda: self.editor.marking),
+            Command('delete', self.editor.delete_selected, keys=('Del', 'Backspace'), when=lambda: self.editor.visible),
             Command('undo', self.editor.undo, keys=('Ctrl+Z',)),
             Command('clear', self.editor.clear),
             Command('copy', self.copy_for_agent))
@@ -291,23 +293,27 @@ class Viewer:
                            key=lambda e: e[1].lower())
             folder = [('folder', 'Open project folder', None)] if self.session.owner else []
             return own + [(None, '', None)] + stock + [(None, '', None)] + folder + [('browse', 'Browse...', None)]
-        if menu == 'lod':
-            return [(v, v.title(), o['lod'] == v) for v in ('low', 'medium', 'high')]
-        if menu == 'weather':
-            return [('map', "Map's own", o['weather'] == 'map'), (None, '', None)] + \
-                   [(v, v.title(), o['weather'] == v) for v in PRESETS]
+        if menu == 'preview':
+            # Values are 'option:value'; headings are (None, text, None).
+            entry = lambda key, value, text: (f'{key}:{value}', text, o[key] == value)
+            return ([(None, 'Preview only: these do not change the map', None), (None, '', None),
+                     (None, 'Detail', None)] +
+                    [entry('lod', v, v.title()) for v in ('low', 'medium', 'high')] +
+                    [(None, 'Weather', None), entry('weather', 'map', "Map's own")] +
+                    [entry('weather', v, v.title()) for v in PRESETS] +
+                    [(None, 'Sun', None), entry('sun', 'own', "Weather's own")] +
+                    [entry('sun', k, v['label']) for k, v in SUNS.items()] +
+                    [(None, '', None), (None, "The map's own weather: Properties", None)])
         if menu == 'fps':
             label = lambda v: dict(vsync='VSync (monitor rate)', unlimited='Unlimited').get(v, f'{v} fps')
             return [(v, label(v), self.fps_limit == v) for v in FPS_LIMITS[:-2]] + [(None, '', None)] + \
                    [(v, label(v), self.fps_limit == v) for v in FPS_LIMITS[-2:]]
-        if menu == 'sun':
-            return [('own', "Weather's own", o['sun'] == 'own'), (None, '', None)] + \
-                   [(k, v['label'], o['sun'] == k) for k, v in SUNS.items()]
         return self.commands.menu(VIEW_MENU, self.renderer is not None)
 
     def toolbar_state(self):
         r, o = self.renderer, self.session.options
         message = self.status.current()
+        hint = self.editor.hint() if r is not None else None
         if self.session.loading and r is None:
             status = ''
         elif self.build.running:
@@ -316,24 +322,39 @@ class Viewer:
             status = message
         elif r is None:
             status = 'Choose a map to load'
+        elif hint:
+            status = hint
         else:
             if time.perf_counter() >= self.focus_sample:
                 c = self.camera.cur
                 self.focus_text = f'focus {c["x"]:.0f}, {c["y"]:.0f}   distance {c["distance"]:.0f}'
                 self.focus_sample = time.perf_counter() + 0.15
             status = self.focus_text
-        weather = "Map's own" if o['weather'] == 'map' else o['weather'].title()
-        sun = "Weather's own" if o['sun'] == 'own' else SUNS[o['sun']]['label']
-        return dict(map=self.session.title(), lod=o['lod'].title(), weather=weather, sun=sun,
-                    marking=self.editor.marking, status=status,
+        preview = [o['lod'].title(), "Map's own" if o['weather'] == 'map' else o['weather'].title()]
+        if o['sun'] != 'own':
+            preview.append(SUNS[o['sun']]['label'])
+        return dict(map=self.session.title(), preview=' · '.join(preview), status=status,
+                    build_chip=self.build_chip(),
                     fps=f'{self.fps:.0f} fps' + ('' if self.fps_limit in ('vsync', 'unlimited')
                                                  else f' / {self.fps_limit}'))
+
+    def build_chip(self):
+        """The toolbar's build chip: a build running, or how the viewer's
+        last build ended and when; '' before the first."""
+        build = self.build
+        if build.running:
+            return f'Building {time.perf_counter()-build.started:.0f} s', 'busy'
+        if build.outcome is None:
+            return ''
+        ok, seconds, finished = build.outcome
+        at = time.strftime('%H:%M', time.localtime(finished))
+        return (f'Built {at} · {seconds:.0f} s', 'good') if ok else (f'Build failed {at}', 'bad')
 
     def toolbar_target(self, pos):
         k = self.scale()
         target = self.toolbar.target_at(pos[0]*k, pos[1]*k)
-        if target is None and self.editor.marking:
-            target = self.mark_bar.target_at(pos[0]*k, pos[1]*k)
+        if target is None and self.renderer is not None:
+            target = self.palette.target_at(pos[0]*k, pos[1]*k)
         return target
 
     def toolbar_click(self, target):
@@ -350,7 +371,7 @@ class Viewer:
         toolbar = self.toolbar
         if target == 'menu':
             return
-        if target in ('bar', 'panel'):
+        if target in ('bar', 'panel', 'palette'):
             toolbar.open_menu = None
             return
         kind = target[0]
@@ -366,18 +387,19 @@ class Viewer:
             self.choose(target[1], target[2])
         else:
             toolbar.open_menu = None
-            if kind == 'toggle' and target[1] == 'marking':
-                self.editor.toggle_marking()
-            elif kind == 'toggle':
-                self.editor.set_tool(target[1][len('tool_'):])
+            if kind == 'tool':
+                self.editor.set_tool(target[1])
             elif kind == 'button':
                 self.commands.run(target[1], self.renderer is not None)
 
     def choose(self, menu, value):
         """A menu entry was clicked."""
-        if menu == 'view':
-            # The View menu stays open so several layers can be switched.
-            self.commands.run(value, self.renderer is not None)
+        if menu in ('view', 'preview'):
+            # These menus stay open so several settings can be switched.
+            if menu == 'view':
+                self.commands.run(value, self.renderer is not None)
+            else:
+                self.set_preview(*value.split(':', 1))
             self.toolbar.open_menu = (menu, self.menu_entries(menu))
             return
         self.toolbar.open_menu = None
@@ -399,9 +421,12 @@ class Viewer:
             path = self.browse_map() if value == 'browse' else Path(value)
             if path:
                 self.session.open_map(path)
-        elif self.session.options[menu] != value:
-            self.session.options[menu] = value
-            if menu == 'lod':
+
+    def set_preview(self, option, value):
+        """Detail ('lod'), 'weather' or 'sun': reloads the scene with it."""
+        if self.session.options[option] != value:
+            self.session.options[option] = value
+            if option == 'lod':
                 self.session.options['normal_maps'] = None
             self.session.reload = True
 
@@ -564,7 +589,7 @@ class Viewer:
             return
         if self.nav is None:
             target = self.toolbar_target((x, y))
-            self.toolbar.hover = self.mark_bar.hover = target if isinstance(target, tuple) else None
+            self.toolbar.hover = self.palette.hover = target if isinstance(target, tuple) else None
             self.update_pointer(target, (x, y))
             return
         kind, anchor = self.nav
@@ -623,8 +648,9 @@ class Viewer:
         if r is not None:
             r.draw(cam, size, self.ctx.screen, grid=self.view['grid'], border=self.view['border'],
                    shadow_radius=4000.0, shadow_size=4096, time=self.time)
-            # Every frame, so picking never sees marks that are gone.
-            self.overlay.draw(self.session.marks.items, self.editor.drawing, self.editor.selected, cam,
+            # Every frame, so picking never sees marks that are gone or hidden.
+            shown = self.session.marks.items if self.editor.visible else []
+            self.overlay.draw(shown, self.editor.drawing, self.editor.selected, cam,
                               r.surface_at, size, k, self.editor.hovered)
         else:
             self.ctx.screen.use()
@@ -635,37 +661,38 @@ class Viewer:
             # Keep check marks current (keyboard toggles, a finished reload).
             toolbar.open_menu = (toolbar.open_menu[0], self.menu_entries(toolbar.open_menu[0]))
         toolbar.draw(size, k, self.toolbar_state())
-        toolbar.panel_rect = None
+        toolbar.panel_rect = self.palette.rect = None
         marks = self.session.marks
-        if self.editor.marking and r is not None:
-            self.mark_bar.draw(size, k, self.editor.bar_state())
-            if marks.items:
+        if r is not None:
+            self.palette.draw(size, k, self.editor.tool)
+            if marks.items and self.editor.visible:
                 self.summary.update(r, marks, self.session.source)
                 toolbar.draw_panel(size, k, 'Marks', summary_lines(marks.items, self.summary.get(r, marks)),
-                                   toolbar.height + self.mark_bar.height)
+                                   toolbar.height)
         self.draw_toast(size)
-        # Last, so the mark row, the panel and the loading toast never cover it.
+        # Last, so the palette, the panel and the loading toast never cover it.
         toolbar.draw_menu(size, k)
 
     def draw_toast(self, size):
-        """The toast at the top left, below the toolbar rows: a load's
-        progress or a build's latest output line while they run, then
-        briefly how they ended."""
+        """The toast at the top left, below the toolbar and beside the
+        palette: a load's progress or a build's latest output line while they
+        run, then briefly how they ended."""
         session, build = self.session, self.build
-        top = self.toolbar.height + (self.mark_bar.height if self.editor.marking and self.renderer is not None else 0)
+        top, left = self.toolbar.height, self.palette.rect[2] if self.palette.rect else 0
         now = time.perf_counter()
         if session.toast_shown(now):
             fraction, step = session.request.progress if session.request else (0.0, 'Starting')
             alpha = min(1.0, (now-session.load_started-TOAST_DELAY)/0.15)
-            self.toolbar.draw_toast(size, self.scale(), top, session.load_title, step, fraction, 'loading', alpha)
+            self.toolbar.draw_toast(size, self.scale(), top, session.load_title, step, fraction, 'loading', alpha,
+                                    left=left)
         elif build.running:
             elapsed = now-build.started
             self.toolbar.draw_toast(size, self.scale(), top, f'{build.title}  ·  {elapsed:.0f} s', build.line,
-                                    None, 'loading', min(1.0, elapsed/0.15))
+                                    None, 'loading', min(1.0, elapsed/0.15), left=left)
         elif session.toast and now < session.toast['until']:
             toast = session.toast
             self.toolbar.draw_toast(size, self.scale(), top, toast['title'], toast['detail'], None, toast['kind'],
-                                    min(1.0, (toast['until']-now)/0.4))
+                                    min(1.0, (toast['until']-now)/0.4), left=left)
 
     def pace(self):
         """Wait for the next frame under the frame rate cap."""

@@ -64,11 +64,14 @@ class Toolbar:
       dict(kind='toggle', id, label)               state[id] -> bool
       dict(kind='dropdown', id, label[, title])    shows title, or state[id] as text;
                                                    align='right' puts it at the right edge
+      dict(kind='chip', id, align='right')         state[id]: (text, 'busy', 'good' or 'bad')
+                                                   as a pill with a coloured dot, or '' for none
       dict(kind='gap') / dict(kind='status', id)   right-aligned text
 
     A dropdown click returns ('dropdown', id); the caller sets open_menu to
     (id, entries), entries being (value, text, checked) with checked None for
-    no check column and value None for a separator. A menu click returns
+    no check column, value None for a separator, or value None with a text
+    for a heading. A menu click returns
     ('menu', id, value); a click on the arrow strip of a scrolling menu
     returns ('menu_scroll', id, -1 or 1), for scroll_menu().
     """
@@ -169,6 +172,10 @@ class Toolbar:
         # text to their left when there is room for it.
         edge = width-pad
         for item in reversed(right):
+            if item['kind'] == 'chip':
+                if state.get(item['id']):
+                    edge = self._chip(d, edge, y0, bh, scale, *state[item['id']])
+                continue
             label = str(state.get(item['id'], ''))
             w = round(text_w(label)+30*scale)
             target = ('dropdown', item['id'])
@@ -191,6 +198,20 @@ class Toolbar:
         self.boxes, self.height = boxes, h
         return image
 
+    @staticmethod
+    def _chip(d, right, y0, bh, scale, text, tone):
+        """A pill ending at `right`: a coloured dot and the text. Returns
+        where the next item to its left ends."""
+        small = _font(round(12*scale))
+        dot, pad = round(8*scale), round(9*scale)
+        w = round(pad + dot + 6*scale + d.textlength(text, font=small) + pad)
+        x0 = right - w
+        d.rounded_rectangle([x0, y0+1, right, y0+bh-1], radius=(bh-2)//2, fill=MENU, outline=LINE)
+        cy = y0 + bh/2
+        d.ellipse([x0+pad, cy-dot/2, x0+pad+dot, cy+dot/2], fill=dict(good=GOOD, bad=BAD).get(tone, ON_LINE))
+        d.text((x0+pad+dot+round(6*scale), cy), text, font=small, fill=TEXT, anchor='lm')
+        return x0 - round(6*scale)
+
     def _render_menu(self, scale, menu_id, entries, room):
         """The open menu, at most `room` pixels tall: (image, boxes with x
         from the menu's left edge). A taller menu shows a window of its
@@ -202,7 +223,8 @@ class Toolbar:
         indent = round((30 if checks else 12)*scale)
         measure = ImageDraw.Draw(Image.new('RGB', (1, 1)))
         width = max(round(160*scale), round(max(measure.textlength(e[1], font=font) for e in entries)+indent+20*scale))
-        heights = [sep if e[0] is None else row for e in entries]
+        heading_font, heading = _font(round(11*scale), bold=True), round(22*scale)
+        heights = [row if e[0] is not None else heading if e[1] else sep for e in entries]
         total = sum(heights)+2
         visible = min(total, max(room, 4*row))
         strip = round(16*scale)
@@ -222,7 +244,9 @@ class Toolbar:
             if y+h <= 0 or y >= visible:
                 continue
             target = ('menu', menu_id, value)
-            if value is None:
+            if value is None and text:
+                d.text((round(12*scale), y+h-round(6*scale)), text, font=heading_font, fill=MUTED, anchor='ls')
+            elif value is None:
                 d.line([(round(8*scale), y+h//2), (width-round(8*scale), y+h//2)], fill=LINE)
             else:
                 if self.hover == target:
@@ -326,11 +350,11 @@ class Toolbar:
         self.program['tex'].value = 0
         self.vao.render(self.mgl.TRIANGLE_STRIP)
 
-    def draw_toast(self, size, scale, top, title, detail, fraction=None, kind='loading', alpha=1.0):
-        """A small card at the top left, `top` pixels down: a spinner (kind
-        'loading'), a check ('done') or a cross ('failed'), a bold title and a
-        muted detail line; while loading, the percentage and a thin progress
-        bar along its bottom edge."""
+    def draw_toast(self, size, scale, top, title, detail, fraction=None, kind='loading', alpha=1.0, left=0):
+        """A small card at the top left, `top` pixels down and `left` pixels
+        in: a spinner (kind 'loading'), a check ('done') or a cross
+        ('failed'), a bold title and a muted detail line; while loading, the
+        percentage and a thin progress bar along its bottom edge."""
         phase = int(time.perf_counter()*12) % 12 if kind == 'loading' else 0
         percent = None if fraction is None else round(100*max(0.0, min(1.0, fraction)))
         key = (round(scale, 3), title, detail, percent, kind, phase)
@@ -345,7 +369,7 @@ class Toolbar:
         ctx.disable(self.mgl.DEPTH_TEST)
         ctx.enable(self.mgl.BLEND)
         ctx.blend_func = (self.mgl.SRC_ALPHA, self.mgl.ONE_MINUS_SRC_ALPHA)
-        self._blit(self.toast_texture, (margin, top+margin, margin+w, top+margin+h), size, alpha)
+        self._blit(self.toast_texture, (left+margin, top+margin, left+margin+w, top+margin+h), size, alpha)
         ctx.disable(self.mgl.BLEND)
 
     def _toast_card(self, scale, title, detail, percent, kind, phase):

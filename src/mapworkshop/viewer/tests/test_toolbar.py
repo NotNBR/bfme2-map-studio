@@ -1,6 +1,7 @@
-"""viewer.toolbar: menu layout, without a GPU."""
+"""viewer.toolbar and viewer.palette: menu layout and hit-testing, without a GPU."""
 import unittest
 
+from mapworkshop.viewer.palette import Palette
 from mapworkshop.viewer.toolbar import Toolbar
 
 
@@ -36,6 +37,30 @@ class MenuTests(unittest.TestCase):
             bar.draw_menu((800, 600), 1.0)
         self.assertEqual(len(bar.drawn), 2)
         self.assertNotIn(None, bar.drawn)
+
+    def test_menu_headings_take_no_clicks(self):
+        bar = toolbar()
+        bar.open_menu = ('preview', [(None, 'Detail', None), ('lod:low', 'Low', False), ('lod:high', 'High', True)])
+        bar.draw_menu((800, 600), 1.0)
+        self.assertEqual([b[4] for b in bar.menu_boxes], [('menu', 'preview', 'lod:low'), ('menu', 'preview', 'lod:high')])
+
+
+class PaletteTests(unittest.TestCase):
+    def test_clicks_find_the_tool_or_button_under_them(self):
+        palette = Palette.__new__(Palette)
+        Palette.__init__(palette, Fake(), top=36)
+        palette.mgl = Fake()
+        palette._upload = lambda image, old: image
+        palette._blit = lambda texture, rect, size: None
+        palette.draw((800, 600), 1.0, 'pin')
+        centre = lambda target: next(((x0+x1)//2, (y0+y1)//2) for x0, y0, x1, y1, t in palette.boxes if t == target)
+        self.assertEqual(palette.target_at(*centre(('tool', 'circle'))), ('tool', 'circle'))
+        self.assertEqual(palette.target_at(*centre(('button', 'copy'))), ('button', 'copy'))
+        self.assertEqual(len(palette.boxes), 9)
+        x0, y0, x1, y1 = palette.rect
+        self.assertEqual(palette.target_at(x0+1, y0+1), 'palette')
+        self.assertIsNone(palette.target_at(x1+5, y0+5))
+        self.assertGreaterEqual(y0, 36)
 
 
 if __name__ == '__main__':
