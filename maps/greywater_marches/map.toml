@@ -4,3 +4,7 @@ native_name = "map mp bfmexbar greywater marches"
 players = 6
 description = "Six open realms across rocky grasslands, mountain passes and branching rivers."
 weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+# Map properties set in the viewer's Properties dialog; the build applies them over the map's own.
+[properties.ini.WaterTransparency]
+ReflectionOn = true
