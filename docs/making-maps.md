@@ -244,6 +244,34 @@ button and Alt+F4; the launcher catches that close request and ends the game,
 so closing the window works. The launcher log is
 `local/runtime/logs/play-<map>.log`. It needs no administrator rights.
 
+### Camera
+
+Test games have a free camera, to look at the map from any distance and angle:
+
+| Input | Does |
+| --- | --- |
+| Mouse wheel | zooms, from close up to far enough to see the whole map |
+| Middle button held, mouse up or down | tilts, from near the horizon to straight down |
+| Middle button held, mouse sideways | rotates (the game's own) |
+| Middle click | the game's own camera again, at its default angle and zoom |
+
+Scrolling, the minimap and rotation work as usual, and scrolling covers as
+much of the screen per step at any zoom. The camera stays the game's own
+until you first zoom or tilt, and scripted camera moves hand it back to the
+game. The game draws no sky near the horizon, so low angles show black above
+the terrain, and the map's edge shows as black.
+
+It comes from a small DLL the launcher loads into every game it starts
+([native/ingame/ingame.cpp](../src/mapworkshop/native/ingame/ingame.cpp),
+committed built; `python -m mapworkshop.native.msvc ingame` rebuilds it with
+Visual C++ .NET 2003, setting `msvc71`). It lets the game build its camera,
+then turns it to the chosen tilt and moves it to the chosen distance from the
+same focus point, before the game sets it and the terrain picks what to draw
+from it; it also moves the clip planes out, which the game keeps at 10 to
+1,800 units. It replaces the game's zoom steps (the wheel arrives there only
+when no menu took it), watches the mouse for the middle-button drag, and
+scales the scroll offset.
+
 The same runtime serves two other tools. They run headless: the game starts
 on a hidden desktop of its own, so no window appears and your focus stays where
 it is, and it ends as soon as the tool has what it came for.
@@ -254,11 +282,9 @@ it is, and it ends as soon as the tool has what it came for.
   saves screenshots rendered by the game, HUD included, into
   `local/renders/game/<map>/` (about 10 seconds for a few shots). The camera
   looks at the ground at X, Y from HEIGHT (the game's own camera; 300 is its
-  usual zoom). A small DLL loaded into the game
-  ([native/capture/capture.cpp](../src/mapworkshop/native/capture/capture.cpp),
-  committed built; `python -m mapworkshop.native.msvc` rebuilds it with
-  Visual C++ .NET 2003, setting `msvc71`) places the camera and copies
-  the frame. Use it for what the renderer does not show, such as the water
+  usual zoom). The camera DLL above
+  ([native/ingame/ingame.cpp](../src/mapworkshop/native/ingame/ingame.cpp))
+  places the camera and copies the frame. Use it for what the renderer does not show, such as the water
   reflections at High. `--show` runs it in a visible window instead.
 
 Direct3D 9 does not render on a desktop that is not shown, so headless runs

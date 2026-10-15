@@ -1,7 +1,7 @@
 """Build the DLLs the launcher loads into the game, with Visual C++ .NET 2003
 (MSVC 7.1: 32-bit, linked against msvcr71.dll, which the game ships).
 
-    python -m mapworkshop.native.msvc      rebuild every DLL below
+    python -m mapworkshop.native.msvc [NAME ...]     rebuild these DLLs below (default: all)
 
 The built DLLs are committed, so only a change to their source needs the
 compiler: setting `msvc71`, default openbfme2-untouched's reference
@@ -17,7 +17,7 @@ from mapworkshop.config import ROOT, setting
 NATIVE = Path(__file__).parent
 # name: (source, built DLL, compiler defines, exported names as `name=symbol`)
 DLLS = {
-    'capture': (NATIVE/'capture'/'capture.cpp', NATIVE/'capture'/'capture.dll', [], []),       # screenshots
+    'ingame': (NATIVE/'ingame'/'ingame.cpp', NATIVE/'ingame'/'ingame.dll', [], []),   # free camera, screenshots
     'loading': (NATIVE/'loading'/'loading.cpp', NATIVE/'loading'/'bin'/'loading.dll', [], []),   # runtime loads
     # loading/ is the bfme2-map-quickload submodule (github.com/NotNBR/bfme2-map-quickload),
     # whose build.py builds the same two DLLs; dinput8.dll is its build for the normal game (mw patch).
@@ -56,5 +56,6 @@ def build(name):
 
 
 if __name__ == '__main__':
-    for name in DLLS:
+    import sys
+    for name in sys.argv[1:] or DLLS:
         print(build(name))

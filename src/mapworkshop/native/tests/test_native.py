@@ -19,9 +19,9 @@ class PETests(unittest.TestCase):
         self.assertEqual(set(pe.exports()), {'mwLoading', 'mwFlush'})
         self.assertEqual({dll for dll, _ in pe.imports()}, {'kernel32.dll', 'msvcr71.dll', 'user32.dll'})
 
-    def test_capture_dll_exports_and_imports(self):
-        pe = PE(msvc.dll('capture'))
-        self.assertEqual(set(pe.exports()), {'mwCapture', 'mwPhoto', 'mwInstalled'})
+    def test_ingame_dll_exports_and_imports(self):
+        pe = PE(msvc.dll('ingame'))
+        self.assertEqual(set(pe.exports()), {'mwCamera', 'mwCapture', 'mwPhoto', 'mwInstalled'})
         dlls = {dll for dll, _ in pe.imports()}
         self.assertEqual(dlls, {'kernel32.dll', 'msvcr71.dll'})     # the game ships msvcr71
         self.assertEqual(pe.image_base, 0x10000000)
@@ -164,13 +164,13 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(patch.status(game), 'installed')
                 patch.remove(game)
                 self.assertFalse((game/'dinput8.dll').exists())
-                (game/'dinput8.dll').write_bytes(msvc.dll('capture').read_bytes())   # another program's
+                (game/'dinput8.dll').write_bytes(msvc.dll('ingame').read_bytes())   # another program's
                 self.assertEqual(patch.status(game), 'foreign')
                 with self.assertRaises(RuntimeError):
                     patch.install(game)
                 with self.assertRaises(RuntimeError):
                     patch.remove(game)
-                self.assertEqual((game/'dinput8.dll').read_bytes(), msvc.dll('capture').read_bytes())
+                self.assertEqual((game/'dinput8.dll').read_bytes(), msvc.dll('ingame').read_bytes())
 
     def test_dinput8_build_forwards_directinput(self):
         self.assertIn('DirectInput8Create', PE(msvc.dll('dinput8')).exports())

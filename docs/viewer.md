@@ -84,7 +84,9 @@ capture. The default CLI and viewer always use the local calculation.
 - **Test In-Game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
   ([making maps](making-maps.md#testing-in-game)). The status bar says when
-  the skirmish is playable and when the game has closed. When the game is
+  the skirmish is playable and when the game has closed. Its camera zooms out
+  to the whole map and tilts with the middle button
+  ([camera](making-maps.md#camera)). When the game is
   not BFME2 1.06, or for one of the game's own maps, it starts the normal
   game at its menu.
 - **Detail**: Low, Medium or High, as `--lod`.

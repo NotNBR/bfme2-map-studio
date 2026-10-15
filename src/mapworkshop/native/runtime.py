@@ -18,7 +18,10 @@ starts a skirmish on an installed map, you against an easy AI, and by
 default loads it faster: loading.dll (native/loading/loading.cpp) runs the
 terrain textures' D3DX compression on worker threads, with the same calls and
 input as the game, so the same result (Brightwater Fold at Medium: gameplay
-4.5 s after the start instead of 12).
+4.5 s after the start instead of 12). Every game also loads ingame.dll
+(native/ingame/ingame.cpp): the free camera you steer in test games (the
+wheel zooms out to the whole map, the middle button tilts) and the
+screenshot hooks of native.capture.
 
 Headless runs (start(..., headless=True): the pathfinding read and
 screenshots) put the game on a hidden desktop of its own
@@ -327,11 +330,26 @@ def fast_loading(game):
     game.on(NEW_GAME_DONE, flush)
 
 
+def ingame(game):
+    """Load ingame.dll (native/ingame): the free camera and the screenshot
+    hooks. Its exports land in game.ingame once it has loaded and installed."""
+    from mapworkshop.native import msvc
+    game.ingame = {}
+
+    def loaded(game, exports):
+        if game.u32(exports['mwInstalled']):
+            game.ingame.update(exports)
+        else:
+            game.res['ingame'] = 'ingame.dll did not install its hooks'
+    game.inject(staged(msvc.dll('ingame')), loaded)
+
+
 def start(project, graphics='Medium', headless=False, progress=print, fast=True):
     """A Game set up to start a skirmish on the project's current build at
     this detail level (not yet running: add breakpoints, then game.run()).
     `headless`: on a hidden desktop, with DXVK (see the module notes).
-    `fast`: with fast_loading (False loads the map as the game alone does)."""
+    `fast`: with fast_loading (False loads the map as the game alone does).
+    The game loads ingame.dll in either case."""
     running = debugger.running_games()
     if running:
         raise RuntimeError(f'BFME2 is already running ({running[0][1]}); close it first')
@@ -344,6 +362,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     game = debugger.Game(folder, args, APPDATA)
     game.headless = headless
     game.on(FILE_SLOTS_SET, skirmish_setup)
+    ingame(game)
     if fast:
         fast_loading(game)
     return game
