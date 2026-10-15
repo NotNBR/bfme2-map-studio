@@ -94,10 +94,21 @@ viewer's **Copy for agent** button copies.
    wants the game's own view, for example to check something the renderer
    cannot show (water reflections at High).
 
-## Keeping the docs in order
+## Keeping the repository in order
 
-The docs are read by agents first; keep each fact in one place, in the page
-of its kind:
+Put each new file where its kind already lives:
+
+- Toolkit code in `src/mapworkshop/<package>/`, each module opening with a
+  docstring; its tests beside it in `tests/`.
+- Maps, scenes and labs as projects in `maps/`, listed in [maps/README.md](maps/README.md);
+  things made with the workshop in `misc/`.
+- Build output, renders and one-off scripts in the ignored `local/`, never in
+  the repository. No stray files at the root; when something has no obvious
+  place, ask.
+- Move with `git mv` and update every link and path naming the old place.
+  Remove what a change makes obsolete in the same change.
+
+The docs are read by agents first; keep each fact in one place:
 
 - A new or changed command or option: its guide in `docs/guide/`. A new
   `mapkit` module: a docstring, and a line in [the toolkit](docs/guide/toolkit.md).
