@@ -56,6 +56,7 @@ class GameAssets:
             self.basenames.setdefault(stem.rsplit('.', 1)[0], []).append(key)
 
     _shared = None
+    map_ini = ''          # the map's map.ini text, in assets scoped to a map (for_map)
 
     @classmethod
     def shared(cls):
@@ -118,6 +119,7 @@ class GameAssets:
         scoped._base = base
         scoped._templates = dict(base.templates)
         scoped._models = {}
+        scoped.map_ini = text
         scoped.add_map_templates(text)
         return scoped
 

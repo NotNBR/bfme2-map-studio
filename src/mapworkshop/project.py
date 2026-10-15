@@ -270,6 +270,9 @@ def build(project, args=(), progress=print):
     concerns = _template_concerns(b)
     if concerns:
         record['template_concerns'] = concerns
+    ini_concerns = _ini_concerns(b)
+    if ini_concerns:
+        record['ini_concerns'] = ini_concerns
     if b.report:
         (work/'report.json').write_text(json.dumps(b.report, indent=2, default=str) + '\n', encoding='utf-8')
     (work/'build.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
@@ -289,6 +292,10 @@ def build(project, args=(), progress=print):
         progress('Placed templates to know about (`mw item NAME --info`):')
         for line in concerns:
             progress('  ' + line)
+    if ini_concerns:
+        progress('map.ini definitions the game will not take:')
+        for line in ini_concerns:
+            progress('  ' + line)
     return project.build_dir
 
 
@@ -305,6 +312,17 @@ def _template_concerns(b):
                                    ini.read_text(encoding='ascii', errors='replace') if ini.exists() else '')
     except Exception as error:   # a check never fails the build
         return [f'(No template check: {error})']
+
+
+def _ini_concerns(b):
+    """What the build's map.ini defines that the game will not take
+    (render.catalog.check_ini), as lines."""
+    try:
+        from mapworkshop.render import catalog
+        ini = b.out/'map.ini'
+        return catalog.check_ini(b.assets, ini.read_text(encoding='ascii', errors='replace')) if ini.exists() else []
+    except Exception as error:   # a check never fails the build
+        return [f'(No map.ini check: {error})']
 
 
 def _apply_properties(project, b):

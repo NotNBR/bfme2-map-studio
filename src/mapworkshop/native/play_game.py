@@ -1,7 +1,7 @@
 """Start a skirmish on a project that you play, say when it is playable, and
 let its window close.
 
-    python -m mapworkshop.native.play_game PROJECT LOG [--graphics Medium]
+    python -m mapworkshop.native.play_game PROJECT LOG [--graphics Medium] [--fog]
 
 Started by mapworkshop.native.play, which reads its output; it stays running
 as the game's debugger until the game closes. Being the debugger, it learns
@@ -11,6 +11,10 @@ what the game does from breakpoints, as it happens (no polling):
   GameLogicInit.cpp) has loaded the map, placed the players and re-enabled
   the window's close item, in skirmish mode. Its next frame is gameplay.
 - closed: the game has exited, by its window, a crash or the menus.
+
+Once loaded, the map is revealed to you for the whole game (runtime.reveal_map),
+so the whole map and every effect on it shows; --fog keeps the game's shroud
+and fog of war.
 
 Each is a line `mapworkshop: <event> <seconds since start>`, written both to
 the log and to the caller.
@@ -59,6 +63,7 @@ def main(argv=None):
     parser.add_argument('project')
     parser.add_argument('log')
     parser.add_argument('--graphics', default='Medium')
+    parser.add_argument('--fog', action='store_true', help='Keep the shroud and fog of war')
     args = parser.parse_args(argv)
     sys.stdout = sys.stderr = Tee(args.log, sys.__stdout__)
     from mapworkshop import project
@@ -77,6 +82,8 @@ def main(argv=None):
         if game.logic()[1] != debugger.SKIRMISH:
             return True
         event(game, 'loaded')
+        if not args.fog:
+            game.arm(debugger.GAME_ENGINE_UPDATE, runtime.reveal_map)
         return False
 
     game = runtime.start(project.find(args.project), args.graphics)

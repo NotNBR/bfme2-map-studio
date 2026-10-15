@@ -224,6 +224,12 @@ Python process:
   obsolete, cinematic or spawned-only templates, and faction gameplay buildings
   that no player owns. They inform; the build still succeeds, and
   `mw item NAME --info` says more.
+- It also lists what the build's `map.ini` defines that the game will not take,
+  also in `build.json` (`ini_concerns`): an `Object` block that adds an object
+  type (the game hangs loading such a map; a `map.ini` may change the game's
+  objects and add particle systems,
+  [what a map.ini may define](research/water.md#what-a-mapini-may-define)), and
+  particle systems whose texture the game doesn't have.
 - Builds are reproducible: the same source gives the same map, byte for byte.
   (The process runs with a fixed `PYTHONHASHSEED`, because some builds iterate
   sets of names.)
@@ -233,7 +239,10 @@ Python process:
 `mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a
 skirmish on the current build, without going through the menus: the game opens
 in a 1600 x 1200 window, you against an easy AI, at Medium detail
-(`--graphics Low|Medium|High|UltraHigh` for another). It runs an isolated copy
+(`--graphics Low|Medium|High|UltraHigh` for another). The map is revealed to
+you for the whole game, without shroud or fog of war, so all of it shows,
+including objects and their particle effects, which the game hides wherever
+your view is fogged; `--fog` keeps the shroud and fog of war. It runs an isolated copy
 of the game in `local/runtime/` ([native/runtime.py](../src/mapworkshop/native/runtime.py)),
 made on first use from the installed BFME2, which must be version 1.06:
 
@@ -308,6 +317,9 @@ it is, and it ends as soon as the tool has what it came for.
   `--at FRAME` (one per `--shot`, rising) holds each shot until the game's
   logic reaches that frame, about 5 per second of game time, to photograph
   a scripted scenario as it plays out; `--timeout` gives a long one time.
+  After moving the camera each shot waits `--settle` rendered frames (30)
+  and, with `--delay MS`, at least that many milliseconds. Particle effects
+  fill in over game time: a particle stream needs `--at` about 70.
   `--view NAME X Y DISTANCE PITCH HEADING` is a cinematic shot instead: the
   camera DISTANCE from the ground at X, Y, PITCH degrees below the horizon,
   facing HEADING (0 north, 90 east), angles the game's own camera never

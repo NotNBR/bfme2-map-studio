@@ -158,6 +158,21 @@ class CheckMapTests(unittest.TestCase):
         self.assertTrue(lines[2].startswith("RohanHouse02 x1 [Town]: the game defines no such template"))
 
 
+class CheckIniTests(unittest.TestCase):
+    def test_check_ini(self):
+        assets = Assets(HALL, ini={'crate.ini': 'ChildObject TreasureChest100 Crate\n'})
+        assets.texture_key = lambda name: 'art/textures/exwater01.dds' if name.lower() == 'exwater01.tga' else None
+        ini = ('Object RohanGoldenHall\n  ReplaceModule ModuleTag_Draw\n  End\nEnd\n\n'
+               'Object TreasureChest100\n  AddModule ModuleTag_X\n  End\nEnd\n\n'
+               'Object MW_NewThing\n  KindOf = IMMOBILE\nEnd\n\n'
+               'FXParticleSystem MWWater\n  System\n    ParticleName = EXWater01.tga\n  End\nEnd\n\n'
+               'FXParticleSystem MWMissing\n  System\n    ParticleName = NoSuchTexture.tga\n  End\nEnd\n')
+        lines = catalog.check_ini(assets, ini)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith('Object MW_NewThing: adds an object type'))
+        self.assertEqual(lines[1], 'FXParticleSystem MWMissing: the game has no texture NoSuchTexture.tga')
+
+
 class TemplatePatternTests(unittest.TestCase):
     def test_indented_definitions_and_assignments(self):
         text = ('Object A\n  Model = X\nEnd\n   Object B\n  ObjectStatus = Y\n  Object = NotATemplate\nEnd\n'

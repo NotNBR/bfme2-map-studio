@@ -53,9 +53,10 @@ def pathfind(project, progress=print):
     return info
 
 
-def play(project, graphics='Medium', progress=print):
+def play(project, graphics='Medium', progress=print, fog=False):
     """Start BFME2 straight in a skirmish on the project's current build, you
-    against an easy AI, in a 1600 x 1200 window. Returns once the game reports
+    against an easy AI, in a 1600 x 1200 window, the map revealed (no shroud
+    or fog of war, unless `fog`). Returns once the game reports
     that the skirmish is playable: the launcher process (for watch(); close
     its stdout if you do not watch it) and the seconds the start took. Raises
     RuntimeError when the launcher ends before that."""
@@ -63,7 +64,7 @@ def play(project, graphics='Medium', progress=print):
     log = runtime.LOGS/f'play-{project.id}.log'
     env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')
     process = subprocess.Popen([sys.executable, '-m', 'mapworkshop.native.play_game', project.id, str(log),
-                                '--graphics', graphics], cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                '--graphics', graphics] + (['--fog'] if fog else []), cwd=ROOT, env=env, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     progress(f'Starting BFME2 and loading {project.title}...')

@@ -62,6 +62,8 @@ def parser():
                    help="Install into your own game's user maps and start it at the menu instead")
     s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
                    help='Detail level of the test game (default Medium)')
+    s.add_argument('--fog', action='store_true',
+                   help='Keep the shroud and fog of war (by default the map is revealed)')
     s = sub.add_parser('history', help='Earlier builds of a map')
     s.add_argument('map', nargs='?')
     s = sub.add_parser('config', help='Show or change settings')
@@ -88,6 +90,8 @@ def parser():
                    help='Detail level (default Medium)')
     s.add_argument('--out', type=Path, help='Folder for the PNGs (default local/renders/game/<map>)')
     s.add_argument('--settle', type=int, default=30, help='Rendered frames to wait after moving the camera (30)')
+    s.add_argument('--delay', type=int, default=0, metavar='MS',
+                   help='Also wait at least this many milliseconds after moving the camera before each shot')
     s.add_argument('--show', action='store_true',
                    help='Show the game window and use native Direct3D 9 (default: headless, through DXVK)')
     s = sub.add_parser('patch', help="Faster map loading in your normal game (a dinput8.dll in the game folder)")
@@ -250,7 +254,7 @@ def cmd_play(args, extra):
             say(f'{error}\nStarting your normal game instead.')
         else:
             try:
-                process, seconds = native.play(p, graphics=args.graphics, progress=say)
+                process, seconds = native.play(p, graphics=args.graphics, progress=say, fog=args.fog)
             except RuntimeError as error:
                 say(str(error))
                 return 1
@@ -345,7 +349,7 @@ def cmd_capture(args):
     native.ready(progress=say)
     out = args.out or RENDERS/'game'/p.id
     report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say, headless=not args.show,
-                     timeout=args.timeout)
+                     timeout=args.timeout, delay=args.delay)
     say(f'{len(report["shots"])} screenshot(s) in {out} ({report["seconds"]:.0f} s); capture.json has the details.')
     return 0
 

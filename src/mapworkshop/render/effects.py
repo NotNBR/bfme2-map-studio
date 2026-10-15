@@ -644,7 +644,8 @@ class Effects:
         if not hasattr(self, '_system_defs'):
             text = '\n'.join(self.assets.ini_text(f) for f in ('fxparticlesystem.ini', 'fxparticlesystemcustom.ini')
                              if self._has_ini(f))
-            self._system_defs = parse_systems(text)
+            # The map's own map.ini last: its systems are new or replace the game's.
+            self._system_defs = parse_systems(text + '\n' + getattr(self.assets, 'map_ini', ''))
         return self._system_defs
 
     def _has_ini(self, name):

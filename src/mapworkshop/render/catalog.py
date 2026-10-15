@@ -608,14 +608,35 @@ PLAYER_OWNER = re.compile(r'(?i)^player_\d')
 ROAD_FLAGS = 0x2 | 0x4 | 0x10 | 0x20          # road and bridge end points
 
 
+def _object_names(assets):
+    """The game's object templates, those of crate.ini included, lowercase."""
+    return set(assets.templates) | {n.lower() for n in _named(assets.ini_text('crate.ini'), '(?:Object|ChildObject|ObjectReskin)')}
+
+
+def check_ini(assets, ini):
+    """Lines naming what a map's map.ini defines that the game will not take:
+    an `Object` block adding an object type the game doesn't define (BFME2
+    hangs loading a map whose map.ini does; changing the game's own objects
+    works, docs/research/water.md), and a particle system whose texture the
+    game doesn't have. `assets` are the game's, without the map's templates."""
+    known = _object_names(assets)
+    out = [f'Object {name}: adds an object type; BFME2 hangs loading a map whose map.ini does '
+           "(change one of the game's objects instead)"
+           for name in sorted(set(_named(ini, 'Object')), key=str.lower) if name.lower() not in known]
+    for name, body in re.findall(r'(?ms)^FXParticleSystem[ \t]+(\S+)[^\n]*\n(.*?)^End\b', ini):
+        texture = _field(body, 'ParticleName')
+        if texture and assets.texture_key(texture) is None:
+            out.append(f'FXParticleSystem {name}: the game has no texture {texture}')
+    return out
+
+
 def check_map(assets, m, ini=''):
     """Lines naming the templates of a map worth a second look: names the game
     doesn't define, obsolete, cinematic or spawned-only templates, and faction
     gameplay buildings no player owns."""
     if ini:
         assets = assets.for_map(ini)
-    known = set(assets.templates) | {n.lower() for n in _named(assets.ini_text('crate.ini'), '(?:Object|ChildObject|ObjectReskin)')}
-    known |= {n.lower() for n in _named(assets.ini_text('roads.ini'), 'Road')}
+    known = _object_names(assets) | {n.lower() for n in _named(assets.ini_text('roads.ini'), 'Road')}
     known.add('scorch')                           # a terrain scorch mark, drawn by the engine (MapObject::isScorch)
     found, seen = defaultdict(lambda: [0, set()]), {}
     for o in m.objects():

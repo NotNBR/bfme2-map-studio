@@ -74,6 +74,23 @@ NEW_GAME_DONE = 0x248767
 THE_GAME_INFO, THE_SKIRMISH_GAME_INFO = 0xA02EEC, 0xA02EF0
 SLOTS_OFF, SLOT_STATE, SLOT_TEMPLATE = 0x18, 4, 0x18
 TEMPLATE_RANDOM, EASY_AI = -1, 2
+# PartitionManager::revealMapForPlayerPermanently(player index), thiscall
+# (Open-BFME-2 ScriptActionsRva003BB9C6.cpp: the script action that reveals
+# the map permanently calls it, undoing it at 0x7397B0).
+REVEAL_MAP = 0x739790
+THE_PARTITION_MANAGER = 0x9FE74C
+THE_PLAYER_LIST = 0x9FEEE8      # PlayerList*: +0x10 local player; Player +0x54 its index
+
+
+def reveal_map(game, tid, ctx):
+    """Breakpoint handler, armed on the engine frame (debugger.GAME_ENGINE_UPDATE)
+    once the skirmish has loaded: reveals the whole map to the local player
+    for the rest of the game, no shroud and no fog of war. The game hides an
+    object, with its particle effects, wherever the local player's view of
+    it is fogged or shrouded."""
+    player = game.u32(game.u32(game.base + THE_PLAYER_LIST) + 0x10)
+    return {'call': game.base + REVEAL_MAP, 'ecx': game.u32(game.base + THE_PARTITION_MANAGER),
+            'args': [game.u32(player + 0x54)]}
 
 
 def linked(relative):

@@ -24,12 +24,9 @@ from pathlib import Path
 
 # Retail game.dat 1.06 (RVAs), from Open-BFME-2 and bfme-workshop.
 GAME_ENGINE_UPDATE = 0x225DA9   # once per engine frame, on the main thread
-REVEAL_MAP = 0x739790           # PartitionManager::revealMapForPlayer(player index), thiscall
-THE_PARTITION_MANAGER = 0x9FE74C
-THE_PLAYER_LIST = 0x9FEEE8      # PlayerList*: +0x10 local player; Player +0x54 its index
 
 
-def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240, headless=True):
+def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240, headless=True, delay=0):
     """Save each shot (name, x, y, height[, logic frame]) of the project's current build as
     out/<name>.png; returns a report of the shots and the run. `headless`
     (the default) runs the game unseen, through DXVK (native.runtime); False
@@ -47,11 +44,6 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     game = runtime.start(project, graphics, headless=headless, progress=progress)
     state = dict(shot=0, step='load', done=[])
 
-    def reveal(game, tid, ctx):
-        player = game.u32(game.u32(game.base + THE_PLAYER_LIST) + 0x10)
-        return {'call': game.base + REVEAL_MAP, 'ecx': game.u32(game.base + THE_PARTITION_MANAGER),
-                'args': [game.u32(player + 0x54)]}
-
     def tick(game):
         frame, mode = game.logic()
         module = game.ingame
@@ -60,7 +52,7 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
         photo, cap = module['mwPhoto'], module['mwCapture']
         frames = game.u32(cap + 24)
         if state['step'] == 'load':
-            game.arm(GAME_ENGINE_UPDATE, reveal)
+            game.arm(GAME_ENGINE_UPDATE, runtime.reveal_map)
             state['step'] = 'move'
         if state['step'] == 'move':
             s = shots[state['shot']]
@@ -68,8 +60,9 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
                 return None                       # not yet: the shot waits for its logic frame
             game.write(photo, struct.pack('<I6f', 1, s['x'], s['y'], s['height'], math.radians(s['pitch']),
                                           math.radians(s['heading']), s['distance']))
-            state.update(step='settle', since=frames)
-        elif state['step'] == 'settle' and frames >= state['since'] + settle:
+            state.update(step='settle', since=frames, moved=time.time())
+        elif (state['step'] == 'settle' and frames >= state['since'] + settle
+              and time.time() >= state['moved'] + delay/1000):   # `delay` ms at least
             game.write(cap, struct.pack('<I', 1))
             state['step'] = 'read'
         elif state['step'] == 'read' and not game.u32(cap):

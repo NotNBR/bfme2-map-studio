@@ -440,8 +440,10 @@ Objects get particle effects in two ways, and the renderer draws both:
   `E_Fire_SM`, `E_Smoke_SM` and `E_FireSparks_SM`, which hold its flame.
 - **INI particle systems.** `ParticleSysBone = <bone> <system>` lines in the
   draw module's `DefaultModelConditionState` and `IdleAnimationState` attach
-  an `FXParticleSystem` from `fxparticlesystem.ini`. `FireCampfire`'s
-  embers and `FireBonfire`'s glow and smoke work this way.
+  an `FXParticleSystem` from `fxparticlesystem.ini`, or from the map's
+  `map.ini`, read after it, so a map's own systems are drawn and replace the
+  game's of the same name. `FireCampfire`'s embers and `FireBonfire`'s glow
+  and smoke work this way.
 
 Only drawables in the scene run effects. `W3DPropDraw` templates go to the
 prop buffer, which renders their models without adding them to a scene, so
