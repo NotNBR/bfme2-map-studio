@@ -695,7 +695,7 @@ def build(b):
     global OUT
     OUT=b.work
     print('Sculpting the supplied heightmap and grading six construction areas...',flush=True)
-    t=terrain()
+    t=b.cached(terrain)
     project=b.project
     m=create(WIDTH,HEIGHT,BORDER,title=project.title,description=project.description,player_count=project.players)
     starts(m,t['starts'])
@@ -752,10 +752,8 @@ def build(b):
         +('; Vegetation beyond the 1,200-tree and 2,000-shrub buffers, drawn as full models.\n'
           +vegetation_ini+'\n' if vegetation_ini else ''))
     plan=preview(t,m,b.work,project.title)
-    path=b.save(data,ini=ini)
-    if not (b.out/(project.native_name+'_art.tga')).exists():
-        # No GPU for the minimap render: use the terrain plan instead.
-        b.save(data,ini=ini,minimap=plan)
+    # Without a GPU for the minimap render, the terrain plan stands in.
+    path=b.save(data,ini=ini,fallback=plan)
     cache_entry(path,m,project.native_name,project.title,project.description,players=project.players)
     report.update(title=project.title,seed=SEED,starts=t['starts'],bridges=t['bridges'],scenery=scenery,
         grid_audit=t['audit'],source_map=None,reference_height_sha256=sha((PROJECT/'references/heightmap.png').read_bytes()),

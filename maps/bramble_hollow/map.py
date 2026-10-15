@@ -1264,7 +1264,7 @@ def build(b):
     if b.project.players != len(STARTS):
         raise ValueError(f'map.toml has {b.project.players} players, but the valley has {len(STARTS)} starts')
     print('Shaping the valley, brook and fords...', flush=True)
-    t = terrain()
+    t = b.cached(terrain)
     lane_lines = lanes()+[chaikin(FARM_TRACK, 3)]+lower_lanes()
     lower_houses = lower_house_fronts()
     t['lanes'] = lane_field(t, lane_lines)

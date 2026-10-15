@@ -1216,7 +1216,7 @@ def build(b):
         raise ValueError(f'map.toml has {b.project.players} players, but the dale has {len(STARTS)} starts')
     m = create(WIDTH, HEIGHT, BORDER, title=b.project.title, description=b.project.description,
                player_count=b.project.players)
-    t = terrain()
+    t = b.cached(terrain)
     t['roads'] = road_field(t, roads())
     crossings(t)
     t['paddock'] = paddock_distance(t)

@@ -27,6 +27,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from mapworkshop.formats.map import Map
+from mapworkshop.mapkit.memo import pure
 
 STEP = 20.0                       # world units per analysis cell
 SITE_TEMPLATES = {'outpost': 'Outpost', 'warglair': 'WargLair', 'inn': 'Inn', 'signalfire': 'SignalFire'}
@@ -74,6 +75,7 @@ def cell_of(walk, p):
     return best
 
 
+@pure
 def distance_field(walk, source):
     """Dijkstra over walkable cells; distances in world units."""
     h, w = walk.shape

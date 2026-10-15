@@ -17,6 +17,8 @@ import math
 
 import numpy as np
 
+from mapworkshop.mapkit.memo import pure
+
 
 def _grid(x, y):
     """(x0, y0, step) when x and y are a regular 2-D grid, x along the rows; else None."""
@@ -31,6 +33,7 @@ def _grid(x, y):
     return float(x[0, 0]), float(y[0, 0]), step
 
 
+@pure
 def polyline_distance(points, x, y, reach=None):
     """Distance from every sample (x, y) to the polyline, and the arc length
     along it of its nearest point. Zero-length segments are skipped.

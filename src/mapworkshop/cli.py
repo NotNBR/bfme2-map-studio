@@ -4,6 +4,7 @@ Maps are named by their project id or any unique start of it ("grey" for
 greywater-marches); commands without a map use the one you worked on last.
 """
 import argparse
+import os
 from pathlib import Path
 import sys
 import time
@@ -15,7 +16,8 @@ USAGE = """
   mw maps                    list your map projects
   mw new "Misty Vale"        start a new map project
   mw dev [MAP]               rebuild on every save, with the viewer open
-  mw build [MAP] [--install] build a map (--install: also into the game's maps)
+  mw build [MAP] [--install] build a map (--install: also into the game's maps;
+                             --no-cache: make every stored calculation again)
   mw view [MAP]              open the viewer
   mw play [MAP]              test it in-game: start BFME2 straight in a skirmish on it
   mw marks [MAP] [--json]    print the viewer's marks, for an agent
@@ -53,9 +55,11 @@ def parser():
     s = sub.add_parser('dev', help='Rebuild on every save, with the viewer open')
     s.add_argument('map', nargs='?')
     s.add_argument('--no-view', action='store_true', help="Don't open the viewer")
+    s.add_argument('--no-cache', action='store_true', help="Make every calculation again instead of reusing earlier builds' results")
     s = sub.add_parser('build', help='Build a map')
     s.add_argument('map', nargs='?')
     s.add_argument('--install', action='store_true', help="Also copy it into the game's user maps")
+    s.add_argument('--no-cache', action='store_true', help="Make every calculation again instead of reusing earlier builds' results")
     s = sub.add_parser('play', help='Test the map in-game: start BFME2 straight in a skirmish on it')
     s.add_argument('map', nargs='?')
     s.add_argument('--rebuild', action='store_true', help='Build before installing')
@@ -246,9 +250,17 @@ def _build(p, extra=()):
     return code
 
 
+def _no_cache(args):
+    """--no-cache: the builds this command runs make every calculation again
+    (mapkit.memo) instead of reusing earlier builds' results."""
+    if args.no_cache:
+        os.environ['MW_NO_CACHE'] = '1'
+
+
 def cmd_build(args, extra):
     from mapworkshop import game, project
     p = project.find(args.map)
+    _no_cache(args)
     code = _build(p, extra)
     if code == 0 and args.install:
         say(f'Installed: {game.install(p.build_dir, p.native_name)}')
@@ -518,6 +530,7 @@ def cmd_dev(args, extra):
     from mapworkshop.config import ROOT
     p = project.find(args.map)
     project.remember(p)
+    _no_cache(args)
     if not p.map_file.exists() or _changed_since_build(p):
         _build(p, extra)
     viewer = None

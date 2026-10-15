@@ -75,7 +75,8 @@ for settings the code leaves alone.
 | | |
 |---|---|
 | `b.project` | the project: `id`, `title`, `native_name`, `players`, `description`, `weather`, `config` (all of map.toml), `folder` |
-| `b.save(m, ini='', minimap=None)` | write the map `m`, its `map.ini` text and the in-game minimap; without `minimap`, the minimap is rendered from above |
+| `b.save(m, ini='', minimap=None, fallback=None)` | write the map `m`, its `map.ini` text and the in-game minimap; without `minimap`, the minimap is rendered from above once the build is published, or is `fallback` (an image) without a GPU |
+| `b.cached(fn, *args)` | `fn(*args)`, or its result from an earlier build when nothing it depends on has changed ([reusing earlier results](#reusing-earlier-results)) |
 | `b.image(name, image)` | keep a plan or preview image (PIL) with this build |
 | `b.report` | a dict saved as `report.json` with the build |
 | `b.work` | this build's folder, for other files |
@@ -101,7 +102,9 @@ Python process. `mw dev` rebuilds on every save with the viewer open
   `report.json` and `build.json` (time, source hash, git commit, map hash).
 - Only a build that succeeds replaces `local/build/<id>/`: the `.map`, `map.ini`,
   minimap and `preview.png`. An open viewer then reloads it. A failed build
-  leaves the previous one in place.
+  leaves the previous one in place. The map is published as soon as it is
+  written: the minimap, the comparison and the checks below follow while the
+  viewer reloads (the previous build's minimap is kept when the map is unchanged).
 - The last five builds are kept; `mw history [MAP]` lists them.
 - Each build ends with what it changed since the previous one, also kept in its
   `build.json` (`changes`): heights and repainted textures with their area,
@@ -128,6 +131,33 @@ Python process. `mw dev` rebuilds on every save with the viewer open
 
 `mw build --install` also copies the build into the game's user maps folder;
 [testing in-game](testing-in-game.md) covers `mw play`.
+
+### Reusing earlier results
+
+Because builds are reproducible, a calculation given the same inputs by the
+same code gives the same result, so builds keep slow ones in `local/cache/memo/`
+and reuse them ([mapkit/memo.py](../../src/mapworkshop/mapkit/memo.py)). The
+map comes out byte for byte the same either way; the build says how many it reused.
+
+- Toolkit functions of large arrays are reused when their arguments and their
+  own module are unchanged: noise (`earth.fbm`), talus erosion, distances to
+  lines (`lines.polyline_distance`) and walking distances
+  (`checks.strategy.distance_field`). Noise over the terrain grid is almost
+  always reused, even after an edit to the terrain.
+- A project caches a stage of its own with `t = b.cached(terrain)`. It is reused
+  while its arguments, the code it reaches (the functions and module-level values
+  it names, followed through the project's files), the project's other files
+  (references, heightmaps), the toolkit it can call (`formats`, `mapkit` and the
+  modules they import) and the numpy and Pillow versions are unchanged. Greywater Marches,
+  Bramble Hollow and Brightwater Fold cache their `terrain()`, so an edit to
+  their objects skips it. Each call gets its own copy, so the build may change it.
+- A cached stage must depend on nothing else: no game data, no files outside the
+  project, nothing reached through an object other than its arguments. A stage
+  that assigns module globals, or names something the key cannot describe, runs
+  every build, with a note saying why.
+- `mw build --no-cache` (and `mw dev --no-cache`) makes everything again and
+  stores nothing. The cache keeps at most 3 GB, dropping the least recently
+  used results first; deleting `local/cache/memo/` is always safe.
 
 ## Checking a build
 

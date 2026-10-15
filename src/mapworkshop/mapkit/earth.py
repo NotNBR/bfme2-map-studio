@@ -6,6 +6,8 @@ notes in docs/history/ashen-march-findings.md. This is not a hydraulic solver.
 
 import numpy as np
 
+from mapworkshop.mapkit.memo import pure
+
 
 def gradient_noise(x,y,scale,seed):
     rng=np.random.default_rng(seed)
@@ -26,6 +28,7 @@ def gradient_noise(x,y,scale,seed):
     return ((a*(1-fu)+b*fu)*(1-fv)+(c*(1-fu)+d*fu)*fv)*1.45
 
 
+@pure
 def fbm(x,y,scale=900,seed=100,octaves=4):
     value=np.zeros_like(x,dtype=float);weight=1.;total=0.
     for i in range(octaves):
@@ -36,6 +39,7 @@ def fbm(x,y,scale=900,seed=100,octaves=4):
     return value/total
 
 
+@pure
 def thermal_erosion(height,iterations=28,spacing=10,talus=.72):
     """Conservative eight-neighbour talus relaxation, with a closed boundary."""
     z=height.astype(float).copy()

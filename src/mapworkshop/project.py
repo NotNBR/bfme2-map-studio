@@ -9,7 +9,9 @@ the map:
 
 The pipeline does the rest: it builds into a fresh history folder, swaps the
 result into local/build/<id>/ only when the build succeeds (an open viewer
-reloads it), and keeps the last builds in local/history/<id>/.
+reloads it), then renders the minimap, compares with the previous build and
+runs its checks, and keeps the last builds in local/history/<id>/. Slow
+calculations are reused from earlier builds (mapkit.memo, Build.cached).
 
 Older projects with a build.py and main() are run through the same pipeline;
 their OUT, CHECK and TARGET globals are pointed at the run's folders.
@@ -150,6 +152,7 @@ class Build:
         self.args = list(args)    # extra command-line arguments for the project
         self._assets = None
         self.report = {}
+        self.minimap_due = None   # what save() left for the pipeline: True (render), or a fallback image
 
     @property
     def assets(self):
@@ -166,21 +169,37 @@ class Build:
         """Save a preview image of this build (e.g. a layout plan)."""
         image.save(self.work/name)
 
-    def save(self, m, ini='', minimap=None):
+    def save(self, m, ini='', minimap=None, fallback=None):
         """Write the map, its map.ini and the in-game minimap (_art/_pic.tga).
-        Without a `minimap` image, it is rendered from the map from above."""
+        Without a `minimap` image, the pipeline renders it from the map from
+        above once the build is published (the viewer reloads meanwhile), or
+        uses `fallback` (an image, e.g. a layout plan) where it cannot render
+        one (no GPU)."""
         data = m.encode() if hasattr(m, 'encode') else bytes(m)
         self.map_file.write_bytes(data)
         title = self.project.title
         (self.out/'map.ini').write_text((f'; {title}\n' + ini) if ini else f'; {title}\n', encoding='ascii')
         if minimap is None:
-            minimap = render_minimap(self.map_file)
-        if minimap is not None:
-            from PIL import Image
-            minimap = minimap.resize((256, 256), Image.Resampling.LANCZOS) if minimap.size != (256, 256) else minimap
-            for suffix in ('_art.tga', '_pic.tga'):
-                minimap.save(self.out/(self.project.native_name + suffix))
+            self.minimap_due = fallback if fallback is not None else True
+        else:
+            self.minimap_due = None
+            _write_minimap(self.out, self.project.native_name, minimap)
         return self.map_file
+
+    def cached(self, fn, *args, **kwargs):
+        """fn(*args, **kwargs), or a copy of its result from an earlier build
+        when the call, the code it reaches in the project, the project's other
+        files and the toolkit are all unchanged (mapkit.memo.stage). For
+        slow stages that depend on nothing else: `t = b.cached(terrain)`."""
+        from mapworkshop.mapkit.memo import stage
+        return stage(fn, *args, root=self.project.folder, **kwargs)
+
+
+def _write_minimap(folder, name, image):
+    from PIL import Image
+    image = image.resize((256, 256), Image.Resampling.LANCZOS) if image.size != (256, 256) else image
+    for suffix in ('_art.tga', '_pic.tga'):
+        image.save(folder/(name + suffix))
 
 
 def render_minimap(path):
@@ -264,6 +283,22 @@ def build(project, args=(), progress=print):
     data = b.map_file.read_bytes()
     record.update(status='built', seconds=round(time.time() - started, 1), map_sha256=hashlib.sha256(data).hexdigest(),
                   map_bytes=len(data))
+    if b.report:
+        (work/'report.json').write_text(json.dumps(b.report, indent=2, default=str) + '\n', encoding='utf-8')
+    (work/'build.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+    # Publish first: an open viewer reloads the map while the minimap, the
+    # comparison and the checks below run.
+    _publish(project, work)
+    remember(project)
+    progress(f'Built {project.title} in {record["seconds"]:.0f} s: {project.build_dir}')
+    if set_properties:
+        progress('Map properties from map.toml over the build\'s own:')
+        for line in set_properties:
+            progress('  ' + line)
+    try:
+        _minimap(project, b, work, stamp)
+    except Exception as error:   # the map is out: a minimap never fails the build
+        progress(f'(No minimap: {error})')
     since, changes = _changes(project, work)
     if changes is not None:
         record.update(changes_since=since, changes=changes)
@@ -273,17 +308,13 @@ def build(project, args=(), progress=print):
     ini_concerns = _ini_concerns(b)
     if ini_concerns:
         record['ini_concerns'] = ini_concerns
-    if b.report:
-        (work/'report.json').write_text(json.dumps(b.report, indent=2, default=str) + '\n', encoding='utf-8')
-    (work/'build.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
-    _publish(project, work)
+    record['seconds_with_checks'] = round(time.time() - started, 1)
+    _update_record(project, work, record, stamp)
     _prune(project)
-    remember(project)
-    progress(f'Built {project.title} in {record["seconds"]:.0f} s: {project.build_dir}')
-    if set_properties:
-        progress('Map properties from map.toml over the build\'s own:')
-        for line in set_properties:
-            progress('  ' + line)
+    from mapworkshop.mapkit import memo
+    if memo.stats['reused']:
+        progress(f'Reused {memo.stats["reused"]} of {memo.stats["reused"] + memo.stats["calculated"]} '
+                 'calculations from earlier builds (`--no-cache` makes them again)')
     if since:
         progress(f'Changes since the build of {since} (`mw diff {project.id}`):')
     for line in changes or ():
@@ -297,6 +328,55 @@ def build(project, args=(), progress=print):
         for line in ini_concerns:
             progress('  ' + line)
     return project.build_dir
+
+
+def _ours(project, stamp):
+    """Whether local/build/<id>/ still holds the build started at `stamp`."""
+    try:
+        return json.loads((project.build_dir/'build.json').read_text(encoding='utf-8')).get('started') == stamp
+    except (OSError, ValueError):
+        return False
+
+
+def _minimap(project, b, work, stamp):
+    """The minimap save() left to the pipeline, after publishing: the
+    previous build's when the map and map.ini are unchanged, else rendered
+    (or the build's fallback image without a GPU). Written to this run's
+    folder and, while it is still the latest, to local/build/<id>/."""
+    if b.minimap_due is None:
+        return
+    name = project.native_name
+    image = None
+    try:
+        previous = previous_build(project, latest=work)
+        if previous is not None and previous.read_bytes() == b.map_file.read_bytes() \
+                and (previous.parent/'map.ini').read_bytes() == (b.out/'map.ini').read_bytes() \
+                and all((previous.parent/(name + s)).exists() for s in ('_art.tga', '_pic.tga')):
+            for suffix in ('_art.tga', '_pic.tga'):
+                shutil.copy2(previous.parent/(name + suffix), b.out/(name + suffix))
+            image = True
+    except OSError:
+        pass
+    if image is None:
+        image = render_minimap(b.map_file)
+        if image is None and b.minimap_due is not True:
+            image = b.minimap_due
+        if image is None:
+            return
+        _write_minimap(b.out, name, image)
+    if _ours(project, stamp):
+        from PIL import Image
+        for suffix in ('_art.tga', '_pic.tga'):
+            shutil.copy2(b.out/(name + suffix), project.build_dir/(name + suffix))
+        Image.open(b.out/(name + '_art.tga')).convert('RGB').save(project.build_dir/'preview.png')
+
+
+def _update_record(project, work, record, stamp):
+    """build.json again, with what was worked out after publishing."""
+    text = json.dumps(record, indent=2) + '\n'
+    (work/'build.json').write_text(text, encoding='utf-8')
+    if _ours(project, stamp):
+        (project.build_dir/'build.json').write_text(text, encoding='utf-8')
 
 
 def _template_concerns(b):

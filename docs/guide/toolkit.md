@@ -32,6 +32,7 @@ searches both ([finding assets](finding-assets.md)).
 | [script_writer](../../src/mapworkshop/mapkit/script_writer.py) | map scripts from the game's own catalogue of conditions and actions (`Writer(m).operation`, `.script`, `.install`), each checked against its argument signature ([map scripts](../game/scripts.md)) |
 | [properties](../../src/mapworkshop/mapkit/properties.py) | the map-wide settings a `map.toml` `[properties]` table and the viewer's Properties window set ([projects](projects-and-builds.md#map-properties)) |
 | [cache](../../src/mapworkshop/mapkit/cache.py) | checks a build's player starts (2 to 8, consecutive) the way the game's map cache counts them |
+| [memo](../../src/mapworkshop/mapkit/memo.py) | reuse slow calculations across builds: `pure` for array functions, `stage` through `b.cached` for project stages ([reusing earlier results](projects-and-builds.md#reusing-earlier-results)) |
 
 ## Checking a map
 
