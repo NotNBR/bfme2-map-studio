@@ -191,7 +191,17 @@ def corner_blend_records(labels, tile_index):
     return blends,extra,records
 
 
-def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes=None, corner_blends=False):
+def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes=None, corner_blends=False,
+                  cliffs=None, cliff_scale=1.0):
+    """Write the terrain's textures: `labels` index `palette` per cell.
+
+    `cliffs` (a cell mask, e.g. mapkit.cliffs.steep_cells(heights)) gives
+    those cells cliff records (mapkit.cliffs) from the map's heights, so set
+    the heights first; `cliff_scale` 2 lays their texture twice as large as
+    the stock maps do. The mapped cells must all have one texture: the game
+    builds the cliff texture from the first record's alone. They keep no
+    blend, as in the game, so put their texture last in the palette: higher
+    textures blend over their neighbours, which are not mapped."""
     h,w=labels.shape; yy,xx=np.indices((h,w))
     sizes=list(cell_sizes or [4]*len(palette))
     if len(sizes)!=len(palette):
@@ -205,6 +215,7 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
     label_phase=np.array([phase_of[size] for size in sizes])
     def tile_index(label,y,x):
         return tile_start[label]+phases[label_phase[label],y,x]
+    given=np.asarray(labels)
     if blend_edges and corner_blends:
         labels=fill_enclosed(labels)
     tiles=tile_index(labels,yy,xx).astype('<u2')
@@ -226,13 +237,33 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
                     records.append(blend_record(*key))
                     lookup[key]=len(records)
                 blends[y,x]=lookup[key]
+    cliff_index=np.zeros((h,w),dtype='<u4'); cliff_records=[]
+    if cliffs is not None and np.any(cliffs):
+        from mapworkshop.mapkit.cliffs import cliff_uvs
+        mapped=np.asarray(cliffs,bool).copy(); mapped[-1,:]=mapped[:,-1]=False
+        textures_used=np.unique(given[mapped])
+        if len(textures_used)>1:
+            raise ValueError('Cliff-mapped cells use more than one texture: '+', '.join(palette[i] for i in textures_used))
+        label=int(textures_used[0])
+        mapped&=labels==label                  # not the lone cells fill_enclosed gave their surroundings' texture
+        heights=m.heightmap()['elevations'].astype(float)*.0390625
+        if heights.shape!=(h,w):
+            raise ValueError('Set the heights before cliff-mapping the textures')
+        uv,flip=cliff_uvs(heights,mapped,cell_size=sizes[label],scale=cliff_scale)
+        ys,xs=np.nonzero(mapped)
+        cliff_index[ys,xs]=np.arange(1,len(ys)+1)
+        tile=int(tile_start[label])
+        cliff_records=[dict(tile=tile,uv=tuple(float(f) for f in uv[y,x]),flip=int(flip[y,x]),mutant=0)
+                       for y,x in zip(ys,xs)]
+        blends=np.where(mapped,0,blends).astype(blends.dtype)
+        three_way=np.where(mapped,0,three_way).astype(np.asarray(three_way).dtype)
     blocked=zero if blocked is None else blocked.astype('u1')
-    arrays=dict(tiles=tiles,blends=blends,three_way=three_way,cliffs=zero,impassable=blocked,impassable_players=zero,
+    arrays=dict(tiles=tiles,blends=blends,three_way=three_way,cliffs=cliff_index,impassable=blocked,impassable_players=zero,
                 passage_widths=zero,taintable=zero,extra_passable=zero,flammability=zero,visible=np.ones((h,w),'u1'))
     textures=[dict(cell_start=int(cell_start[i]),cell_count=counts[i],cell_size=sizes[i],name=name)
               for i,name in enumerate(palette)]
     m.chunk('BlendTileData').data=encode_blend(dict(arrays=arrays,texture_cells=sum(counts),textures=textures,
-        edge_texture_cells=0,edge_textures=[],blend_records=records,cliff_records=[]),18)
+        edge_texture_cells=0,edge_textures=[],blend_records=records,cliff_records=cliff_records),18)
 
 
 def add_object(m, template, x, y, angle=0, layer='', extra=(), z=0):

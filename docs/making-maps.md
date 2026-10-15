@@ -105,6 +105,13 @@ Building blocks, in `src/mapworkshop/`:
   areas cut off from every start. `--compare` checks a saved native grid;
   `--native` explicitly starts a skirmish to capture one. See the
   [viewer guide](viewer.md#walkable-areas) for the estimate's limits.
+- `mapkit.cliffs`: cliff texture mapping, so steep faces do not stretch
+  their texture into streaks: `set_materials(..., cliffs=steep_cells(heights))`
+  writes a cliff record per masked cell, its UVs measured along the face as
+  the stock maps' are. One texture per map (the game builds the cliff
+  texture from the first record's); mapped cells keep no blend, so put that
+  texture last in the palette
+  ([cliff mapping](reference/mapping/terrain-and-presentation/terrain.md#cliff-mapping)).
 - `mapkit.bridges`: bridges the game spans between two points at any length
   (`add_bridge`; `bridge_type` for a map's own type), walkable; only models
   with left/span/right pieces work, which it checks

@@ -62,6 +62,8 @@ TERRAIN_VS = """
 uniform mat4 view_projection;
 uniform sampler2D heights;          // R32F world z, (width, height)
 uniform usampler2D cells;           // RGBA32UI per cell
+uniform sampler2D cliff_u;          // RGBA32F per cell: the cliff record's u0..u3
+uniform sampler2D cliff_v;          // and v0..v3 (mapkit.cliffs)
 uniform ivec2 grid;                 // samples (width, height)
 uniform int border;
 uniform vec3 ambient;
@@ -86,6 +88,7 @@ out vec2 v_alpha;
 out vec3 v_light_t;                 // Default VS oT5: light in the tangent frame
 out vec3 v_half_t;                  // Default VS oT6: normalized half vector, tangent frame
 out float v_fog;                    // 1 = no fog
+out vec2 v_cliff;                   // the corner's cliff UV, in its texture
 flat out uvec4 v_cell;
 
 const ivec2 CORNER[4] = ivec2[4](ivec2(0,0), ivec2(1,0), ivec2(1,1), ivec2(0,1));
@@ -128,6 +131,7 @@ void main() {
     float f = clamp((length(v_world - fog_eye) - fog_range.x) / max(fog_range.y - fog_range.x, 1.0), 0.0, 1.0);
     v_fog = fog_enabled != 0 ? 1.0 - f : 1.0;
     v_local = vec2(CORNER[corner]);
+    v_cliff = vec2(texelFetch(cliff_u, cell, 0)[corner], texelFetch(cliff_v, cell, 0)[corner]);
     v_alpha = vec2(float((data.y >> (20u + uint(corner))) & 1u), float((data.z >> (20u + uint(corner))) & 1u));
     v_cell = data;
     gl_Position = view_projection * vec4(v_world, 1.0);
@@ -196,6 +200,7 @@ in vec2 v_alpha;
 in vec3 v_light_t;
 in vec3 v_half_t;
 in float v_fog;
+in vec2 v_cliff;
 flat in uvec4 v_cell;
 out vec4 frag;
 uniform vec3 fog_color;
@@ -240,6 +245,22 @@ vec4 sample_layer(sampler2DArray s, uint word) {
     return textureGrad(s, vec3(uv, tex), dx, dy);
 }
 
+// A cliff-mapped cell (bit 25 of its base word): the record's UVs in the
+// cell's own texture, wrapping (getUVForTileIndex / 0x000AE490), at the same
+// texel cap as the tile texture.
+bool is_cliff(uint word) { return (word & (1u << 25u)) != 0u; }
+
+vec4 sample_cliff(sampler2DArray s, uint word) {
+    int tex = int(word & 1023u);
+    float n = subtiles[tex];
+    vec2 dx = dFdx(v_cliff), dy = dFdy(v_cliff);
+    float texels = array_size * max(length(dx), length(dy));
+    float lod = log2(max(texels, 1e-8));
+    float min_lod = max(log2(array_size / n) - g_min_lod, 0.0);
+    if (lod < min_lod) { float k = exp2(min_lod - lod); dx *= k; dy *= k; }
+    return textureGrad(s, vec3(fract(v_cliff), tex), dx, dy);
+}
+
 bool has_blend(uint word) { return (word & (1u << 24u)) != 0u; }
 
 bool outside(vec2 p) { return any(lessThan(p, vec2(0.0))) || any(greaterThan(p, playable)); }
@@ -258,13 +279,14 @@ void main() {
     g_min_lod = log2(tile_px_per_cell());
     // The CPU-composited tile texture: base, then blend and three-way tiles
     // mixed by their alpha ramps (blendTile 0x000ADDCE); texture alpha unused.
-    vec3 tex = sample_layer(albedo, v_cell.x).rgb;
+    bool cliff = is_cliff(v_cell.x);
+    vec3 tex = cliff ? sample_cliff(albedo, v_cell.x).rgb : sample_layer(albedo, v_cell.x).rgb;
     if (has_blend(v_cell.y)) tex = mix(tex, sample_layer(albedo, v_cell.y).rgb, v_alpha.x);
     if (has_blend(v_cell.z)) tex = mix(tex, sample_layer(albedo, v_cell.z).rgb, v_alpha.y);
     vec3 c;
     if (technique == 2) {
         // Default PS (objects 83/88), composited normal texture alike.
-        vec4 nm = sample_layer(normals, v_cell.x);
+        vec4 nm = cliff ? sample_cliff(normals, v_cell.x) : sample_layer(normals, v_cell.x);
         if (has_blend(v_cell.y)) nm = mix(nm, sample_layer(normals, v_cell.y), v_alpha.x);
         if (has_blend(v_cell.z)) nm = mix(nm, sample_layer(normals, v_cell.z), v_alpha.y);
         vec2 xy = nm.rg * 2.0 - 1.0;

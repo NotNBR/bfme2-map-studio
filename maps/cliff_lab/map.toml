@@ -1,0 +1,6 @@
+id = "cliff-lab"
+title = "Cliff Lab"
+native_name = "map mp cliff lab"
+players = 2
+description = "Test map: brick-textured walls and a hill, with and without cliff UV mapping, to compare cliff texturing in the renderer and the game."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

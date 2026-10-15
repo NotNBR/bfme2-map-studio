@@ -122,6 +122,31 @@ Do not directly transplant its legacy height/texture scaling into BFME2's
 16-bit terrain. Use the isolated test map below, source comparisons and native
 tests on adjoining slopes before enabling a new projection on Eight Kingdoms.
 
+## Cliff mapping
+
+`mapkit.cliffs` writes cliff records for steep cells
+(`set_materials(..., cliffs=steep_cells(heights))`): each cell's corners are
+projected onto the vertical plane along its face, U along the face and V up
+it, at the stock maps' density (0.155 UV per cell of surface length for
+4-tile textures, measured over the 8 stock maps with cliff records). The face
+direction is smoothed over neighbouring cells and taken in 45-degree steps;
+neighbouring cells share their corner UVs exactly.
+
+The game applies a record only when its tile's texture is the cell's own
+(getUVForTileIndex, 0x000AE490), and builds the cliff texture from the first
+record's texture alone (0x000AEAA6), so one texture per map is mapped. Mapped
+cells take no blends (0x000ABD19), so the cliff texture goes last in the
+palette and blends over its unmapped neighbours.
+
+Native checks (15 October 2026, `maps/cliff_lab`, Medium): a map with 138,033
+records loads; mapped faces take the projected texture instead of the
+stretched one; triangle flip and the record's tile do not change the result.
+Open: a dark vertical band of one cell column shows on some mapped faces in
+the game but not in the renderer. It moves when every U is shifted by half a
+repeat, so it depends on where in the texture a cell falls; WorldBuilder keeps
+each cell's U inside the texture's width (`adjustForTiling`), which the
+module does not yet do.
+
 ## Isolated native experiment
 
 `python -m mapkit.terrain_lab --install` generates a 192 × 192 playable

@@ -9,7 +9,10 @@ texels by the 64x64 alpha tiles of setupAlphaTiles 0x000AC6F9 only; the
 tile's own alpha is not used. Those alpha tiles are linear ramps across one
 cell, which the per-corner 0/1 values of getAlphaUVData reproduce when
 interpolated over the cell's triangles (diagonal blends rotate the split).
-Cliff cells take no primary blend (0x000ABD19 in 0x000AED2E).
+Cliff cells take no primary blend (0x000ABD19 in 0x000AED2E). A cliff
+record (mapkit.cliffs) applies when its tile's texture is the cell's
+(getUVForTileIndex / 0x000AE490): the cell then takes the record's corner
+UVs in that texture, wrapping, and its triangle flip.
 """
 
 import re
@@ -100,7 +103,8 @@ class TerrainData:
             lut[t['tile_start']+local, 1] = (c % size)*2 + (q & 1)
             lut[t['tile_start']+local, 2] = (c // size)*2 + ((q >> 1) & 1)
         self.subtiles = 2*sizes  # subtiles across each texture
-        records = {r['index']: r for r in terrain_records(m, blend)['blends']}
+        tables = terrain_records(m, blend)
+        records = {r['index']: r for r in tables['blends']}
         self.blend_count = len(records)
 
         def pack(tile_array):
@@ -132,8 +136,27 @@ class TerrainData:
         extra, _ = layer(arrays['three_way'].astype(np.int64))
         cliff = arrays['cliffs'] != 0
         primary[cliff] = 0
-        self.cells = np.stack([base, primary, extra, flip.astype(np.int64)], -1).astype(np.uint32)
+        # Cliff UVs, per cell: u0..u3 and v0..v3, and whether the cell uses them.
+        self.cliff_u = np.zeros((self.height, self.width, 4), np.float32)
+        self.cliff_v = np.zeros((self.height, self.width, 4), np.float32)
+        cliff_records = tables.get('cliffs', [])
+        mapped = np.zeros(cliff.shape, bool)
+        if cliff_records:
+            table = np.zeros((len(cliff_records)+1, 8), np.float32)
+            tile_texture = np.zeros(len(cliff_records)+1, np.int64)-1
+            record_flip = np.zeros(len(cliff_records)+1, bool)
+            for r in cliff_records:
+                table[r['index']] = np.ravel(r['uv'])
+                tile_texture[r['index']] = lut[min(max(r['tile'], 0), total), 0]
+                record_flip[r['index']] = bool(r['flip'])
+            index = np.where(arrays['cliffs'].astype(np.int64) <= len(cliff_records), arrays['cliffs'].astype(np.int64), 0)
+            mapped = (index > 0) & (tile_texture[index] == (base & 1023))
+            self.cliff_u[mapped] = table[index[mapped]][:, 0::2]
+            self.cliff_v[mapped] = table[index[mapped]][:, 1::2]
+            flip = np.where(mapped, record_flip[index], flip)
+        self.cells = np.stack([base | (mapped.astype(np.int64) << 25), primary, extra, flip.astype(np.int64)], -1).astype(np.uint32)
         self.cliff_cells = int(np.count_nonzero(cliff))
+        self.cliff_mapped = int(np.count_nonzero(mapped))
         # Height range of each 16x16-cell tile (samples origin..origin+16),
         # for W3DTerrainBackground::updateCenter's camera distance.
         nx, ny = (self.width + TILE_CELLS - 2)//TILE_CELLS, (self.height + TILE_CELLS - 2)//TILE_CELLS

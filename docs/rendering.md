@@ -426,7 +426,8 @@ Previews draw every tree and shrub of the map. The game keeps only the first
 `MapRenderer(vegetation_limits=True)`) applies those limits, and the render
 report lists how many were dropped under `vegetation`.
 
-Not reproduced: roads, cliff UV records and shroud. River areas follow the game's river drawing
+Cliff-mapped cells (`mapkit.cliffs`) take their record's corner UVs in their own texture, wrapping,
+and its triangle flip. Not reproduced: roads and shroud. River areas follow the game's river drawing
 ([rivers](reference/mapping/terrain-and-presentation/rivers-and-waves.md#rivers)). Textures smaller than their declared terrain
 class are drawn but reported, because the game cannot load them.
 

@@ -345,6 +345,11 @@ class MapRenderer:
         self.heights.repeat_x = self.heights.repeat_y = False
         self.cells = ctx.texture((t.width, t.height), 4, t.cells.astype('u4').tobytes(), dtype='u4')
         self.cells.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        self.cliff_u = ctx.texture((t.width, t.height), 4, t.cliff_u.tobytes(), dtype='f4')
+        self.cliff_v = ctx.texture((t.width, t.height), 4, t.cliff_v.tobytes(), dtype='f4')
+        for texture in (self.cliff_u, self.cliff_v):
+            texture.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        self.report['cliff_mapped_cells'] = t.cliff_mapped
         yield
         self.albedo = self._texture_array(self._terrain_pixels[0])
         yield
@@ -370,7 +375,8 @@ class MapRenderer:
         self.depth_tint.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
         self.report['depth_tinted_samples'] = int(np.count_nonzero((tint < .999).any(-1)))
         p['depth_tint'].value = 8
-        for name, unit in [('heights', 0), ('cells', 1), ('albedo', 2), ('normals', 3), ('macro_tex', 4), ('cloud_tex', 5)]:
+        for name, unit in [('heights', 0), ('cells', 1), ('albedo', 2), ('normals', 3), ('macro_tex', 4), ('cloud_tex', 5),
+                           ('cliff_u', 13), ('cliff_v', 14)]:
             p[name].value = unit
         # terrain.fx macro UV: stretched ((x + MapBorderWidth) / MapSize.x,
         # -(y + MapBorderWidth) / MapSize.y), MapSize = samples x 10
@@ -1507,6 +1513,7 @@ class MapRenderer:
         p['view_projection'].write(vp)
         p['use_shadows'].value = 0
         self.heights.use(0); self.cells.use(1); self.albedo.use(2); self.normal_array.use(3)
+        self.cliff_u.use(13); self.cliff_v.use(14)
         self.terrain_vao.render(mgl.TRIANGLES, vertices=self.terrain_vertices)
         if self.visible['objects']:
             op = self.object_program
@@ -1920,6 +1927,7 @@ class MapRenderer:
         if hasattr(self, 'decal_tex'):
             self.decal_tex.use(7)
         self.heights.use(0); self.cells.use(1); self.albedo.use(2); self.normal_array.use(3)
+        self.cliff_u.use(13); self.cliff_v.use(14)
         self.depth_tint.use(8); self.tile_z.use(9)
         if self.macro_tex: self.macro_tex.use(4)
         if self.cloud_tex: self.cloud_tex.use(5)
