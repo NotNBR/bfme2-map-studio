@@ -25,6 +25,7 @@ USAGE = """
   mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself, headless (--graphics High, --show)
   mw patch [install|remove]  faster map loading in your normal game (status without an action)
   mw rivers [MAP] [--json]   which way each river strip flows
+  mw where MAP NAME...       where objects stand (--section Z, --footprint, --bones: their outlines there)
   mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
                              (--textures, --roads, --sounds, --effects: those instead)
   mw item TEMPLATE           render one object on its own (--info: what the game says about it)
@@ -101,6 +102,20 @@ def parser():
     s = sub.add_parser('rivers', help='Which way each river strip flows')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
+    s = sub.add_parser('where', help='Where objects stand on a map, and their outlines there')
+    s.add_argument('map', help='Project, stock map or .map file')
+    s.add_argument('patterns', nargs='*',
+                   help='Template, object or waypoint names: a wildcard ("*bridge*") or any part of one')
+    s.add_argument('--layer', help='Only objects of this layer')
+    s.add_argument('--near', help='Only objects within R of X,Y: X,Y,R')
+    s.add_argument('--section', type=float, metavar='Z', help="Each one's model cut at the map height Z (e.g. its water)")
+    s.add_argument('--footprint', action='store_true', help='The ground each one covers seen from above')
+    s.add_argument('--low', type=float, help='With --footprint: only what lies above this map height')
+    s.add_argument('--high', type=float, help='With --footprint: only what lies below this map height')
+    s.add_argument('--bones', action='store_true', help="Each one's named points")
+    s.add_argument('--step', type=float, default=1., help='Outline grid in map units (1)')
+    s.add_argument('--limit', type=int, default=40, help='Objects to show (40)')
+    s.add_argument('--json', action='store_true', help='Print JSON')
     s = sub.add_parser('diff', help='What the last build changed, or what differs between two maps')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('other', nargs='?', help='A second map: show what changes from MAP to OTHER')
@@ -400,6 +415,61 @@ def cmd_walkable(args):
     return 0
 
 
+def cmd_where(args):
+    """Placed objects matching the patterns, with their outlines on the map."""
+    import json
+    import math
+    from mapworkshop import project
+    from mapworkshop.formats.map import Map
+    from mapworkshop.render import footprint
+    if not (args.patterns or args.layer or args.near):
+        raise LookupError('name a template, object or waypoint, or give --layer or --near')
+    near = None
+    if args.near:
+        near = tuple(float(v) for v in args.near.split(','))
+        if len(near) != 3:
+            raise LookupError('--near takes X,Y,R')
+    path = project.map_path(args.map)
+    found = footprint.placed(Map(path.read_bytes()), args.patterns, args.layer, near)
+    shapes = args.section is not None or args.footprint or args.bones
+    for o in found[:args.limit]:
+        if not shapes or o['template'].startswith('*'):
+            continue
+        def here(points, o=o):
+            return footprint.to_world(points, o['x'], o['y'], o['angle'], o['z'])
+        try:
+            if args.bones:
+                o['bones'] = {k: here([v])[0] for k, v in footprint.bones(o['template']).items()}
+            if args.section is not None:
+                o['section'] = [here(p) for p in footprint.section(o['template'], args.section - o['z'], args.step)]
+            if args.footprint:
+                low, high = (None if v is None else v - o['z'] for v in (args.low, args.high))
+                o['footprint'] = [here(p) for p in footprint.footprint(o['template'], low, high, args.step)]
+        except LookupError as error:
+            o['error'] = str(error)
+    if args.json:
+        say(json.dumps([dict(o, angle=round(math.degrees(o['angle']), 2)) for o in found[:args.limit]], indent=1))
+        return 0
+    say(f'{path.stem}: {len(found)} object{" matches" if len(found) == 1 else "s match"}. Map units, x east and y north; '
+        "z is the height on the map; an object's angle turns it counter-clockwise from east.")
+    for o in found[:args.limit]:
+        label = o['template'] + (f' "{o["name"]}"' if o['name'] else '') + (f' [{o["layer"]}]' if o['layer'] else '')
+        say(f'{label} at ({o["x"]:g}, {o["y"]:g}), ground {o["ground"]:g}, origin z {o["z"]:g}, '
+            f'angle {math.degrees(o["angle"]):.1f}')
+        if o.get('error'):
+            say(f'  {o["error"]}')
+        for name, point in o.get('bones', {}).items():
+            say(f'  bone {name}: ({point[0]:g}, {point[1]:g}, {point[2]:g})')
+        for key, title in {'section': f'cut at z {args.section}', 'footprint': 'from above'}.items():
+            if key in o:
+                say(f'  {title}: {len(o[key]) or "no"} outline{"" if len(o[key]) == 1 else "s"}')
+                for line in footprint.describe(o[key]):
+                    say('    ' + line)
+    if len(found) > args.limit:
+        say(f'... {len(found) - args.limit} more (--limit)')
+    return 0
+
+
 def cmd_rivers(args):
     """Each river strip (RiverAreas) in flow order, as compass runs."""
     import json
@@ -514,7 +584,7 @@ def main(argv=None):
     if extra and extra[0] == '--':
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
-                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, capture=cmd_capture,
+                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, where=cmd_where, capture=cmd_capture,
                     patch=cmd_patch)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:

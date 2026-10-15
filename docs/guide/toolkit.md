@@ -43,7 +43,7 @@ searches both ([finding assets](finding-assets.md)).
 | [checks.coverage](../../src/mapworkshop/mapkit/checks/coverage.py), [checks.terrain_audit](../../src/mapworkshop/mapkit/checks/terrain_audit.py) | surveys of a whole archive (`Maps.big`): which sections and terrain records it holds ([format tools](../format/tools.md)) |
 | [checks.lighting_check](../../src/mapworkshop/mapkit/checks/lighting_check.py) | reads the lighting arrays from the running game's memory; written for bfme-workshop's host, nothing here calls it yet |
 | [mapdiff](../../src/mapworkshop/mapkit/mapdiff.py) | what changed between two maps (`mw diff`) |
-| [graphics](../../src/mapworkshop/mapkit/graphics.py) | diagnostic plans and comparisons (`mw graphics`, [map graphics](map-graphics.md)) |
+| [graphics](../../src/mapworkshop/mapkit/graphics.py) | terrain heightmaps, slopes, shaded plans with contours, scenery placement and map comparisons (`mw graphics`, [map graphics](map-graphics.md)) |
 | [workspace](../../src/mapworkshop/mapkit/workspace.py), [author](../../src/mapworkshop/mapkit/author.py) | hand edits of one `.map` file and their recipes (`mw workspace`, [hand-editing](hand-editing.md)) |
 
 ## The files themselves: `formats`
@@ -63,7 +63,7 @@ The [map-file specification](../format/README.md) describes the bytes.
 |---|---|
 | [project](../../src/mapworkshop/project.py) | the projects in `maps/` and the build pipeline ([projects and builds](projects-and-builds.md)) |
 | [game](../../src/mapworkshop/game.py) | the BFME2 installation: find it, extract its data, install maps (`mw setup`) |
-| [render](../../src/mapworkshop/render/) | the renderer (`mw render`, the viewer), the asset catalogue (`catalog`: `mw find`) and single objects (`items`: `mw item`, `mw items`); [rendering](rendering.md), and [the renderer](../game/renderer/README.md) for what it reproduces of the game |
+| [render](../../src/mapworkshop/render/) | the renderer (`mw render`, the viewer), the asset catalogue (`catalog`: `mw find`), single objects (`items`: `mw item`, `mw items`) and their measured outlines, footprints and named points, on their own or where a map places them (`footprint`: `mw item --section`, `mw where`, [measuring](finding-assets.md#measuring-outlines-footprints-and-positions)); [rendering](rendering.md), and [the renderer](../game/renderer/README.md) for what it reproduces of the game |
 | [native](../../src/mapworkshop/native/) | the game itself: test games, its pathfinding grid, screenshots, the loading patch ([testing in-game](testing-in-game.md), [the runtime](../game/runtime.md)) |
 | [viewer](../../src/mapworkshop/viewer/) | the viewer ([the viewer](../viewer.md)) |
 | [video](../../src/mapworkshop/video/) | FFmpeg encoding for the videos in `misc/` |

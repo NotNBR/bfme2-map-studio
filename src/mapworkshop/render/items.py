@@ -2,10 +2,14 @@
 
     mw item TEMPLATE [--heading H] [--elevation E] [--rotation R] [--distance D] [--top]
     mw item TEMPLATE --info
+    mw item TEMPLATE --section H | --footprint [--low L] [--high H] | --bones [--json]
     mw items PATTERN... [--from-map MAP [--layer L]] [--views 3q,side,top] [--columns N]
 
 `mw item TEMPLATE --info` renders nothing: it prints what the game says about
 the template (render.catalog.describe). To find names, `mw find`.
+`--section`, `--footprint` and `--bones` render nothing either: they print the
+model's outline cut at a height, its outline seen from above, or its named
+points, in the object's own frame (render.footprint).
 
 An item stands alone on a plain background (white unless --background) with
 a soft ground shadow, lit by the game's renderer: the same models, materials
@@ -374,8 +378,19 @@ def main_item(argv=None):
     parser.add_argument('--size', type=int, default=800, help='Image width and height in pixels (800)')
     parser.add_argument('--info', action='store_true',
                         help='Print what the game says about it (INI file, KindOf, footprint, stock-map use) instead of rendering')
+    shape = parser.add_argument_group("outlines and points, printed in the object's frame instead of rendering "
+                                      '(x east and y north at angle 0, z up from its origin, map units)')
+    shape.add_argument('--section', type=float, metavar='H', help='The model cut level at height H: what is solid there')
+    shape.add_argument('--footprint', action='store_true', help='The ground the model covers seen from above')
+    shape.add_argument('--low', type=float, help='With --footprint: only what lies above this height')
+    shape.add_argument('--high', type=float, help='With --footprint: only what lies below this height')
+    shape.add_argument('--bones', action='store_true', help="The model's named points")
+    shape.add_argument('--step', type=float, default=1., help='Outline grid in map units (1): edges are accurate to about this')
+    shape.add_argument('--json', action='store_true', help='Print JSON')
     _common(parser)
     args = parser.parse_args(argv)
+    if args.section is not None or args.footprint or args.bones:
+        return _print_shape(args)
     if args.info:
         from mapworkshop.render import catalog
         from mapworkshop.render.assets import GameAssets
@@ -400,6 +415,41 @@ def main_item(argv=None):
                   seconds=round(time.time() - started, 1))
     out.with_suffix('.json').write_text(json.dumps(record, indent=2) + '\n')
     print(f'{out}\n{names[0]} ({measured["model"]}): {_size_text(measured)} map units (width x depth x height)')
+    return 0
+
+
+def _print_shape(args):
+    """mw item --section / --footprint / --bones."""
+    from mapworkshop.render import footprint
+    found = footprint.model(args.template)
+    low, high = footprint.bounds(args.template)
+    result = dict(template=args.template, model=found['model'], scale=found['scale'], low=low, high=high)
+    if args.bones:
+        result['bones'] = footprint.bones(args.template)
+    if args.section is not None:
+        result['section'] = dict(height=args.section, outlines=footprint.section(args.template, args.section, args.step))
+    if args.footprint:
+        result['footprint'] = dict(low=args.low, high=args.high,
+                                   outlines=footprint.footprint(args.template, args.low, args.high, args.step))
+    if args.json:
+        print(json.dumps(result, indent=1))
+        return 0
+    print(f'{args.template} ({found["model"]}, scale {found["scale"]:g}), in its own frame: x east and y north at '
+          f'angle 0, z up from its origin; map units.\n'
+          f'Box: x {low[0]:g}..{high[0]:g}, y {low[1]:g}..{high[1]:g}, z {low[2]:g}..{high[2]:g}.')
+    if args.bones:
+        print(f'Bones ({len(result["bones"])}):')
+        for name, (x, y, z) in result['bones'].items():
+            print(f'  {name}: ({x:g}, {y:g}, {z:g})')
+    for key, title in (('section', f'Cut at height {args.section}'),
+                       ('footprint', 'Seen from above' + (f', above {args.low:g}' if args.low is not None else '')
+                        + (f', below {args.high:g}' if args.high is not None else ''))):
+        if key in result:
+            outlines = result[key]['outlines']
+            print(f'{title}: {len(outlines) or "no"} outline{"" if len(outlines) == 1 else "s"} '
+                  f'(accurate to about {args.step:g}; counter-clockwise, holes clockwise):')
+            for line in footprint.describe(outlines):
+                print('  ' + line)
     return 0
 
 

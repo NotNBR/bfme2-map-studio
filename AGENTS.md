@@ -25,8 +25,8 @@ that covers it; [docs/README.md](docs/README.md) indexes them all.
 | Change a map | its project in `maps/<folder>/` ([maps/README.md](maps/README.md)); its README or `map.py` docstring describes it |
 | Start a map, the build, `mw diff`, where output goes | [projects and builds](docs/guide/projects-and-builds.md) |
 | Which module to use in a `map.py` | [the toolkit](docs/guide/toolkit.md), then that module's docstring |
-| Find, look at and turn objects; textures, roads, sounds, effects | [finding assets](docs/guide/finding-assets.md) |
-| Design or rework a map's landscape | [designing maps](docs/guide/designing-maps.md) |
+| Find, look at, turn and measure objects; textures, roads, sounds, effects | [finding assets](docs/guide/finding-assets.md) |
+| Design, assess or rework a map's landscape | [designing maps](docs/guide/designing-maps.md), [map graphics](docs/guide/map-graphics.md) for terrain and scenery diagnostics |
 | Water, fords, rivers, bridges, walls, sites, scripts: what the game does | [how BFME2 behaves](docs/game/README.md) |
 | A render disagrees with the game; changing the renderer | [how the game draws a map](docs/game/renderer/README.md) |
 | Render a view; check in the game | [rendering](docs/guide/rendering.md), [testing in the game](docs/guide/testing-in-game.md) |
@@ -74,6 +74,12 @@ viewer's **Copy for agent** button copies.
      (`mw items <template> --views 0/40,90/40,180/40,270/40`), and write in the
      code which side you chose as its front
      ([turning a building](docs/guide/finding-assets.md#turning-a-building-to-face-the-right-way)).
+   - To place something against an object's real edges (foam on a bridge's
+     piers, a path along a wall), measure it instead of guessing from a
+     render: `mw where <map> NAME --section Z` cuts the placed object at the
+     map height Z and prints its outline in map coordinates; `mw item NAME
+     --section H | --footprint | --bones` does so in the object's own frame
+     ([measuring](docs/guide/finding-assets.md#measuring-outlines-footprints-and-positions)).
 3. **Build:** `mw build <map>`. A failed build leaves the previous one in place;
    an open viewer reloads a successful one by itself. The build ends with what
    it changed since the previous build; `mw diff <map>` shows it again.

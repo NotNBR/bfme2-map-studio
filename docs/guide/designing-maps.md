@@ -88,6 +88,13 @@ into the land over long, irregular shoulders: a radial flat mask with a short
 falloff makes an artificial circular cliff bowl. Keep noise from erasing the
 composition, and use a fixed seed.
 
+Review the built terrain at the three scales above before adding detail.
+Use [map graphics](map-graphics.md) to inspect elevations, slopes and contours,
+and [rendered views](rendering.md) with `--no-objects` to see the land without
+scenery. Compare the shape of each region and its transitions with the brief:
+construction pads, open fields and mountain slopes have different purposes.
+Keep the same views and measurement scales when comparing revisions.
+
 ## 3 Secondary forms, water and routes
 
 Add saddles, spurs, gullies, river terraces and local shoulders that belong to

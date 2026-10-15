@@ -1033,6 +1033,136 @@ def sounds(m, t):
         heights=cells(inside & (t['sd'] > 250) & (t['sd'] < 700))), limits=dict(heights=14, open=10, woods=12))
 
 
+def bridge_water(m, t, assets):
+    """Water around the bridge at viewer mark (5442.1, 3780.6).
+
+    Measure the four separate masonry sections at WATER, not the deck's
+    top-down silhouette. Small upstream disturbances divide round their
+    edges; narrow side foam feeds two broken wakes below the downstream
+    supports. This is authored surface motion, not a fluid simulation.
+    """
+    from mapworkshop.render.footprint import section
+
+    # Local +x is downstream, +y follows the deck towards the east bank.
+    # The bridge's origin is BRIDGE_BANK-1; currently the water cut is -11.
+    rings = section(BRIDGE, WATER-(BRIDGE_BANK-1), assets=assets)
+    counts = Counter()
+    for (bx, by), (ax, ay) in bridges():
+        fx, fy = ay, -ax
+        angle = math.atan2(fy, fx)
+
+        def place(template, down, across, direction=0.):
+            x, y = bx+fx*down+ax*across, by+fy*down+ay*across
+            ground = float(t['z'][round(y/10)+BORDER, round(x/10)+BORDER])
+            if ground >= WATER-2:
+                return                            # no foam emitters on dry banks
+            add_object(m, template, x, y, angle+direction, layer='BridgeWater',
+                       z=WATER+1.6-ground)
+            counts[template] += 1
+
+        for ring in rings:
+            downstream = max(x for x, y in ring) > 0
+            for (x1, y1), (x2, y2) in zip(ring, ring[1:]+ring[:1]):
+                dx, dy = x2-x1, y2-y1
+                length = math.hypot(dx, dy)
+                nx, ny = dy/length, -dx/length      # outward from CCW solid
+                if nx < -.8 and not downstream:
+                    # Nose: foam slips sideways away from the stagnation
+                    # point, just outside the measured upstream stone face.
+                    middle = (y1+y2)/2
+                    for f in (.2, .5, .8):
+                        x, y = x1+dx*f+nx*3, y1+dy*f+ny*3
+                        # Increasing local y is a positive turn from +x.
+                        place('LakeRipple', x, y, math.copysign(math.pi/2, y-middle))
+                elif abs(nx) < .25 and length > 12:
+                    # Short-lived flecks follow the actual stepped flanks.
+                    # Sample from upstream so their drift exits each edge.
+                    n = max(1, int(length/14))
+                    for k in range(n):
+                        f = (k+.3)/n
+                        if dx < 0:
+                            f = 1-f
+                        place('WtrflHaze', x1+dx*f+nx*3, y1+dy*f+ny*3)
+                elif nx > .8 and downstream and max(x1, x2) > 80:
+                    # Two sparse filaments leave each exposed downstream
+                    # face, gently spreading and fading over 70-110 units.
+                    for f, turn in ((.28, -.10), (.72, .10)):
+                        y = min(y1, y2)+abs(dy)*f
+                        place('WtrflSteam', max(x1, x2)+5, y, turn)
+
+        # A few smaller, faster flecks carry the clear central jet out from
+        # the 62-unit arch opening; no full-width band of white water.
+        for u in (-13, 13):
+            place('LakeCoast01', 91, u)
+
+    def effect(name, size, life, speed, alpha, delay, spread, spin):
+        return f"""FXParticleSystem {name}
+  System
+    Priority = ALWAYS_RENDER
+    Shader = ALPHA
+    ParticleName = EXwaterpuddle2.tga
+    Lifetime = {life} {life+12}
+    Size = {size} {size+3}
+    BurstDelay = {delay} {delay+2}
+    BurstCount = 1 1
+    IsGroundAligned = Yes
+    SortLevel = 2
+  End
+  Color = DefaultColor
+    Color1 = R:215 G:225 B:220 0
+    Color2 = R:170 G:190 B:190 {life}
+  End
+  Alpha = DefaultAlpha
+    Alpha1 = 0 0 0
+    Alpha2 = {alpha} {alpha} 6
+    Alpha3 = {alpha*.65:.3f} {alpha*.65:.3f} {life//2}
+    Alpha4 = 0 0 {life}
+  End
+  Update = DefaultUpdate
+    AngleZ = -3 3
+    AngularRateZ = -{spin} {spin}
+    AngularDamping = 1 1
+    SizeRate = 0.025 0.055
+    SizeRateDamping = 1 1
+  End
+  Physics = DefaultPhysics
+    VelocityDamping = 1 1
+  End
+  EmissionVelocity = OrthoEmissionVelocity
+    X = {speed} {speed*1.35:.3f}
+    Y = -{spread} {spread}
+    Z = 0 0
+  End
+  EmissionVolume = LineEmissionVolume
+    StartPoint = X:0 Y:-2 Z:0
+    EndPoint = X:0 Y:2 Z:0
+  End
+  Draw = DefaultDraw
+  End
+End
+
+"""
+
+    # Stock carriers used nowhere else on this map. Replace their draws
+    # and flags; NO_COLLIDE keeps these visual details out of pathfinding.
+    ini = ''
+    for carrier, tag, args in (
+        ('LakeRipple', 'Bow', (6, 28, .32, .50, 3, .04, .015)),
+        ('WtrflHaze', 'Side', (4, 26, .55, .42, 4, .025, .012)),
+        ('WtrflSteam', 'Wake', (10, 68, 1.15, .48, 2, .12, .018)),
+        ('LakeCoast01', 'Current', (4, 42, 1.7, .25, 5, .035, .008)),
+    ):
+        name = 'HollinBridge'+tag
+        ini += effect(name, *args)
+        ini += (f'Object {carrier}\n  KindOf = IMMOBILE NO_COLLIDE OPTIMIZED_PROP UNATTACKABLE\n'
+                '  ReplaceModule ModuleTag_Draw\n'
+                '    Draw = W3DScriptedModelDraw ModuleTag_DrawHollinWater\n'
+                '      DefaultModelConditionState\n        Model = P_WtrflHaze\n'
+                f'        ParticleSysBone = HazeBone {name}\n'
+                '      End\n    End\n  End\nEnd\n\n')
+    return ini, dict(water_height=WATER, solid_sections=len(rings), emitters=dict(counts))
+
+
 def level_sites(t, places, radius=120):
     for template, px, py in places:
         if template == 'CaptureFlag':
@@ -1064,6 +1194,7 @@ def build(b):
                    z=BRIDGE_BANK-1-float(t['z'][round(by/10)+BORDER, round(bx/10)+BORDER]),
                    extra=[('objectName', 3, f'Sirannon_Bridge_{i+1}')])
         keep += [(bx+ax*d, by+ay*d, r) for d, r in ((-320, 70), (-170, 130), (0, 130), (170, 130), (320, 70))]
+    bridge_ini, bridge_report = bridge_water(m, t, b.assets)
     s = Scenery(m, t, b.assets, keep)
     rng = random.Random(SEED+300)
     print('Raising the ruins, planting the woods...', flush=True)
@@ -1123,6 +1254,8 @@ def build(b):
             raise ValueError(f'Uneven or blocked construction area at {p}')
     walking = fairness(Map(data))
     ini = ini_block(weather)+f'WaterTransparency\n  ReflectionPlaneZ = {WATER:g}\n  ReflectionOn = No\nEnd\n'
+    ini += bridge_ini
+    b.report['bridge_water'] = bridge_report
     path = b.save(data, ini=ini)
     report.update(title=b.project.title, seed=SEED, starts=start_positions(), sites=placed, walking=walking, sky=sky,
                   layers=dict(s.counts), vegetation=dict(s.vegetation))

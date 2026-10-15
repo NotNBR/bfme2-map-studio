@@ -134,6 +134,26 @@ proof of unit navigation or bridge traversal.
 - `--contour-step 25`: elevation interval; use 0 to disable contours.
 - `--overwrite`: explicitly regenerate into an existing output directory.
 
+Read the terrain outputs together: the heightmap shows relative elevation,
+the slope map shows how quickly it changes, and contours show the shape and
+spacing of landforms. Heightmap PNGs normalize each map independently;
+`height_range` in `metrics.json` records the original range. Tall peaks can
+leave lowland relief almost invisible in grayscale. The slope colors span
+rise/run from 0 to 1.5, so similar green areas need not be equally level.
+Use a contour interval suited to the region's relief (`--contour-step 5`,
+for example, for gentle terrain), and inspect local areas as well as the
+whole map. Compare revisions with the same contour interval and view extent;
+independently normalized heightmaps alone cannot establish which is flatter.
+
+Judge those shapes against their intended use, as in
+[designing maps](designing-maps.md#2-large-forms). Level construction pads
+are deliberate; the surrounding land should carry the intended shoulders,
+hollows and drainage. Pair the plans with low, oblique
+[renders](rendering.md) using `--no-objects` to check how the relief reads
+without scenery. For numerical questions about a particular area, measure
+the built height samples and state the sampled bounds and spacing. These
+outputs do not calculate local height-range statistics or elevation profiles.
+
 Nearest-neighbor distances use actual object positions in bounded-memory NumPy
 blocks. Spacing is unavailable for zero or one tree; fifth-neighbor distance is
 unavailable below six trees. Duplicate tree positions count as zero spacing.
@@ -146,7 +166,6 @@ approximate categories derived from texture names; native texture art, blends,
 model silhouettes, lighting, wave effects and LOD are not rendered. Unsupported
 palette cells appear magenta and are counted in the report. Stored passability
 does not include dynamic objects, formation footprints or bridge deck behavior.
-Heightmap PNGs normalize each map independently; `height_range` in `metrics.json`
-records the original range. Map-level scale values do not include every native
+Map-level scale values do not include every native
 template's built-in scale fuzziness. Use native tests for rendering, traversal
 and performance conclusions.

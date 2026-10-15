@@ -98,3 +98,41 @@ model's own sides: `front` (heading 0) shows its local -y side, `back` its +y
 side, `left` (heading 270) its +x side and `right`/`side` its -x side. They
 look from 15 degrees up, which leaves the side away from the sun dark; the
 four views at 40 degrees above show all four sides more clearly.
+
+## Measuring: outlines, footprints and positions
+
+To place something against an object's real edges, such as foam against a
+bridge's piers or a path along a wall, measure the model rather than a
+render ([render/footprint.py](../../src/mapworkshop/render/footprint.py)):
+
+```powershell
+mw item GondorIthilienBridge2 --section -11      # the model cut 11 below its origin: what is solid there
+mw item CBHobbitBldg01 --footprint               # the ground it covers seen from above
+mw item GondorIthilienBridge2 --footprint --high -5   # only what lies below -5
+mw item GondorIthilienBridge2 --bones            # its named points
+mw where hollin-dales bridge --section 165       # where it stands on a map, cut at the map height 165
+mw where hollin-dales Player_1_Start             # a waypoint
+mw where hollin-dales --layer BridgeWater --near 5455,3765,300
+```
+
+`mw item` prints in the object's own frame: map units, x east and y north at
+angle 0, z up from its origin. `mw where` finds the objects placed on a map
+whose template, object name or waypoint name matches (a wildcard such as
+`*bridge*`, else any part of the name), and prints each one's position, the
+ground there, its origin's height and its angle; with `--section`,
+`--footprint` or `--bones` it prints those on the map, in map coordinates,
+and `--section Z` and `--low`/`--high` take map heights (the water's, say).
+`--json` prints everything for code.
+
+Outlines are closed polygons, counter-clockwise round solid ground and
+clockwise round a hole. They are traced on a 1-unit grid (`--step`), so an
+edge is accurate to about one unit and straight edges come out straight.
+`--section` keeps what is solid at that height: closed parts of the model,
+overlapping ones joined; a lone wall plane has no inside and drops out.
+`--footprint` keeps everything the model covers from above, overhangs too.
+
+Neither is what blocks units: that is the template's `Geometry`, a box or
+cylinder that `mw item NAME --info` prints. A map's own code calls the same
+functions: `footprint.section(template, height)`, `footprint.footprint(...)`,
+`footprint.bones(template)`, and `footprint.to_world(points, x, y, angle)` to
+put them where an object stands.
