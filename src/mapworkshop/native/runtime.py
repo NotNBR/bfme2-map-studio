@@ -42,7 +42,7 @@ import struct
 import subprocess
 from pathlib import Path
 
-from mapworkshop.config import GAME_DATA, RUNTIME, game_dir
+from mapworkshop.config import GAME_DATA, RUNTIME, PROFILE, GAME_LABEL, game_dir
 from mapworkshop.native import debugger
 from mapworkshop.native.pe import PE
 
@@ -110,6 +110,9 @@ def _same(source, target):
 def prepare(progress=print):
     """Create or refresh the runtime from the installed game; returns the
     runtime's game folder. Only new or changed files are linked or copied."""
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import rotwk
+        return rotwk.prepare(progress)
     source = game_dir()
     if not source or not (Path(source)/'game.dat').is_file():
         raise RuntimeError('BFME2 not found: run `mw setup`')
@@ -243,12 +246,14 @@ def profile_leaf():
     (a Rise of the Witch-king name on some installs), else BFME2's."""
     try:
         import winreg
+        title = ('The Lord of the Rings, The Rise of the Witch-king' if PROFILE == 'rotwk'
+                 else 'The Battle for Middle-earth II')
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                            r'SOFTWARE\Electronic Arts\Electronic Arts\The Battle for Middle-earth II',
+                            'SOFTWARE\\Electronic Arts\\Electronic Arts\\' + title,
                             0, winreg.KEY_READ | winreg.KEY_WOW64_32KEY) as key:
             leaf = winreg.QueryValueEx(key, 'UserDataLeafName')[0]
     except OSError:
-        return PROFILE_LEAF
+        return 'My The Lord of the Rings, The Rise of the Witch-king Files' if PROFILE == 'rotwk' else PROFILE_LEAF
     if not isinstance(leaf, str) or Path(leaf).name != leaf or leaf in ('', '.', '..'):
         raise RuntimeError(f'Invalid BFME2 profile folder name in the registry: {leaf!r}')
     return leaf
@@ -369,7 +374,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     The game loads ingame.dll in either case."""
     running = debugger.running_games()
     if running:
-        raise RuntimeError(f'BFME2 is already running ({running[0][1]}); close it first')
+        raise RuntimeError(f'A game is already running ({running[0][1]}); close it before starting {GAME_LABEL}')
     folder = prepare_headless(progress) if headless else prepare(progress)
     map_name = install(project)
     set_options(graphics)
@@ -378,6 +383,9 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     os.environ['DXVK_LOG_LEVEL'] = 'none'             # DXVK would write logs into the game folder
     game = debugger.Game(folder, args, APPDATA)
     game.headless = headless
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import rotwk
+        return rotwk.configure(game)
     game.on(FILE_SLOTS_SET, skirmish_setup)
     ingame(game)
     if fast:

@@ -211,3 +211,8 @@ local/cache/           caches (the asset catalogue among them)
 `mw config` prints the settings; `mw config KEY` one of them and
 `mw config KEY VALUE` changes it (`game`, the BFME2 folder, which also runs the
 setup; `last_map`, the map commands use when none is given).
+
+`profile` selects `bfme2` or `rotwk`; `rotwk` is the expansion folder. The ROTWK
+profile puts the output folders above under `local/profiles/rotwk/`, while
+`local/config.toml` and the map sources stay shared. Each `build.json` records
+its profile. See [ROTWK setup](getting-started.md#rise-of-the-witch-king).

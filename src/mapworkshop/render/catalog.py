@@ -90,6 +90,7 @@ def facts(assets, name):
 
 # Classification -----------------------------------------------------------------
 REGIONS = [  # first match wins; tokens match the lowercased name
+    ('Angmar', ['angmar', 'carn_dum', 'carndum']),
     ('Minas Morgul', ['minasmorgul', 'mbmm', 'mmbmm', 'morgul']),
     ('Dol Guldur', ['dolgoldur', 'dogoldur', 'dolgul', 'necromancer']),
     ('Mordor', ['mordor', 'cirithungol', 'mountdoom', 'lava', 'morrock', 'mortree', 'shelob', 'barad']),
@@ -130,7 +131,7 @@ FILE_REGIONS = {'bluemountains': 'Blue Mountains', 'dale': 'Dale / Lake-town', '
                 'moriamodules': 'Moria', 'necromancerstatue': 'Dol Guldur', 'osgiliath': 'Osgiliath',
                 'rivendell': 'Rivendell', 'rohan': 'Rohan / Edoras', 'shire': 'Shire', 'weathertop': 'Weathertop'}
 SIDE_REGIONS = {'mordor': 'Mordor', 'isengard': 'Isengard', 'men': 'Gondor / Minas Tirith', 'gondor': 'Gondor / Minas Tirith',
-                'elves': 'Elven', 'dwarves': 'Dwarven', 'wild': 'Goblins / Wild', 'moria': 'Moria'}
+                'elves': 'Elven', 'dwarves': 'Dwarven', 'wild': 'Goblins / Wild', 'moria': 'Moria', 'angmar': 'Angmar'}
 
 
 def region(f):
@@ -354,7 +355,7 @@ def _stamp(assets):
     """What the index depends on: the game archives, the extracted INIs and
     the stock maps."""
     ini = GAME_DATA/'data/ini'
-    files = sorted(assets.game.glob('*.big')) + sorted(ini.rglob('*.ini')) + stock_maps()
+    files = list(assets.archive_paths) + sorted(ini.rglob('*.ini')) + stock_maps()
     return dict(version=VERSION, files=len(files), newest=max((p.stat().st_mtime for p in files), default=0),
                 bytes=sum(p.stat().st_size for p in files))
 

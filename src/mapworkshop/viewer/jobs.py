@@ -89,12 +89,13 @@ def play(owner, status):
     or, when that cannot run (no BFME2 1.06) or for a game map (owner None),
     the normal game at its menu."""
     from mapworkshop import game
+    from mapworkshop.config import GAME_LABEL, PROFILE
 
     def normal_game(note=''):
         if owner:
             game.install(owner.build_dir, owner.native_name)
         game.launch()
-        status.set(note + (f'{owner.title} installed in the game\'s maps; ' if owner else '') + 'starting BFME2...', 10)
+        status.set(note + (f'{owner.title} installed in the game\'s maps; ' if owner else '') + f'starting {GAME_LABEL}...', 10)
 
     def work():
         try:
@@ -102,12 +103,14 @@ def play(owner, status):
             try:
                 native.ready(progress=lambda line: status.set(line[:140], 600))
             except RuntimeError as error:
+                if PROFILE == 'rotwk':
+                    raise
                 normal_game(f'{error}: ')
                 return
             # Each step holds the status until the next: the game says
             # when the skirmish is playable and when it has closed.
             process, seconds = native.play(owner, progress=lambda line: status.set(line[:140], 600))
-            status.set(f'{owner.title} is playable in BFME2 ({seconds:.0f} s to start)', 600)
+            status.set(f'{owner.title} is playable in {GAME_LABEL} ({seconds:.0f} s to start)', 600)
             native.watch(process)
             status.set(f'the test game on {owner.title} has closed', 8)
         except Exception as error:

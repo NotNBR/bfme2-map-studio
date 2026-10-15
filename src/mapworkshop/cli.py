@@ -10,6 +10,7 @@ import sys
 import time
 
 USAGE = """
+  mw --profile bfme2|rotwk COMMAND   use a game profile for this command
   mw                         open the viewer on your last map
   mw setup [--game DIR]      find BFME2 and extract its data (once)
   mw doctor                  check that everything is in place
@@ -33,7 +34,7 @@ USAGE = """
   mw item TEMPLATE           render one object on its own (--info: what the game says about it)
   mw items PATTERN...        a labelled collage of objects: "*bridge*", --from-map MAP [--layer L]
   mw render | graphics | workspace ...   render images, map graphics, hand-edit workspaces
-  mw config [KEY [VALUE]]    show or change settings (game, last_map)
+  mw config [KEY [VALUE]]    show or change settings (game, rotwk, profile, last_map)
   mw test [--corpus]         run the tests and checks (--corpus: also on every stock map)
 """
 
@@ -41,9 +42,11 @@ USAGE = """
 def parser():
     p = argparse.ArgumentParser(prog='mw', description=__doc__, usage=USAGE,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--profile', choices=['bfme2', 'rotwk'], help='Game assets and output profile (default: saved setting)')
     sub = p.add_subparsers(dest='command')
     s = sub.add_parser('setup', help='Find BFME2 and extract its data')
     s.add_argument('--game', help='The BFME2 folder (with lotrbfme2.exe and INI.big)')
+    s.add_argument('--rotwk', help='The expansion folder (with lotrbfme2ep1.exe and INI.big); use --profile rotwk')
     s.add_argument('--force', action='store_true', help='Extract again even if up to date')
     sub.add_parser('doctor', help='Check the setup')
     sub.add_parser('maps', help='List the map projects')
@@ -60,11 +63,12 @@ def parser():
     s.add_argument('map', nargs='?')
     s.add_argument('--install', action='store_true', help="Also copy it into the game's user maps")
     s.add_argument('--no-cache', action='store_true', help="Make every calculation again instead of reusing earlier builds' results")
-    s = sub.add_parser('play', help='Test the map in-game: start BFME2 straight in a skirmish on it')
+    s = sub.add_parser('play', help='Test the map in-game: start the selected game in a skirmish on it')
     s.add_argument('map', nargs='?')
     s.add_argument('--rebuild', action='store_true', help='Build before installing')
+    s.add_argument('--check', action='store_true', help='Run a hidden skirmish to ten logic frames, then close it and save a report')
     s.add_argument('--normal-game', action='store_true',
-                   help="Install into your own game's user maps and start it at the menu instead")
+                   help="Install into the game's user maps and open its menu (isolated runtime for ROTWK)")
     s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
                    help='Detail level of the test game (default Medium)')
     s.add_argument('--fog', action='store_true',
@@ -141,8 +145,8 @@ def say(text=''):
 # Commands ----------------------------------------------------------------------
 def cmd_setup(args):
     from mapworkshop import game
-    from mapworkshop.config import ROOT
-    if (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
+    from mapworkshop.config import ROOT, GAME_LABEL, PROFILE
+    if PROFILE == 'bfme2' and (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
         import subprocess
         say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
         subprocess.run(['git', 'submodule', 'update', '--init'], cwd=ROOT, check=False)
@@ -156,8 +160,8 @@ def cmd_setup(args):
             if choice and game.is_game(choice):
                 break
             say('That folder has no lotrbfme2.exe and INI.big; try again, or Ctrl+C to stop.')
-    folder = game.setup(choice, force=args.force, progress=say)
-    say(f'BFME2: {folder}')
+    folder = game.setup(choice, force=args.force, progress=say, rotwk=args.rotwk)
+    say(f'{GAME_LABEL}: {folder}')
     say('Next: `mw maps` to see the map projects, `mw` to open the viewer.')
     return 0
 
@@ -165,7 +169,7 @@ def cmd_setup(args):
 def cmd_doctor(args):
     import platform
     from mapworkshop import game, project
-    from mapworkshop.config import USER_MAPS, game_dir
+    from mapworkshop.config import USER_MAPS, GAME_DATA, GAME_LABEL, PROFILE, base_game_dir, game_dir
     problems = 0
 
     def check(ok, text, fix=None, required=True):
@@ -178,12 +182,25 @@ def cmd_doctor(args):
     say('bfme2-map-workshop doctor')
     check(sys.version_info >= (3, 11), f'Python {platform.python_version()}', 'Install Python 3.11 or newer.')
     folder = game_dir()
-    check(bool(folder and game.is_game(folder)), f'BFME2 folder: {folder or "not set"}', 'Run `mw setup` (or `mw setup --game DIR`).')
-    check(game.extracted(), 'Game data extracted (local/game)', 'Run `mw setup`.')
-    from mapworkshop.config import ROOT
-    check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
-          'bfme2-map-quickload submodule (faster map loading in test games)',
-          'Run `git submodule update --init` (or `mw setup`).', required=False)
+    check(bool(folder and game.is_game(folder, PROFILE)), f'{GAME_LABEL} folder: {folder or "not set"}', 'Run `mw setup`.')
+    if PROFILE == 'rotwk':
+        base = base_game_dir()
+        check(bool(base and game.is_game(base)), f'Shared BFME2 assets: {base or "not set"}', 'Run `mw setup --game DIR`.')
+    check(game.extracted() if base_game_dir() else False, f'Game data extracted ({GAME_DATA})', 'Run `mw setup`.')
+    if PROFILE == 'rotwk':
+        import hashlib
+        from mapworkshop.native import rotwk
+        engine = folder/'game.dat' if folder else None
+        supported = bool(engine and engine.is_file() and
+                         hashlib.sha256(engine.read_bytes()).hexdigest() == rotwk.SUPPORTED_SHA256)
+        check(supported, 'Verified ROTWK engine for direct in-game tests',
+              'Asset editing works independently; direct tests need the verified engine documented in docs/game/runtime.md.',
+              required=False)
+    else:
+        from mapworkshop.config import ROOT
+        check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
+              'bfme2-map-quickload submodule (faster map loading in test games)',
+              'Run `git submodule update --init` (or `mw setup`).', required=False)
     try:
         import moderngl
         ctx = moderngl.create_standalone_context(require=430)
@@ -203,8 +220,14 @@ def cmd_doctor(args):
         check(bool(imageio_ffmpeg.get_ffmpeg_exe()), 'ffmpeg (videos only)', required=False)
     except Exception:
         check(False, 'ffmpeg (videos only)', 'pip install -e ".[video]"', required=False)
-    check(USER_MAPS.parent.exists(), f"Game's user maps: {USER_MAPS}",
-          'Start BFME2 once so it creates its user folder; `mw play` installs maps there.', required=False)
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import runtime
+        user_maps = runtime.APPDATA/runtime.profile_leaf()/'Maps'
+        check(user_maps.exists(), f'Isolated ROTWK user maps: {user_maps}',
+              '`mw play` prepares this folder and installs the map.', required=False)
+    else:
+        check(USER_MAPS.parent.exists(), f"Game's user maps: {USER_MAPS}",
+              f'Start {GAME_LABEL} once so it creates its user folder; `mw play` installs maps there.', required=False)
     every = project.projects()
     built = [p for p in every if p.map_file.exists()]
     check(bool(every), f'{len(every)} map projects, {len(built)} built', 'Start one with `mw new "<title>"`.')
@@ -269,17 +292,26 @@ def cmd_build(args, extra):
 
 def cmd_play(args, extra):
     from mapworkshop import game, project
+    from mapworkshop.config import GAME_LABEL, PROFILE
+    if args.check and args.normal_game:
+        raise RuntimeError('--check cannot be combined with --normal-game')
     p = project.find(args.map)
     if args.rebuild or not p.map_file.exists():
         code = _build(p, extra)
         if code:
             return code
     project.remember(p)
+    if args.check:
+        from mapworkshop import native
+        native.check(p, graphics=args.graphics, progress=say)
+        return 0
     if not args.normal_game:
         from mapworkshop import native
         try:
             native.ready(progress=say)
         except RuntimeError as error:
+            if PROFILE == 'rotwk':
+                raise
             say(f'{error}\nStarting your normal game instead.')
         else:
             try:
@@ -288,13 +320,13 @@ def cmd_play(args, extra):
                 say(str(error))
                 return 1
             process.stdout.close()                   # the game runs on; its launcher logs to the cache
-            say(f'{p.title} is playable in BFME2, {seconds:.0f} s after the start: you against an easy AI. '
+            say(f'{p.title} is playable in {GAME_LABEL}, {seconds:.0f} s after the start: you against an easy AI. '
                 'Closing the game window ends it.')
             return 0
     target = game.install(p.build_dir, p.native_name)
     say(f'Installed {p.title} into {target}')
     game.launch()
-    say(f'Starting BFME2: pick "{p.title}" under Skirmish or Multiplayer.')
+    say(f'Starting {GAME_LABEL}: pick "{p.title}" under Skirmish or Multiplayer.')
     return 0
 
 
@@ -519,6 +551,15 @@ def cmd_config(args):
     if args.key == 'game':
         game.setup(args.value, progress=say)
         return 0
+    if args.key == 'rotwk':
+        game.setup(rotwk=args.value, progress=say)
+        return 0
+    if args.key == 'profile':
+        if args.value not in ('bfme2', 'rotwk'):
+            raise RuntimeError('Profile must be bfme2 or rotwk')
+        save_setting(args.key, args.value)
+        say(f'Default profile: {args.value}. Restart any open viewer to switch its assets.')
+        return 0
     save_setting(args.key, args.value)
     return 0
 
@@ -581,6 +622,12 @@ PASSTHROUGH = {'view': 'mapworkshop.viewer.app', 'marks': 'mapworkshop.viewer.ma
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    # Do this before importing config (including through a passthrough module).
+    selector = argparse.ArgumentParser(add_help=False)
+    selector.add_argument('--profile', choices=['bfme2', 'rotwk'])
+    selected, argv = selector.parse_known_args(argv)
+    if selected.profile:
+        os.environ['MW_GAME_PROFILE'] = selected.profile
     if not argv:
         argv = ['view']
     if argv[0] in PASSTHROUGH:

@@ -4,6 +4,11 @@ A map places the game's own objects and paints its own textures, by name. Find
 a name with `mw find`, learn what the game says about it with `mw item --info`,
 and look at the candidates with `mw items` before choosing.
 
+The active [game profile](getting-started.md#rise-of-the-witch-king) determines
+the library: BFME2, or BFME2 plus ROTWK with expansion overrides. The ROTWK
+catalogue includes Angmar alongside the base game's assets and uses a separate
+cache. For example, `mw --profile rotwk find angmar` searches the combined set.
+
 ## Searching: `mw find`
 
 `mw find` searches the game's object templates by what they are rather than by

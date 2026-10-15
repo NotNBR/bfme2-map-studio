@@ -31,6 +31,9 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     out/<name>.png; returns a report of the shots and the run. `headless`
     (the default) runs the game unseen, through DXVK (native.runtime); False
     shows its window and uses native Direct3D 9."""
+    from mapworkshop.config import PROFILE
+    if PROFILE == 'rotwk':
+        raise RuntimeError('Native screenshot capture currently supports BFME2 1.06 only')
     from PIL import Image, ImageStat
     from mapworkshop.native import debugger, runtime
     out = Path(out)

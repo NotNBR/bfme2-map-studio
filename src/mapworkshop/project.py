@@ -28,7 +28,7 @@ import sys
 import time
 import tomllib
 
-from mapworkshop.config import BUILD, HISTORY, MAPS, ROOT, save_setting, setting
+from mapworkshop.config import BUILD, HISTORY, MAPS, ROOT, PROFILE, save_setting, setting
 
 KEEP_BUILDS = 5
 
@@ -263,7 +263,7 @@ def build(project, args=(), progress=print):
     out = work/'map'
     out.mkdir()
     b = Build(project, work, out, args)
-    record = dict(project=project.id, started=stamp, commit=_git('rev-parse', 'HEAD'),
+    record = dict(project=project.id, profile=PROFILE, started=stamp, commit=_git('rev-parse', 'HEAD'),
                   dirty=bool(_git('status', '--porcelain', '--', 'maps', 'src')), sources_sha256=_digest(project.sources()))
     try:
         for name in [n for n in sys.modules if n == f'maps.{project.folder.name}' or n.startswith(f'maps.{project.folder.name}.')]:

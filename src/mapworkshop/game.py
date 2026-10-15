@@ -11,7 +11,8 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 
-from mapworkshop.config import GAME_DATA, ROOT, USER_MAPS, game_dir, save_setting
+from mapworkshop.config import (GAME_DATA, ROOT, USER_MAPS, PROFILE, GAME_LABEL, GAME_EXE,
+                                archive_paths, base_game_dir, game_dir, save_setting)
 from mapworkshop.formats.big import BigArchive
 
 REGISTRY_KEYS = [r'SOFTWARE\WOW6432Node\Electronic Arts\Electronic Arts\The Battle for Middle-earth II',
@@ -20,9 +21,11 @@ COMMON_FOLDERS = [r'EA Games\The Battle for Middle-earth (tm) II', r'Electronic 
                   r'EA Games\The Battle for Middle-earth II', 'The Battle for Middle-earth II']
 
 
-def is_game(path):
+def is_game(path, profile='bfme2'):
     path = Path(path)
-    return (path/'INI.big').is_file() and ((path/'lotrbfme2.exe').is_file() or (path/'game.dat').is_file())
+    exe = 'lotrbfme2ep1.exe' if profile == 'rotwk' else 'lotrbfme2.exe'
+    return (path/'INI.big').is_file() and ((path/exe).is_file() or
+           ((path/'game.dat').is_file() and not (path/'lotrbfme2ep1.exe').is_file() and profile == 'bfme2'))
 
 
 def _registry():
@@ -62,7 +65,7 @@ def _nearby(base, depth=3):
 def find():
     """The BFME2 folder: the configured one, the registry's, a usual install
     folder, or one near this checkout. None when there is none."""
-    configured = game_dir()
+    configured = base_game_dir()
     if configured and is_game(configured):
         return configured
     candidates = _registry()
@@ -79,6 +82,11 @@ def find():
 
 def archives(game):
     """The archives the game reads INIs and maps from, in override order."""
+    if PROFILE == 'rotwk':
+        base = base_game_dir()
+        if base is None:
+            raise RuntimeError('ROTWK also needs BFME2: run setup with --game DIR')
+        return archive_paths(base, game)
     game = Path(game)
     found = [game/'INI.big', game/'Maps.big']
     found += sorted(p for p in game.glob('*.big') if p.name.lower().startswith('data'))
@@ -87,7 +95,7 @@ def archives(game):
 
 
 def _signature(game):
-    return [[p.name, p.stat().st_size, int(p.stat().st_mtime)] for p in archives(game)]
+    return [[str(p.resolve()), p.stat().st_size, p.stat().st_mtime_ns] for p in archives(game)]
 
 
 def extracted(game=None):
@@ -111,6 +119,7 @@ def extract(game, progress=print):
     keys = sorted(k for k in effective if k.startswith(('data/ini/', 'maps/')))
     staging = GAME_DATA.with_name(GAME_DATA.name + '.partial')
     shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
     for i, key in enumerate(keys):
         relative = PurePosixPath(key)
         if relative.is_absolute() or '..' in relative.parts:
@@ -129,7 +138,7 @@ def extract(game, progress=print):
     return len(keys)
 
 
-def setup(game=None, force=False, progress=print):
+def setup(game=None, force=False, progress=print, rotwk=None):
     """Find (or take) the game folder, remember it, extract its data. Returns the folder."""
     game = Path(game).expanduser().resolve() if game else find()
     if game is None:
@@ -137,7 +146,21 @@ def setup(game=None, force=False, progress=print):
                            'that holds lotrbfme2.exe and INI.big.')
     if not is_game(game):
         raise RuntimeError(f'{game} is not a BFME2 folder (no INI.big next to lotrbfme2.exe).')
+    if PROFILE == 'rotwk':
+        expansion = Path(rotwk).expanduser().resolve() if rotwk else game_dir()
+        if expansion is None or not is_game(expansion, 'rotwk'):
+            raise RuntimeError('ROTWK not found: run `mw --profile rotwk setup --rotwk DIR` '
+                               '(the folder with lotrbfme2ep1.exe and INI.big)')
+        missing = [name for name in ('_patch201.big', '_patch201ini.big', '_patch201maps.big')
+                   if not (expansion/name).is_file()]
+        if missing:
+            raise RuntimeError('ROTWK 2.01 patch archives are missing: ' + ', '.join(missing))
+    elif rotwk:
+        raise RuntimeError('Use `mw --profile rotwk setup --rotwk DIR` to prepare the expansion')
     save_setting('game', game)
+    if PROFILE == 'rotwk':
+        save_setting('rotwk', expansion)
+        game = expansion
     if force or not extracted(game):
         progress(f'Extracting the game data from {game} ...')
         count = extract(game, progress)
@@ -154,7 +177,11 @@ def stock_maps():
 
 def install(build_folder, native_name):
     """Copy a built map into the game's user maps folder; returns the target."""
-    target = USER_MAPS/native_name
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import runtime
+        target = runtime.APPDATA/runtime.profile_leaf()/'Maps'/native_name
+    else:
+        target = USER_MAPS/native_name
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
@@ -165,12 +192,15 @@ def install(build_folder, native_name):
 
 
 def launch():
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import rotwk
+        return rotwk.launch_menu()
     game = game_dir()
-    if not game or not is_game(game):
-        raise RuntimeError('BFME2 not found: run `mw setup`')
-    exe = game/'lotrbfme2.exe'
+    if not game or not is_game(game, PROFILE):
+        raise RuntimeError(f'{GAME_LABEL} not found: run `mw setup`')
+    exe = game/GAME_EXE
     if not exe.exists():
-        raise RuntimeError(f'No lotrbfme2.exe in {game}')
+        raise RuntimeError(f'No {GAME_EXE} in {game}')
     try:
         return subprocess.Popen([str(exe)], cwd=game)
     except OSError as error:

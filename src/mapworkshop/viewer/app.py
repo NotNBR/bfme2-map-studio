@@ -75,7 +75,7 @@ import moderngl
 import numpy as np
 
 from mapworkshop import game, project
-from mapworkshop.config import RENDERS
+from mapworkshop.config import RENDERS, GAME_LABEL
 from mapworkshop.mapkit.weather import PRESETS, SUNS
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.camera import Camera
@@ -760,7 +760,7 @@ class Viewer:
                 message = self.status.current(now)
                 status = f'{message}  |  ' if message is not None else 'live  |  '
                 o = session.options
-                glfw.set_window_title(window, f'{session.source.stem}  |  {status}{self.fps:.0f} fps  |  '
+                glfw.set_window_title(window, f'{session.source.stem}  |  {GAME_LABEL}  |  {status}{self.fps:.0f} fps  |  '
                                       f'heading {c["heading"] % 360:.0f}  elevation {c["elevation"]:.0f}  |  '
                                       f'lod {o["lod"]}  weather {o["weather"]}  |  F1 controls')
 

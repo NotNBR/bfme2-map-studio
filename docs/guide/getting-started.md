@@ -23,6 +23,43 @@ Run it again at any time: it only does what is missing. If BFME2 moves, run
 `mw setup --game "<folder>"`; `mw setup --force` extracts the game data again
 even when it is up to date.
 
+## Rise of the Witch-king
+
+The ROTWK profile combines **all BFME2 archive assets with the complete ROTWK
+2.01 archive library**. The expansion overrides matching paths; BFME2-only
+assets remain available. It reads the retail expansion archives and official
+`_patch201*.big` files, excluding 2.02, HD and timer packs even if they are
+installed in the same folder. The studio reads these files; it does not bundle
+them into a map.
+
+Configure both game folders once:
+
+```powershell
+mw --profile rotwk setup --game "D:\Games\BFME2" --rotwk "D:\Games\ROTWK"
+mw config profile rotwk
+mw find angmar
+mw new "Angmar Valley"
+mw dev angmar-valley
+```
+
+Omit `--game` if BFME2 is already configured. `mw config profile bfme2` restores
+the BFME2 default; `mw --profile bfme2 find bridge` selects it for one command.
+Restart an open viewer after changing the default. Its title shows the active
+game. Commands and their child processes keep that profile for their lifetime.
+
+ROTWK uses `local/profiles/rotwk/` for extracted data, caches, builds, build
+history, marks and renders. BFME2 keeps its existing `local/` paths. Map source
+projects are shared, so build a project in the selected profile before viewing
+or playing it. Both profiles' stock maps appear in their viewer's Map menu.
+
+`mw play` and **Test In-Game** start a ROTWK skirmish directly on the build,
+you against an easy AI, in an isolated runtime with clean 2.01 assets. This
+requires the verified executable described in [the runtime](../game/runtime.md#rotwk-201).
+`mw play MAP --check` runs a short hidden gameplay test and closes it afterward.
+ROTWK uses its normal camera and fog; the studio's free-camera hooks, fog reveal,
+native screenshots and native pathfinding capture remain BFME2 1.06 features.
+Model rendering and local walkability estimates work in either profile.
+
 ## Open a map
 
 Double-click **`Map Workshop.cmd`** or pick **Map Workshop** from the Start menu.

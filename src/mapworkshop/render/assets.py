@@ -1,7 +1,7 @@
-"""Read-only access to installed BFME2 assets: archives, INIs, textures and models.
+"""Read-only access to installed BFME2/ROTWK assets: INIs, textures and models.
 
 Lookup follows the game's override order: loose files in the prepared mod
-directory (local/game) win over archives, and `_patch*.big` archives win over base archives.
+directory win over archives; ROTWK overlays BFME2, with patches over base archives.
 Nothing is written back to the game or the mod.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from mapworkshop.config import GAME_DATA, game_dir
+from mapworkshop.config import GAME_DATA, archive_paths, game_dir
 from mapworkshop.formats.big import BigArchive
 
 TEXTURE_EXTENSIONS = ('.dds', '.tga', '.jpg')
@@ -24,17 +24,14 @@ TEMPLATE = re.compile(r'(?ms)^[ \t]*(Object|ObjectReskin|ChildObject)[ \t]+([^\s
                       r'(?=^[ \t]*(?:Object|ObjectReskin|ChildObject)[ \t]+[^\s=]|\Z)')
 
 
-def _archive_order(path):
-    # Patch archives are applied after the base archives.
-    name = path.name.lower()
-    return (name.startswith('_patch'), name)
-
-
 class GameAssets:
-    def __init__(self, game=None, mod=None):
+    def __init__(self, game=None, mod=None, expansion=None):
         """`game`: the BFME2 folder (default: the configured one); `mod`: loose
-        files that override the archives (default: local/game, from `mw setup`)."""
-        game = game or game_dir()
+        files that override the archives (default: this profile's extracted data).
+        `expansion`: optional ROTWK folder over an explicit BFME2 `game` folder.
+        With no folders, use the configured profile's combined asset library."""
+        paths = archive_paths(game, expansion)
+        game = expansion or game or game_dir()
         if game is None:
             raise RuntimeError('BFME2 not found: run `mw setup` (or `mw config game <folder>`)')
         self.game = Path(game)
@@ -44,7 +41,8 @@ class GameAssets:
         # Per-base-index cache: map scopes share it without retaining a new
         # assets instance for every map switch in a class-level LRU.
         self.image = lru_cache(maxsize=512)(self._image)
-        for path in sorted(self.game.glob('*.big'), key=_archive_order):
+        self.archive_paths = paths
+        for path in paths:
             try:
                 archive = BigArchive(path)
             except ValueError:

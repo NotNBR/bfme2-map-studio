@@ -7,6 +7,24 @@ showing it: `mw walkable --native` (its pathfinding grid) and `mw capture`
 profile and saved games are untouched. [The runtime](../game/runtime.md)
 describes how they work.
 
+With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
+directly in a player-versus-easy-AI skirmish. The isolated runtime uses BFME2
+assets plus retail ROTWK and official 2.01 patches, excluding community mods.
+It needs the [verified ROTWK executable](../game/runtime.md#rotwk-201); other
+hashes are rejected before hooks run. ROTWK keeps its normal camera and fog;
+the free camera, automatic fog reveal (`--fog` controls BFME2 only),
+`mw capture`, `mw walkable --native`, and `mw patch` remain BFME2 1.06 features.
+
+`mw play MAP --check` works in either profile: it runs a hidden skirmish until
+ten logic frames have elapsed, closes the test, and saves `check-MAP.json` in
+that profile's `runtime/logs/`. A timeout or crash fails the command. This
+checks gameplay startup, not visual appearance or match balance.
+
+For ROTWK, `mw play --normal-game` opens the **isolated clean runtime's menu**
+and installs the map into that runtime's user maps. `mw build --install` also
+uses those isolated user maps. Your modded ROTWK installation and its saves
+are untouched. The remaining sections describe BFME2's additional features.
+
 ## `mw play`
 
 `mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a

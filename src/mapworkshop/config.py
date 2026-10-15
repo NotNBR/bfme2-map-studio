@@ -2,7 +2,7 @@
 
 Everything the workshop writes stays in the ignored `local/` folder:
 
-    local/config.toml    settings: the BFME2 folder, the last opened map
+    local/config.toml    settings: game folders, active profile, last opened map
     local/game/          the game's INI and map trees, extracted by `mw setup`
     local/build/<map>/   the latest build of each map project
     local/history/<map>/ earlier builds, one folder per build
@@ -10,6 +10,9 @@ Everything the workshop writes stays in the ignored `local/` folder:
     local/renders/       renders and viewer screenshots
     local/videos/        videos
     local/cache/         caches
+
+ROTWK keeps the same layout under local/profiles/rotwk/, except for the
+shared config.toml. Map sources are shared; generated output is isolated.
 """
 import os
 from pathlib import Path
@@ -33,16 +36,6 @@ ROOT = find_root()
 MAPS = ROOT/'maps'
 LOCAL = ROOT/'local'
 CONFIG = LOCAL/'config.toml'
-GAME_DATA = LOCAL/'game'
-BUILD = LOCAL/'build'
-HISTORY = LOCAL/'history'
-MARKS = LOCAL/'marks'
-RENDERS = LOCAL/'renders'
-VIDEOS = LOCAL/'videos'
-CACHE = LOCAL/'cache'
-RUNTIME = LOCAL/'runtime'          # the isolated game mw play and the native tools start (native.runtime)
-# Where BFME2 looks for its user's own maps.
-USER_MAPS = Path(os.environ.get('APPDATA', '~')).expanduser()/'My Battle for Middle-earth(tm) II Files'/'Maps'
 
 
 def settings():
@@ -55,6 +48,8 @@ def setting(key, default=None):
 
 def save_setting(key, value):
     """Set one string setting in local/config.toml, keeping the others."""
+    if key == 'profile' and value not in ('bfme2', 'rotwk'):
+        raise ValueError('Profile must be bfme2 or rotwk')
     values = settings()
     values[key] = str(value)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
@@ -68,9 +63,47 @@ def _quote(text):
 
 
 def game_dir():
-    """The configured BFME2 installation (with lotrbfme2.exe and INI.big), or None."""
+    """The active profile's installation, or None."""
+    value = setting('rotwk' if PROFILE == 'rotwk' else 'game')
+    return Path(value).expanduser() if value else None
+
+
+def base_game_dir():
+    """BFME2 supplies shared assets to both profiles."""
     value = setting('game')
     return Path(value).expanduser() if value else None
+
+
+def archive_paths(game=None, expansion=None):
+    """Assets in override order, BFME2 first and ROTWK last.
+
+    Explicit folders are independent of the active profile. The ROTWK profile
+    uses retail archives plus official 2.01 patches, excluding community mods.
+    BFME2 keeps the studio's existing archive order.
+    """
+    if game is None:
+        game = base_game_dir()
+        expansion = game_dir() if PROFILE == 'rotwk' else None
+        if PROFILE == 'rotwk' and expansion is None:
+            raise RuntimeError('ROTWK not configured: run `mw --profile rotwk setup --rotwk DIR`')
+    if game is None:
+        raise RuntimeError('BFME2 not configured: run `mw setup --game DIR`')
+    for folder in (game, expansion):
+        if folder is not None and not Path(folder).is_dir():
+            raise RuntimeError(f'Game asset folder does not exist: {folder}; run `mw setup`')
+    paths = sorted(Path(game).glob('*.big'), key=lambda p: (p.name.lower().startswith('_patch'), p.name.lower()))
+    if expansion is not None:
+        paths += sorted((p for p in Path(expansion).glob('*.big') if p.name.lower() in ROTWK_ARCHIVES),
+                        key=lambda p: p.name.lower(), reverse=True)
+    return paths
+
+
+# Retail root archives from the disc's file list, plus official patch 2.01.
+# An allowlist also excludes mods with ordinary filenames, not just __patch202.
+ROTWK_ARCHIVES = frozenset(('ambientstreams.big', 'audio.big', 'bases.big', 'data1.big', 'data2.big',
+    'ini.big', 'libraries.big', 'lotrsec.big', 'maps.big', 'music.big', 'shaders.big', 'terrain.big',
+    'textures0.big', 'textures1.big', 'textures2.big', 'textures3.big', 'textures4.big', 'w3d.big', 'window.big',
+    '_patch201.big', '_patch201ini.big', '_patch201maps.big'))
 
 
 def local_path(name, default=None):
@@ -79,3 +112,25 @@ def local_path(name, default=None):
     if value:
         return Path(value).expanduser()
     return Path(default) if default else None
+
+
+# Select once per process. Children inherit this choice even if another studio
+# changes the saved default while a build or viewer is running.
+PROFILE = os.environ.get('MW_GAME_PROFILE') or setting('profile', 'bfme2')
+if PROFILE not in ('bfme2', 'rotwk'):
+    raise RuntimeError(f'Unknown game profile {PROFILE!r}; use bfme2 or rotwk')
+os.environ['MW_GAME_PROFILE'] = PROFILE
+PROFILE_ROOT = LOCAL if PROFILE == 'bfme2' else LOCAL/'profiles'/PROFILE
+GAME_DATA = PROFILE_ROOT/'game'
+BUILD = PROFILE_ROOT/'build'
+HISTORY = PROFILE_ROOT/'history'
+MARKS = PROFILE_ROOT/'marks'
+RENDERS = PROFILE_ROOT/'renders'
+VIDEOS = PROFILE_ROOT/'videos'
+CACHE = PROFILE_ROOT/'cache'
+RUNTIME = PROFILE_ROOT/'runtime'
+GAME_LABEL = 'ROTWK 2.01' if PROFILE == 'rotwk' else 'BFME2'
+GAME_EXE = 'lotrbfme2ep1.exe' if PROFILE == 'rotwk' else 'lotrbfme2.exe'
+USER_MAPS = Path(os.environ.get('APPDATA', '~')).expanduser()/(
+    'My The Lord of the Rings, The Rise of the Witch-king Files' if PROFILE == 'rotwk'
+    else 'My Battle for Middle-earth(tm) II Files')/'Maps'

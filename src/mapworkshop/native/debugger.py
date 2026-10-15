@@ -233,6 +233,11 @@ class Game:
 
     def __init__(self, game_dir, args, appdata):
         self.game_dir, self.args, self.appdata = Path(game_dir), args, Path(appdata)
+        self.executable = 'lotrbfme2.exe'
+        self.game_logic = THE_GAME_LOGIC
+        self.engine_update = GAME_ENGINE_UPDATE
+        self.load_library_slot = LOAD_LIBRARY_SLOT
+        self.debug_exits = DEBUG_EXITS
         self.k = kernel32()
         self.handlers = {}            # rva -> [handlers], armed at the loader breakpoint
         self.injections = []          # (DLL path, done) for inject()
@@ -279,7 +284,7 @@ class Game:
 
     def logic(self):
         """(logic frame, game mode), or (None, None) before GameLogic exists."""
-        gl = self.u32(self.base + THE_GAME_LOGIC) if self.base else None
+        gl = self.u32(self.base + self.game_logic) if self.base else None
         if not gl:
             return None, None
         return self.u32(gl + FRAME_OFF), self.u32(gl + MODE_OFF)
@@ -314,7 +319,7 @@ class Game:
         frame (LoadLibraryA from a remote call); then done(game, {export:
         address}). Whether each DLL loaded is in res['injected']."""
         if not self.injections:
-            self.on(GAME_ENGINE_UPDATE, Game._inject)
+            self.on(self.engine_update, Game._inject)
         self.injections.append((Path(path), done))
 
     def _inject(self, tid, ctx):
@@ -323,7 +328,7 @@ class Game:
             name = str(path.resolve()).encode('mbcs') + b'\0'
             memory = self.alloc(len(name))
             self.write(memory, name)
-            calls.append({'call': self.u32(self.base + LOAD_LIBRARY_SLOT), 'args': [memory]})
+            calls.append({'call': self.u32(self.base + self.load_library_slot), 'args': [memory]})
 
         def loaded(game, modules):
             for (path, done), module in zip(game.injections, modules):
@@ -459,7 +464,7 @@ class Game:
             self.focus_va = self.base + hits[0]
             self._arm(self.focus_va, None)
         self.res['lies']['focus'] = bool(self.focus_va)
-        for rva in DEBUG_EXITS:
+        for rva in self.debug_exits:
             self._arm(self.base + rva, Game._debug_exit)
         for rva, handlers in self.handlers.items():
             self._arm(self.base + rva, combine(handlers))
@@ -524,7 +529,7 @@ class Game:
         if desktop:
             si.d = desktop[1]
         os.environ['_NO_DEBUG_HEAP'] = '1'            # inherited by the launcher and game.dat
-        cmd = ctypes.create_unicode_buffer(f'"{self.game_dir.resolve()/"lotrbfme2.exe"}" {self.args}')
+        cmd = ctypes.create_unicode_buffer(f'"{self.game_dir.resolve()/self.executable}" {self.args}')
         if not k.CreateProcessW(None, cmd, None, None, False, DEBUG_PROCESS, None, str(self.game_dir.resolve()),
                                 ctypes.byref(si), ctypes.byref(pi)):
             raise RuntimeError(f'Starting the game failed (Windows error {ctypes.get_last_error()})')

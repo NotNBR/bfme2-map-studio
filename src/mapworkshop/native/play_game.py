@@ -67,6 +67,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     sys.stdout = sys.stderr = Tee(args.log, sys.__stdout__)
     from mapworkshop import project
+    from mapworkshop.config import PROFILE
     from mapworkshop.native import debugger, runtime
 
     def event(game, name):
@@ -87,11 +88,23 @@ def main(argv=None):
         return False
 
     game = runtime.start(project.find(args.project), args.graphics)
-    game.on(CLOSE_ARM, close)
-    game.on(runtime.NEW_GAME_DONE, loaded)       # also loads the menu's shell map: only the skirmish's counts
+    tick = None
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import rotwk
+        game.on(rotwk.CLOSE_ARM, close)
+        def tick(game):
+            frame, mode = game.logic()
+            if not game.res.get('playable') and mode == debugger.SKIRMISH and frame is not None and frame >= 2:
+                game.res['playable'] = True
+                event(game, 'loaded')
+            if not game.res.get('playable') and game.seconds() > 180:
+                return 'loading-timeout'
+    else:
+        game.on(CLOSE_ARM, close)
+        game.on(runtime.NEW_GAME_DONE, loaded)   # also loads the menu's shell map: only the skirmish's counts
     print(f'mapworkshop: starting {game.args}', flush=True)
     try:
-        result = game.run(WEEK)
+        result = game.run(WEEK, tick=tick)
     finally:
         if game.t0 is not None:
             event(game, 'closed')

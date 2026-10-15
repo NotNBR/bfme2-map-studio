@@ -1,5 +1,5 @@
-"""Start BFME2 on a project and learn from the running game: test games you
-play, the game's own pathfinding grid, screenshots.
+"""Start BFME2 or ROTWK on a project; BFME2 also supports native pathfinding
+and screenshot capture.
 
 Everything runs on an isolated copy of the game in local/runtime/
 (native.runtime), under this package's debugger (native.debugger, ported
@@ -25,7 +25,7 @@ import os
 import subprocess
 import sys
 
-from mapworkshop.config import ROOT
+from mapworkshop.config import ROOT, PROFILE, GAME_LABEL
 from mapworkshop.native import runtime
 
 EVENT = 'mapworkshop: '                 # play_game.py's event lines
@@ -33,13 +33,35 @@ EVENT = 'mapworkshop: '                 # play_game.py's event lines
 
 def ready(progress=print):
     """Prepare the runtime (quick once it exists); RuntimeError if the game
-    is missing or not BFME2 1.06."""
+    is missing or its engine is unsupported by the selected profile."""
     return runtime.prepare(progress)
+
+
+def check(project, graphics='Medium', timeout=180, progress=print):
+    """Run a hidden skirmish until ten logic frames, save evidence, and exit."""
+    from mapworkshop.native import debugger
+    game = runtime.start(project, graphics=graphics, headless=True, progress=progress)
+    def tick(game):
+        frame, mode = game.logic()
+        if mode == debugger.SKIRMISH and frame is not None and frame >= 10:
+            game.res['gameplay'] = dict(frame=frame, mode=mode, seconds=game.seconds())
+            return 'verified-gameplay'
+    result = game.run(timeout, tick=tick)
+    result.update(profile=PROFILE, map_sha256=hashlib.sha256(project.map_file.read_bytes()).hexdigest())
+    report = runtime.LOGS/f'check-{project.id}.json'
+    report.write_text(json.dumps(result, indent=2), encoding='utf-8')
+    if result['stopped'] != 'verified-gameplay':
+        raise RuntimeError(f'The game did not reach gameplay ({result["stopped"]}); see {report}')
+    progress(f'{GAME_LABEL}: reached logic frame {result["gameplay"]["frame"]} in '
+             f'{result["gameplay"]["seconds"]:.1f} s; test game closed. Report: {report}')
+    return result
 
 
 def pathfind(project, progress=print):
     """Read the game's pathfinding grid for the project's current build;
     returns its info."""
+    if PROFILE == 'rotwk':
+        raise RuntimeError('Native pathfinding capture currently supports BFME2 1.06 only')
     import numpy as np
     from mapworkshop.native import pathgrid
     ready(progress)
@@ -54,9 +76,9 @@ def pathfind(project, progress=print):
 
 
 def play(project, graphics='Medium', progress=print, fog=False):
-    """Start BFME2 straight in a skirmish on the project's current build, you
-    against an easy AI, in a 1600 x 1200 window, the map revealed (no shroud
-    or fog of war, unless `fog`). Returns once the game reports
+    """Start the selected game in a skirmish on the project's current build,
+    you against an easy AI, in a 1600 x 1200 window. BFME2 reveals the map
+    unless `fog`; ROTWK keeps its normal fog and camera. Returns once the game reports
     that the skirmish is playable: the launcher process (for watch(); close
     its stdout if you do not watch it) and the seconds the start took. Raises
     RuntimeError when the launcher ends before that."""
@@ -67,7 +89,7 @@ def play(project, graphics='Medium', progress=print, fog=False):
                                 '--graphics', graphics] + (['--fog'] if fog else []), cwd=ROOT, env=env, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    progress(f'Starting BFME2 and loading {project.title}...')
+    progress(f'Starting {GAME_LABEL} and loading {project.title}...')
     last = ''
     for line in process.stdout:
         if line.startswith(EVENT + 'loaded '):

@@ -4,6 +4,41 @@ How `mw play`, `mw walkable --native`, `mw capture` and `mw patch` drive BFME2
 1.06 ([testing in the game](../guide/testing-in-game.md) covers using them).
 The code is in [native/](../../src/mapworkshop/native/).
 
+## ROTWK 2.01
+
+[native/rotwk.py](../../src/mapworkshop/native/rotwk.py) adds direct skirmishes
+for the local executable whose SHA-256 is
+`5481de75b63e22483660ea8097478faef594f90b9ade7de893e092256ba68a26`.
+Its version resource is `2.1.2614.37001`. Earlier local analysis records
+pre-existing scheduling differences in this binary, so this fingerprint is
+not a claim that every retail 2.01 executable is interchangeable with it.
+Other fingerprints are rejected before code hooks are installed.
+
+The ROTWK profile prepares `local/profiles/rotwk/runtime/`. It mounts the
+complete BFME2 archive set below the retail expansion and official 2.01
+archives, omitting 2.02, HD and timer packs. Base archives receive distinct
+names at lower priority, so colliding filenames cannot drop shared assets.
+The executable and writable files are copied, archives and movies linked;
+AppData is redirected and the real install/profile remain untouched.
+
+This executable starts directly as `game.dat`; its retail launcher stalled
+before engine initialization during verification. At RVA `0x23CB7B`, after
+GameEngine::init's `-file` branch assigns slot zero, the studio sets GameInfo
+(`0x9E892C`) to SkirmishGameInfo (`0x9E8930`), assigns random factions to the
+first two slots and makes slot one an easy AI. The slot layout is `+0x18`
+for the array, `+4` for state, `+8/+9` for acceptance/map ownership and
+`+0x18` for faction. These came from the local engine decompilation and were
+verified by a live skirmish, not inferred solely from BFME2.
+
+Readiness requires skirmish mode 2 and advancing logic frames through the
+GameLogic pointer at `0x9E412C`. `mw play --check` closes after ten frames;
+interactive play reports ready after two. The close handler uses RVA `0x18EB`.
+The BFME2 loading/camera DLLs are not injected. ROTWK currently keeps its own
+camera and fog, and native screenshot/pathfinding capture is rejected.
+
+[Validation record](../history/rotwk-integration.md) records the asset and
+gameplay checks. The rest of this page describes the BFME2 runtime.
+
 ## The isolated game
 
 Test games run an isolated copy of the game in `local/runtime/`

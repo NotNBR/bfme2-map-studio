@@ -14,6 +14,7 @@ hash it was measured on.
 
 | Page | What it records |
 | --- | --- |
+| [ROTWK integration](rotwk-integration.md) | clean 2.01 asset overlays and direct skirmish startup verification |
 | [Experiments in bfme-workshop](bfme-workshop-experiments.md) | the navigation lab (barriers, water depth, slopes), the road and bridge runs, the script lab, the lighting readback, the terrain-record audit and terrain lab |
 | [Compatibility and evidence](compatibility.md) | what had been verified on 9 October 2026, and the checks then paused |
 | [Native map screenshots](native-screenshots.md) | bfme-workshop's screenshot harness (now `mw capture`) |

@@ -13,7 +13,7 @@ or removed.
 import hashlib
 from pathlib import Path
 
-from mapworkshop.config import game_dir
+from mapworkshop.config import PROFILE, game_dir
 from mapworkshop.native import msvc
 from mapworkshop.native.pe import PE
 from mapworkshop.native.runtime import SUPPORTED_SHA256
@@ -30,6 +30,8 @@ def is_ours(path):
 
 
 def folder(game=None):
+    if game is None and PROFILE == 'rotwk':
+        raise RuntimeError('The studio loading patch supports BFME2 1.06 only; use the bfme2 profile')
     game = Path(game or game_dir() or '')
     if not (game/'game.dat').is_file():
         raise RuntimeError('BFME2 not found: run `mw setup`')
