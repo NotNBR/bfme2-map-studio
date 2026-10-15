@@ -94,6 +94,9 @@ Building blocks, in `src/mapworkshop/`:
   several). Pass `reach` for fields only compared against short distances,
   such as roads and lanes: it measures each segment only against the samples
   near it, with the same values there, and is far faster on long lines.
+  Beyond `reach` the distance is infinite, so choose it above the largest
+  distance the field is compared against (the maps' road and lane fields use
+  500 for comparisons up to about 200), or leave it out.
 - `mapkit.variety`: `spot_random(seed, template, x, y)`, an object's own random
   numbers for its size and rotation. Drawn from one shared stream instead, every
   object after an added or skipped placement would get a new size, and a small

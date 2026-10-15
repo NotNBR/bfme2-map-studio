@@ -61,6 +61,16 @@ class PreparationTests(unittest.TestCase):
         self.assertIs(first.image, base.image)
         self.assertIs(second.image, base.image)
 
+    def test_shared_assets_take_map_templates_only_in_copies(self):
+        base = GameAssets.__new__(GameAssets)
+        base._templates = {'tree': dict(name='Tree', parent=None, body='Scale = 1\n', kind='Object')}
+        base.image = lambda name: None
+        with patch.object(GameAssets, '_shared', base):
+            with self.assertRaises(RuntimeError):
+                base.add_map_templates('Object Extra\nEnd\n')
+            self.assertIn('extra', base.for_map('Object Extra\nEnd\n').templates)
+            self.assertNotIn('extra', base.templates)
+
     def test_walkability_task_does_not_capture_renderer_gpu_resources(self):
         import weakref
         import gc

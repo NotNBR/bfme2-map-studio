@@ -155,6 +155,8 @@ class GameAssets:
     def add_map_templates(self, text):
         """Object definitions from a map's map.ini, which the game loads on
         top of the INI templates for that map."""
+        if self is GameAssets._shared:
+            raise RuntimeError('The shared assets are read-only: add map templates to a copy (for_map)')
         for kind, name, parent, body in TEMPLATE.findall(text):
             self.templates[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
                                                 body=body, name=name, file='map.ini', line=None)

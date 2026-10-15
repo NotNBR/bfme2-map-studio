@@ -10,13 +10,18 @@ import numpy as np
 def gradient_noise(x,y,scale,seed):
     rng=np.random.default_rng(seed)
     angles=rng.uniform(0,2*np.pi,(256,256))
-    gx,gy=np.cos(angles),np.sin(angles)
+    gx,gy=np.cos(angles).ravel(),np.sin(angles).ravel()
     px,py=x/scale,y/scale
     ix,iy=np.floor(px).astype(int),np.floor(py).astype(int)
     u,v=px-ix,py-iy
-    def dot(dx,dy):
-        return gx[(iy+dy)%256,(ix+dx)%256]*(u-dx)+gy[(iy+dy)%256,(ix+dx)%256]*(v-dy)
-    a,b,c,d=dot(0,0),dot(1,0),dot(0,1),dot(1,1)
+    # The lattice wraps every 256 cells: the four corners' rows and columns
+    # (& 255 is % 256 for these integers), looked up in the flat tables.
+    r0,r1=(iy&255)<<8,((iy+1)&255)<<8
+    c0,c1=ix&255,(ix+1)&255
+    def dot(row,col,dx,dy):
+        k=row+col
+        return gx[k]*(u-dx)+gy[k]*(v-dy)
+    a,b,c,d=dot(r0,c0,0,0),dot(r0,c1,1,0),dot(r1,c0,0,1),dot(r1,c1,1,1)
     fu=u*u*u*(u*(u*6-15)+10);fv=v*v*v*(v*(v*6-15)+10)
     return ((a*(1-fu)+b*fu)*(1-fv)+(c*(1-fu)+d*fu)*fv)*1.45
 

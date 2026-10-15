@@ -5,7 +5,10 @@
     lanes = nearest(lane_lines, x, y, reach=500)        # exact within 500, inf beyond
 
 Each segment is measured against every sample, so a long smoothed line over a
-large map is slow: Hollin Dales' 1,346 lane segments took 45 s. With `reach`,
+large map is slow: Hollin Dales' 1,346 lane segments took 45 s. On a regular
+grid (terrain samples) x varies only along the rows and y only down the
+columns, so the projections onto each segment are a row and a column added by
+broadcasting: the same values with a third of the work. With `reach`,
 each segment is measured only against the samples within `reach` of it,
 which gives exactly the same values there (0.2 s for the same lanes); use it
 for fields that are only compared against distances below `reach`.
@@ -35,6 +38,8 @@ def polyline_distance(points, x, y, reach=None):
     With `reach` (x and y a regular grid, as terrain samples are), samples
     farther than `reach` from the line get distance inf and arc length 0;
     the others get exactly the values they would without it."""
+    if reach is None and _grid(x, y) is not None and (x == x[:1]).all() and (y == y[:, :1]).all():
+        return _grid_distance(points, x, y)
     best = np.full(np.shape(x), np.inf); along = np.zeros(np.shape(x)); s = 0.
     grid = _grid(x, y) if reach is not None else None
     if reach is not None and grid is None:
@@ -67,6 +72,33 @@ def polyline_distance(points, x, y, reach=None):
     if grid is not None:
         far = best > reach
         best[far] = np.inf; along[far] = 0
+    return best, along
+
+
+def _grid_distance(points, x, y):
+    """polyline_distance over a whole regular grid: the same arithmetic per
+    sample, with the terms that depend only on the column or the row computed
+    once per column or row, and every array reused."""
+    cols, rows = x[0], y[:, 0]
+    best = np.full(x.shape, np.inf); along = np.zeros(x.shape); s = 0.
+    t, px, py, d = (np.empty(x.shape) for _ in range(4))
+    closer = np.empty(x.shape, bool)
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        dx, dy = bx-ax, by-ay; length2 = dx*dx+dy*dy
+        if length2 == 0:
+            continue
+        X, Y = cols-ax, rows-ay
+        np.add((X*dx)[None, :], (Y*dy)[:, None], out=t)
+        np.divide(t, length2, out=t)
+        np.clip(t, 0, 1, out=t)
+        np.multiply(t, dx, out=px); np.subtract(X[None, :], px, out=px)
+        np.multiply(t, dy, out=py); np.subtract(Y[:, None], py, out=py)
+        np.hypot(px, py, out=d)
+        np.less(d, best, out=closer)
+        np.copyto(best, d, where=closer)
+        np.multiply(t, math.sqrt(length2), out=t); np.add(s, t, out=t)
+        np.copyto(along, t, where=closer)
+        s += math.sqrt(length2)
     return best, along
 
 
