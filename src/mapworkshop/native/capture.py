@@ -10,9 +10,14 @@ map, then for each shot
 height, waits `settle` rendered frames for the view to stream in, and saves
 the frame. A shot (name, x, y, height, frame) waits until the game's logic
 reaches that frame first, so a run can photograph a scripted scenario as it
-plays out. The game is ended after the last shot.
+plays out. A shot given as a dict may also set `pitch` (degrees below the
+horizon), `heading` (degrees, 0 north, 90 east) and `distance` from the
+point: ingame.dll then replaces the game's camera with that one, for low
+cinematic views the game's own camera never takes. The game is ended after
+the last shot.
 """
 import json
+import math
 import struct
 import time
 from pathlib import Path
@@ -33,6 +38,12 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     from mapworkshop.native import debugger, runtime
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
+    def shot(s):
+        if isinstance(s, dict):
+            return dict(dict(frame=None, height=300., pitch=0., heading=0., distance=0.), **s)
+        name, x, y, height, *at = s
+        return dict(name=name, x=x, y=y, height=height, frame=at[0] if at else None, pitch=0., heading=0., distance=0.)
+    shots = [shot(s) for s in shots]
     game = runtime.start(project, graphics, headless=headless, progress=progress)
     state = dict(shot=0, step='load', done=[])
 
@@ -52,17 +63,26 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             game.arm(GAME_ENGINE_UPDATE, reveal)
             state['step'] = 'move'
         if state['step'] == 'move':
-            name, x, y, height, *at = shots[state['shot']]
-            if at and frame < at[0]:
+            s = shots[state['shot']]
+            if s['frame'] is not None and frame < s['frame']:
                 return None                       # not yet: the shot waits for its logic frame
-            game.write(photo, struct.pack('<I3f', 1, x, y, height))
+            game.write(photo, struct.pack('<I6f', 1, s['x'], s['y'], s['height'], math.radians(s['pitch']),
+                                          math.radians(s['heading']), s['distance']))
             state.update(step='settle', since=frames)
         elif state['step'] == 'settle' and frames >= state['since'] + settle:
             game.write(cap, struct.pack('<I', 1))
             state['step'] = 'read'
         elif state['step'] == 'read' and not game.u32(cap):
             status, w, h, pitch, pixels = struct.unpack('<5I', game.read(cap + 4, 20))
-            name, x, y, height, *_ = shots[state['shot']]
+            s = shots[state['shot']]
+            name, x, y, height = s['name'], s['x'], s['y'], s['height']
+            if (status or not pixels) and state.get('retries', 0) < 8:
+                # Out of video memory for the copy (0x8876017C at High with
+                # many units on screen) passes: ask again a few frames on.
+                state['retries'] = state.get('retries', 0)+1
+                state.update(step='settle', since=frames-settle+5)
+                return None
+            state['retries'] = 0
             if status or not pixels or not (0 < w <= 8192 and 0 < h <= 8192):
                 raise RuntimeError(f'The game could not copy its frame for {name} (status {status:#x}, '
                                    f'surface format {game.u32(cap + 28)})')
@@ -70,8 +90,8 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             path = out/f'{name}.png'
             picture.save(path)
             stddev = sum(ImageStat.Stat(picture).stddev)/3
-            state['done'].append(dict(name=name, x=x, y=y, height=height, path=str(path), width=w, height_px=h,
-                                      frame=frame, seconds=game.seconds(), stddev=round(stddev, 1)))
+            state['done'].append(dict(s, path=str(path), width=w, height_px=h, frame=frame, seconds=game.seconds(),
+                                      stddev=round(stddev, 1)))
             progress(f'  {name}: {path.name} ({w} x {h}, logic frame {frame})')
             state['shot'] += 1
             if state['shot'] == len(shots):

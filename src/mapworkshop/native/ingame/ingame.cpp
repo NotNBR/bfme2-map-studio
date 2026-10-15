@@ -17,6 +17,9 @@
 //  - places the tactical camera every frame while mwPhoto.enabled is set
 //    (W3DView::updateView, RVA 0x85B36): focus on the ground at x, y and
 //    the given height, through the view's own lookAt and height setters;
+//    with a pitch above 0 the built camera is replaced by one at that angle
+//    below the horizon, facing heading (radians from north, clockwise),
+//    `distance` from the focus: a cinematic view;
 //  - copies the D3D9 render target at the end of a presented frame after
 //    mwCapture.request is set (DX8Wrapper::End_Scene, RVA 0x122BE0) into a
 //    buffer the launcher reads back, and counts rendered frames.
@@ -33,7 +36,7 @@ typedef unsigned int U32;
 struct V3 { float x, y, z; };
 struct Matrix { float m[3][4]; };     // W3D Matrix3D: columns right, up, back (the camera looks along -back), position
 
-struct Photo { U32 enabled; float x, y, height; };
+struct Photo { U32 enabled; float x, y, height, pitch, heading, distance; };
 struct Capture { U32 request, status, width, height, pitch, pixels, frames, format; };
 // enabled: the wheel and middle-button tilt drive the camera (the launcher may clear it);
 // active: they have since the last reset, else the game's camera is shown unchanged.
@@ -105,8 +108,33 @@ static void release() {
 // After the game built the camera: the same focus and heading, at the chosen
 // tilt and distance. The game's camera looks at its focus, View +0x0C, which
 // is at the ground height View +0x14 (as bfme-workshop's strategic camera).
+// The screenshot camera's own view: focus on the ground at x, y, seen from
+// `distance` away at `pitch` below the horizon, facing `heading`.
+static void photoCamera(void *view, Matrix &m) {
+    float s = (float)sin(mwPhoto.pitch), c = (float)cos(mwPhoto.pitch), d = mwPhoto.distance;
+    float rightX = (float)cos(mwPhoto.heading), rightY = -(float)sin(mwPhoto.heading);
+    V3 focus = {mwPhoto.x, mwPhoto.y, ground(mwPhoto.x, mwPhoto.y)};
+    m.m[0][0] = rightX;    m.m[1][0] = rightY;    m.m[2][0] = 0;
+    m.m[0][1] = -rightY*s; m.m[1][1] = rightX*s;  m.m[2][1] = c;
+    m.m[0][2] = rightY*c;  m.m[1][2] = -rightX*c; m.m[2][2] = s;
+    m.m[0][3] = focus.x + m.m[0][2]*d;
+    m.m[1][3] = focus.y + m.m[1][2]*d;
+    m.m[2][3] = focus.z + s*d;
+    void *camera = field<void*>(view, 0x104);
+    if (camera) {
+        float nearZ = clamp(d*0.02f, 10, 1000), farZ = d*2 + 20000;
+        if (field<float>(camera, 0xF0) < farZ) field<float>(camera, 0xF0) = farZ;
+        if (field<float>(camera, 0xEC) < nearZ) field<float>(camera, 0xEC) = nearZ;
+        field<U8>(camera, 0xFC) = 0;
+    }
+}
+
 static void __fastcall buildHook(void *view, void *, Matrix *out) {
     ((BuildFn)buildOriginal)(view, 0, out);
+    if (mwPhoto.enabled && mwPhoto.pitch > 0 && mwPhoto.distance > 0 && view == tactical() && inMatch()) {
+        photoCamera(view, *out);
+        return;
+    }
     if (!controls(view)) {
         if (view == tactical()) release();
         return;
@@ -212,6 +240,9 @@ static void __fastcall updateHook(void *view, void *) {
     }
     U32 builds = mwCamera.builds;
     ((ViewFn)updateOriginal)(view, 0);
+    // A cinematic photo: rebuild every frame, so the game cannot keep its own.
+    if (mwPhoto.enabled && mwPhoto.pitch > 0 && view == tactical() && inMatch())
+        address<ViewFn>(0x8BE6B)(view, 0);
     // The game rebuilds its camera only when something moved it: rebuild for
     // new input and while the zoom eases (setCameraTransform, 0x8BE6B).
     if (view == tactical() && builds == mwCamera.builds && controls(view)

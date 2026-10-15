@@ -76,7 +76,10 @@ def parser():
     s.add_argument('--json', action='store_true', help='Print the cut-off areas as JSON')
     s = sub.add_parser('capture', help='Screenshots from the game itself: start it on the map and save camera views')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
-    s.add_argument('--shot', nargs=4, action='append', required=True, metavar=('NAME', 'X', 'Y', 'HEIGHT'),
+    s.add_argument('--view', nargs=6, action='append', metavar=('NAME', 'X', 'Y', 'DISTANCE', 'PITCH', 'HEADING'),
+                   help='A cinematic view: the camera DISTANCE from the ground at X, Y, PITCH degrees below the '
+                        'horizon, facing HEADING degrees (0 north, 90 east); after the --shot views')
+    s.add_argument('--shot', nargs=4, action='append', default=[], metavar=('NAME', 'X', 'Y', 'HEIGHT'),
                    help='A view: the camera looks at the ground at X, Y (map units) from HEIGHT (the game camera; 300 is its usual zoom)')
     s.add_argument('--at', type=int, action='append', metavar='FRAME',
                    help='With one value per --shot, in order: take that shot once the game reaches this logic frame')
@@ -326,14 +329,19 @@ def cmd_capture(args):
         raise LookupError(f'No build of {p.title}: run `mw build {p.id}`')
     try:
         shots = [(name, float(x), float(y), float(height)) for name, x, y, height in args.shot]
+        shots += [dict(name=name, x=float(x), y=float(y), height=300., distance=float(d), pitch=float(p), heading=float(h))
+                  for name, x, y, d, p, h in args.view or []]
     except ValueError:
-        raise LookupError('--shot takes a name and three numbers: NAME X Y HEIGHT') from None
-    if len({s[0] for s in shots}) != len(shots):
+        raise LookupError('--shot takes NAME X Y HEIGHT, --view NAME X Y DISTANCE PITCH HEADING: numbers after the name') from None
+    if not shots:
+        raise LookupError('Give at least one --shot or --view')
+    names = [s['name'] if isinstance(s, dict) else s[0] for s in shots]
+    if len(set(names)) != len(shots):
         raise LookupError('Shot names must be unique')
     if args.at:
         if len(args.at) != len(shots) or args.at != sorted(args.at):
-            raise LookupError('--at takes one rising logic frame per --shot')
-        shots = [s+(frame,) for s, frame in zip(shots, args.at)]
+            raise LookupError('--at takes one rising logic frame per --shot and --view')
+        shots = [dict(s, frame=f) if isinstance(s, dict) else s+(f,) for s, f in zip(shots, args.at)]
     native.ready(progress=say)
     out = args.out or RENDERS/'game'/p.id
     report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say, headless=not args.show,

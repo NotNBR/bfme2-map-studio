@@ -308,6 +308,11 @@ it is, and it ends as soon as the tool has what it came for.
   `--at FRAME` (one per `--shot`, rising) holds each shot until the game's
   logic reaches that frame, about 5 per second of game time, to photograph
   a scripted scenario as it plays out; `--timeout` gives a long one time.
+  `--view NAME X Y DISTANCE PITCH HEADING` is a cinematic shot instead: the
+  camera DISTANCE from the ground at X, Y, PITCH degrees below the horizon,
+  facing HEADING (0 north, 90 east), angles the game's own camera never
+  takes. The game draws no sky near the horizon, so keep the pitch above
+  about 20 degrees for views that reach far.
 
 Direct3D 9 does not render on a desktop that is not shown, so headless runs
 start `local/runtime/game-headless/`: hard links to the runtime's files plus
