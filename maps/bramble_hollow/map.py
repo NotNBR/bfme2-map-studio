@@ -152,6 +152,12 @@ PADDOCK = (690, 2180, 870, 2370)
 # north), merged into one wobbling shore. The hills give way close round it.
 # Placed as marked, so not turned.
 LAKE = [(4420, 2480, 300, 560), (4590, 2930, 210, 170), (4250, 2110, 230, 160)]
+# Its details: a low wooded island off the middle (x, y, radius); the south
+# bay (LAKE[2]) silted up into a reedy shallow; a deep middle; a pebble beach
+# by the dock with nets drying and a boat pulled up, and a footpath to it
+# from the nearest lane; mossy stones and a fallen tree where the woods come
+# down to the east shore; trees leaning over the water at both ends.
+LAKE_ISLAND = (4480, 2650, 62)
 
 
 def smooth(a, b, v):
@@ -253,7 +259,7 @@ def ridge(x, y, notch):
 def lake(x, y):
     """The lake's signed distance in map units (negative in the water): its
     ovals, each measured across its shore, merged with rounded fillets, the
-    shore wobbling in coves and points."""
+    shore wobbling in coves and points, and its island (positive: land)."""
     d = None
     for cx, cy, rx, ry in LAKE:
         dx, dy = (x-cx)/rx, (y-cy)/ry
@@ -261,7 +267,36 @@ def lake(x, y):
         grad = np.hypot(dx/rx, dy/ry)/np.maximum(r, 1e-6)
         oval = (r-1)/np.maximum(grad, 1e-9)
         d = oval if d is None else smooth_min(d, oval, 120)
-    return d+55*fbm(x, y, scale=240, seed=SEED+40, octaves=3)
+    ix, iy, ir = LAKE_ISLAND
+    island = ir+10*np.sin(3*np.arctan2(y-iy, x-ix)+.8)-np.hypot(x-ix, y-iy)
+    return np.maximum(d+55*fbm(x, y, scale=240, seed=SEED+40, octaves=3), island)
+
+
+def marsh(x, y):
+    """How far into the lake's reedy south bay: 1 inside it, 0 well clear of it."""
+    mx, my, mrx, mry = LAKE[2]
+    return 1-smooth(.7, 1.25, np.hypot((x-mx)/mrx, (y-my)/mry))
+
+
+def lake_dock(sd):
+    """The point on the lake's west shore level with its middle, where its dock stands."""
+    lx, ly = LAKE[0][:2]
+    for dx in range(0, 700, 4):
+        if sd[round(ly/10)+BORDER, round((lx-dx)/10)+BORDER] >= 0:
+            return lx-dx, ly
+    raise ValueError('The lake has no west shore')
+
+
+def lake_path(sd, lane_lines):
+    """A footpath from the lake's dock to the nearest lane, wandering a little."""
+    bx, by = lake_dock(sd)
+    start = np.array((bx-25, by))
+    points = np.concatenate([np.array(line) for line in lane_lines])
+    end = points[np.argmin(np.hypot(*(points-start).T))]
+    ax, ay = (end-start)/np.hypot(*(end-start))
+    side = np.array((-ay, ax))
+    bends = [start+(end-start)*.3+side*55, start+(end-start)*.65-side*45]
+    return chaikin([tuple(start)]+[tuple(p) for p in bends]+[tuple(end)], 3)
 
 
 def terrain():
@@ -316,13 +351,29 @@ def terrain():
     swell = 7*fbm(x+900, y-400, scale=1100, seed=SEED+4, octaves=3)
     swell = .5*(swell+mirror(swell))
     valley = 10*(1-smooth(60, 650, sd))            # the floor sinks gently towards the water
-    land = GROUND+hills+swell-valley
+    # The valley floor is no level plain (the viewer's marks 8 and 9, round
+    # the lower hamlets): it climbs gently from the brook towards the hills
+    # and rolls in broad swells with flat-bottomed hollows between them, so
+    # lanes, fields and cottages lie on long gentle slopes. Both halves match;
+    # it flattens out at the water's edge and towards the bases, and runs
+    # into the hills rather than piling onto them.
+    climb = 60*smooth(150, 1800, water)
+    roll = fbm(x+1500, y+800, scale=1200, seed=SEED+8, octaves=3)
+    roll = 85*smooth(-.8, .8, roll+mirror(roll))
+    ripple = fbm(x-700, y+1900, scale=420, seed=SEED+9, octaves=2)
+    ripple = 7*(ripple+mirror(ripple))
+    relief = (climb+roll+ripple)*smooth(60, 600, sd)
+    for p in STARTS:
+        relief *= smooth(BASE_BLEND-150, BASE_BLEND+650, np.hypot(x-p[0], y-p[1]))
+    land = GROUND-smooth_min(-hills, -relief, 30)+swell-valley
     # Fine relief, left out near water and the bases so both sides stay alike.
     calm = smooth(60, 160, sd)
     for p in STARTS:
         calm *= smooth(BASE_BLEND-100, BASE_BLEND+150, np.hypot(x-p[0], y-p[1]))
     land += 1.6*fbm(x, y, scale=140, seed=SEED+5, octaves=2)*calm
     land += 10*(1-smooth(0, POND['island'], r))    # the island rises a little higher in the middle
+    ix, iy, ir = LAKE_ISLAND                       # and so does the lake's
+    land += 16*(1-smooth(0, ir+10, np.hypot(x-ix, y-iy)))
 
     # Banks ease down to the waterline; the bed falls to about 18 deep.
     bank_width = 70+35*smooth(-.3, .3, .5*(fbm(x, y, scale=600, seed=SEED+6, octaves=2)
@@ -330,6 +381,12 @@ def terrain():
     t = np.clip(sd/bank_width, 0, 1)
     edge_z = WATER-1
     z = np.where(sd > 0, edge_z+(land-edge_z)*t**1.5, WATER-2-16*smooth(0, 35, -sd))
+    # The lake shelves down to a deep middle, but its south bay has silted
+    # up into a shallow, uneven reed bed that can be waded.
+    deep = WATER-2-34*smooth(0, 220, -lake_sd)
+    reeds = marsh(x, y)
+    bed = deep*(1-reeds)+(WATER-1.8+.9*fbm(x, y, scale=60, seed=SEED+41, octaves=2))*reeds
+    z = np.where(lake_sd < 0, np.minimum(bed, WATER-.6), z)
 
     # Fords under the bridges: a wide gravel shelf 2.5 deep, with long gentle
     # ramps down the banks, so the crossing holds even off the bridge deck.
@@ -345,16 +402,17 @@ def terrain():
     for p in STARTS:
         blend = (1-smooth(BASE_FLAT, BASE_BLEND, np.hypot(x-p[0], y-p[1])))**.8
         z = z*(1-blend)+BASE*blend
-    return dict(x=x, y=y, z=z, sd=sd, hills=hills, brook=line, fords=fords, ford_d=ford_d, shelf=shelf)
+    return dict(x=x, y=y, z=z, sd=sd, lake=lake_sd, hills=hills, brook=line, fords=fords, ford_d=ford_d, shelf=shelf)
 
 
 def level_pads(t, pads):
     """Level each building's footprint at its own ground height, leaving
-    nearby water alone."""
+    nearby water alone. The pad eases into the ground round it over a wide
+    margin, so one on a slope sits on a soft shelf rather than in a cut."""
     for px, py, radius in pads:
         d = np.hypot(t['x']-px, t['y']-py)
         target = float(np.median(t['z'][(d < radius) & (t['sd'] > 0)]))
-        blend = (1-smooth(radius, radius+80, d))*smooth(0, 30, t['sd'])
+        blend = (1-smooth(radius, radius+170, d))*smooth(0, 30, t['sd'])
         t['z'] = t['z']*(1-blend)+target*blend
 
 
@@ -512,6 +570,16 @@ def materials(t, gardens, orchard_area, yard_masks=()):
     labels[(sd < 10+6*edge) & (sd > -2)] = MUD
     labels[z < WATER-1.5] = SILT
     labels[(t['shelf'] > .25) & (z < WATER+1.5)] = FORD_GRAVEL
+    # The lake: lush grass and mud round the reed bed, a pebble beach by the
+    # dock, and mossy stones along the east shore where the woods come down.
+    lake = t['lake']; reeds = marsh(x, y)
+    labels[(reeds > .05) & (lake > 0) & (lake < 70+30*edge) & (fine > -.3)] = MEADOW_LUSH
+    labels[(reeds > .05) & (lake > -40) & (lake < 22+10*edge)] = MUD
+    shore = (lake > -16) & (lake < 26+12*edge)
+    bx, by = lake_dock(sd)
+    labels[shore & (np.hypot(x-bx, y-by) < 170+50*mid)] = FORD_GRAVEL
+    ix, iy, ir = LAKE_ISLAND
+    labels[shore & (x > LAKE[0][0]+110+60*mid) & (np.hypot(x-ix, y-iy) > ir+50) & (fine > -.15)] = MOSSY_ROCK
     # Yards and kitchen gardens round the cottages, under the lanes and paths.
     for mask, label in yard_masks:
         labels[mask & (sd > 20) & (z > WATER+.5)] = label
@@ -821,10 +889,7 @@ def farm(s, t):
 def lake_shore(s, t):
     """A dock with a rowboat on the lake's west shore, facing the meadows, and ducks along its edge."""
     lx, ly, rx, ry = LAKE[0]
-    for dx in range(0, 700, 4):
-        x, y = lx-dx, ly
-        if s.ground(x, y)[2] >= 0:
-            break
+    x, y = lake_dock(t['sd'])
     cx, cy = x+22, y
     s.put('SBDock', cx, cy, angle=-math.pi/2, layer='Lake', gap=40, lane=30, base=0, wet=True,
           z=WATER+2.5-9-s.ground(cx, cy)[0])
@@ -836,6 +901,113 @@ def lake_shore(s, t):
             if s.ground(x, y)[2] > -12:
                 break
         s.put('Duck', x, y, layer='Lake', gap=15, lane=30, wet=True, base=650)
+
+
+def lake_details(s, t):
+    """The lake's island, reed bed, beach, stones, fallen tree and waterside
+    trees, and the life on it (see LAKE_ISLAND)."""
+    rng = random.Random(SEED+750)
+    lx, ly = LAKE[0][:2]
+    ix, iy, ir = LAKE_ISLAND
+    bx, by = lake_dock(t['sd'])
+
+    def at(field, px, py):
+        return float(t[field][round(py/10)+BORDER, round(px/10)+BORDER])
+
+    def spots(mask, n, spacing):
+        """Up to n cells of the mask, at least `spacing` apart, in a fixed random order."""
+        cells = np.column_stack(np.nonzero(mask))
+        cells = cells[np.random.default_rng(rng.randrange(1 << 30)).permutation(len(cells))]
+        out = []
+        for iy_, ix_ in cells:
+            p = (float(t['x'][iy_, ix_]), float(t['y'][iy_, ix_]))
+            if all(math.dist(p, q) >= spacing for q in out):
+                out.append(p)
+                if len(out) >= n:
+                    break
+        return out
+
+    # The island: an old tree and a younger one, stones at the waterline, flowers.
+    s.put('TreeShire01', ix-8, iy+6, angle=2.1, layer='LakeIsland', gap=30, lane=0, base=0, scale=.75)
+    s.put('TreeOldForest02', ix+24, iy-22, layer='LakeIsland', gap=25, lane=0, base=0, scale=.6)
+    for k in range(5):
+        a = k*math.tau/5+rng.uniform(-.3, .3)
+        s.put(rng.choice(['DarkRockGrey17', 'DarkRockGrey18', 'OldForestRock02']), ix+math.cos(a)*ir*.85,
+              iy+math.sin(a)*ir*.85, layer='LakeIsland', gap=18, lane=0, base=0, wet=True, z=-1)
+    for _ in range(16):
+        a = rng.random()*math.tau; r = rng.uniform(10, ir*.7)
+        s.put(rng.choice(['PTFlower05', 'PTFlower09', 'OptGrass02', 'Fern01']), ix+math.cos(a)*r, iy+math.sin(a)*r,
+              layer='LakeIsland', gap=10, lane=0, base=0)
+
+    # The reed bed: dense stands of rushes in the south bay's shallows, with
+    # open channels of water winding between them.
+    mx, my, mrx, mry = LAKE[2]
+    x, y, lake = t['x'], t['y'], t['lake']
+    shallows = (marsh(x, y) > .25) & (lake < 12) & (t['z'] > WATER-3)
+    for cx, cy in spots(shallows, 26, 55):
+        n = rng.randint(7, 14); spread = rng.uniform(12, 22)
+        for _ in range(n):
+            px, py = cx+rng.gauss(0, spread), cy+rng.gauss(0, spread*.8)
+            s.put(rng.choice(['GladdenFieldsShrub01', 'GladdenFieldsShrub01', 'GladdenFieldsShrub02']), px, py,
+                  layer='LakeReeds', gap=7, lane=30, wet=True, base=650)
+    # Clumps of rushes along the rest of the west and north shores, clear of the beach.
+    edge = (lake > -12) & (lake < 4) & (marsh(x, y) < .05) & (x < lx+80) & (np.hypot(x-bx, y-by) > 220) & \
+           (np.hypot(x-ix, y-iy) > ir+30)
+    for cx, cy in spots(edge, 14, 110):
+        for _ in range(rng.randint(4, 8)):
+            a = rng.random()*math.tau; r = abs(rng.gauss(0, 16))
+            s.put(rng.choice(['GladdenFieldsShrub01', 'GladdenFieldsShrub02', 'OptGrass02']), cx+math.cos(a)*r,
+                  cy+math.sin(a)*r, layer='LakeReeds', gap=10, lane=30, wet=True, base=650)
+
+    # The east shore, where the woods come down: mossy stones, boulders in the shallows.
+    east = (x > lx+120) & (np.hypot(x-ix, y-iy) > ir+60)
+    for px, py in spots(east & (lake > -10) & (lake < 30), 12, 70):
+        s.put(rng.choice(['OldForestROck07', 'OldForestRock02']), px, py, layer='LakeStones', gap=40, lane=30,
+              wet=True, base=650, z=-1)
+    for px, py in spots(east & (lake > -30) & (lake < -6), 8, 60):
+        s.put(rng.choice(['DarkRockGrey17', 'DarkRockGrey18']), px, py, layer='LakeStones', gap=30, lane=30,
+              wet=True, base=650, z=-3)
+    # A dead tree fallen from the east shore into the water: its trunk runs
+    # along local x, the raised root plate at the +x end, so with the roots
+    # on the bank the crown lies out in the lake, half sunk.
+    for dx in range(0, 600, 4):
+        if at('lake', lx+dx, ly-260) >= 0:
+            break
+    fx, fy = lx+dx-25, ly-260
+    s.put('TreeFallDead01', fx, fy, angle=.35, layer='LakeStones', gap=40, lane=0, wet=True, base=650,
+          scale=1.3, z=WATER-5-at('z', fx, fy))
+
+    # Trees leaning over the water at the lake's north and south ends.
+    ends = (lake > 10) & (lake < 30) & (np.abs(y-ly) > 330) & (marsh(x, y) < .3)
+    for px, py in spots(ends, 7, 90):
+        s.put(rng.choice(['TreeShire02', 'TreeShire03', 'TreeOldForest01']), px, py, layer='LakeTrees', gap=50,
+              lane=50, base=650)
+
+    # The fishing spot by the dock: nets drying, a boat pulled up on the beach, a bench.
+    for template, ox, oy, angle in [('Celduin_FishNet01', -45, 75, math.pi/2), ('Celduin_FishNet03', -25, 105, .4),
+                                    ('Daleprops4', -60, -65, 1.1), ('Celduin_Boat02', 2, -95, -.5),
+                                    ('Bench01', -70, 30, math.pi/2)]:
+        s.put(template, bx+ox, by+oy, angle=angle, layer='LakeBeach', gap=20, lane=20, wet=True, base=650)
+
+    # Ripples lapping along the waterline, as on the stock maps' shores
+    # (WaterRipples: a foam model with a ripple effect), turned along the
+    # shore and floated on the surface; none inside the reed bed.
+    gy, gx = np.gradient(lake, 10)
+    waterline = (lake > -16) & (lake < -5) & (marsh(x, y) < .3) & (t['z'] < WATER-.5)
+    for px, py in spots(waterline, 70, 60):
+        iy_, ix_ = round(py/10)+BORDER, round(px/10)+BORDER
+        along = math.atan2(gx[iy_, ix_], -gy[iy_, ix_])
+        s.put('WaterRipples', px, py, angle=along, layer='LakeRipples', gap=12, lane=0, wet=True, base=650,
+              z=WATER+.3-at('z', px, py))
+
+    # Fish, more ducks in the north bay, and the lapping of the water.
+    for px, py in spots(lake < -80, 6, 120):
+        s.put('Fish', px, py, layer='LakeLife', gap=20, lane=0, wet=True, base=650)
+    nx, ny = LAKE[1][:2]
+    for _ in range(5):
+        s.put('Duck', nx+rng.gauss(0, 50), ny+rng.gauss(0, 40), layer='LakeLife', gap=15, lane=30, wet=True, base=650)
+    for px, py in [(lx, ly), (nx, ny), (mx, my)]:
+        s.put('Amb_WaterLakeLight1', px, py, layer='Sounds', gap=0, lane=0, wet=True, base=0)
 
 
 def hedgerows(s, t, lane_lines):
@@ -1097,7 +1269,8 @@ def build(b):
     lower_houses = lower_house_fronts()
     t['lanes'] = lane_field(t, lane_lines)
     t['paths'] = lane_field(t, footpaths(lane_lines[:2])+[door_path(door, lane) for *_, banks in lower_houses
-                                                          for *_, door, lane in banks])
+                                                          for *_, door, lane in banks]
+                            + [lake_path(t['sd'], lane_lines)])
     t['farm'] = farm_distance(t)
     yard_masks, t['yards'], t['kitchen_gardens'] = yards(t, cottages(lane_lines[:2], lower_houses))
 
@@ -1125,6 +1298,7 @@ def build(b):
     kitchen_gardens(s, t)
     farm(s, t)
     lake_shore(s, t)
+    lake_details(s, t)
     hedgerows(s, t, lane_lines)
     print('Planting woods, rushes and meadows...', flush=True)
     trees = woods(s, t)
