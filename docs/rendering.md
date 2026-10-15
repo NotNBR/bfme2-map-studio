@@ -161,7 +161,10 @@ switches the terrain between the High and Medium techniques, as
   rebuilt, N.L and N.H^1200 x B x 0.9 in the per-vertex frame
   T = (Nz, 0, -Nx), B = (0, Nz, -Ny); colour = vertex x texture + sun x
   (N.L x texture + specular), x2 under overbright, x cloud x macro. Textures
-  without `_nrm` maps get a flat normal. Macro UV: stretched
+  without `_nrm` maps get a flat normal without gloss (B = 0): in game their
+  flat ground shows no sun glare, where B = 255 mirrored the sun over whole
+  fields seen from afar ([Specular Lab](../maps/specular_lab/map.py), High
+  screenshots facing the sun, 15 October 2026). Macro UV: stretched
   `(x + border, -(y + border)) / (samples x 10)`, else `(x, -y) / 660`.
   Cloud UV: world / CloudTextureSize plus Time x CloudOffsetPerSecond.
 - Water: the mesh of `RenderableStandingWaterArea::AllocateAndFillBuffers`
@@ -351,8 +354,10 @@ Open questions, approximated for now:
 - Terrain: the composited tile textures are 16-bit (format 25) or DXT1 in
   game; the renderer samples the source textures at the same texel density
   without that quantization. What the composited normal texture holds for
-  textures without `_nrm` maps, and its channel packing (the High shader reads
-  B as gloss), is not recovered. Fog and the Medium cloud/macro pass follow
+  textures without `_nrm` maps is not recovered from the code; a flat normal
+  without gloss matches the Specular Lab screenshots. On its normal-mapped
+  half the renderer is a little brighter than the game (mean 30 against 27 of
+  255) with stronger sparkles. Fog and the Medium cloud/macro pass follow
   native captures, not the passes' render states (FogEnable false,
   ColorWriteEnable 0 on P1), which the engine evidently overrides; the order
   (cloud and macro, then fog) follows the single-pass shaders. Low's fog is

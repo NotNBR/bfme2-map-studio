@@ -1,0 +1,6 @@
+id = "specular-lab"
+title = "Specular Lab"
+native_name = "map mp specular lab"
+players = 2
+description = "Test map: flat ground facing the sun, half with a terrain normal map and half without, to compare the High terrain glare in the renderer and the game."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

@@ -319,8 +319,11 @@ class MapRenderer:
             albedo.append(image)
             normal = self.assets.image(Path(file).stem+'_nrm') if file else None
             has_normal.append(int(normal is not None))
-            # A flat normal (the High PS rebuilds z from RG and reads B as gloss).
-            normals.append(normal if normal is not None else np.full((4, 4, 4), (128, 128, 255, 255), np.uint8))
+            # A flat normal without gloss (the High PS rebuilds z from RG and
+            # reads B as gloss): in game, flat ground of a texture without a
+            # _nrm map shows no sun glare where B = 255 would mirror the sun
+            # (Specular Lab, High screenshots facing the sun, 15 October 2026).
+            normals.append(normal if normal is not None else np.full((4, 4, 4), (128, 128, 0, 255), np.uint8))
         self._terrain_pixels = (self._texture_pixels(albedo), self._texture_pixels(normals))
         self.report['terrain_normal_maps'] = sum(has_normal)
         from mapworkshop.render.water import depth_tint
