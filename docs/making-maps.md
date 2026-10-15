@@ -129,6 +129,10 @@ Building blocks, in `src/mapworkshop/`:
   with an owner; `ground_rise` finds pieces on uneven ground) and castle sites
   (`castle_site`, a CastleFlag that unpacks the capturing faction's castle;
   `castle_layout` reads one) ([walls and castles](reference/mapping/navigation/walls-and-castles.md)).
+- `mapkit.script_writer`: map scripts from the game's own catalogue of
+  conditions and actions (`Writer(m).operation`, `.script`, `.install`),
+  each checked against its argument signature; for scripted test scenarios
+  ([map scripts](reference/mapping/scripts/README.md)).
 - `mapkit.sites`: outposts, inns, signal fires and shipwrights with the
   capture flag they are taken by (`neutral_site`, `shipwright` on a shore), creep lairs
   (`creep_lair`), skirmish Gollum's spawn points (`gollum_spawns`) and
@@ -301,6 +305,9 @@ it is, and it ends as soon as the tool has what it came for.
   ([native/ingame/ingame.cpp](../src/mapworkshop/native/ingame/ingame.cpp))
   places the camera and copies the frame. Use it for what the renderer does not show, such as the water
   reflections at High. `--show` runs it in a visible window instead.
+  `--at FRAME` (one per `--shot`, rising) holds each shot until the game's
+  logic reaches that frame, about 5 per second of game time, to photograph
+  a scripted scenario as it plays out; `--timeout` gives a long one time.
 
 Direct3D 9 does not render on a desktop that is not shown, so headless runs
 start `local/runtime/game-headless/`: hard links to the runtime's files plus

@@ -8,7 +8,9 @@ desktop, rendering through DXVK (native.runtime). The launcher reveals the
 map, then for each shot
 (name, x, y, height) points the camera at the ground below x, y from that
 height, waits `settle` rendered frames for the view to stream in, and saves
-the frame. The game is ended after the last shot.
+the frame. A shot (name, x, y, height, frame) waits until the game's logic
+reaches that frame first, so a run can photograph a scripted scenario as it
+plays out. The game is ended after the last shot.
 """
 import json
 import struct
@@ -23,7 +25,7 @@ THE_PLAYER_LIST = 0x9FEEE8      # PlayerList*: +0x10 local player; Player +0x54 
 
 
 def capture(project, shots, out, graphics='Medium', settle=30, progress=print, timeout=240, headless=True):
-    """Save each shot (name, x, y, height) of the project's current build as
+    """Save each shot (name, x, y, height[, logic frame]) of the project's current build as
     out/<name>.png; returns a report of the shots and the run. `headless`
     (the default) runs the game unseen, through DXVK (native.runtime); False
     shows its window and uses native Direct3D 9."""
@@ -50,7 +52,9 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             game.arm(GAME_ENGINE_UPDATE, reveal)
             state['step'] = 'move'
         if state['step'] == 'move':
-            name, x, y, height = shots[state['shot']]
+            name, x, y, height, *at = shots[state['shot']]
+            if at and frame < at[0]:
+                return None                       # not yet: the shot waits for its logic frame
             game.write(photo, struct.pack('<I3f', 1, x, y, height))
             state.update(step='settle', since=frames)
         elif state['step'] == 'settle' and frames >= state['since'] + settle:
@@ -58,7 +62,7 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             state['step'] = 'read'
         elif state['step'] == 'read' and not game.u32(cap):
             status, w, h, pitch, pixels = struct.unpack('<5I', game.read(cap + 4, 20))
-            name, x, y, height = shots[state['shot']]
+            name, x, y, height, *_ = shots[state['shot']]
             if status or not pixels or not (0 < w <= 8192 and 0 < h <= 8192):
                 raise RuntimeError(f'The game could not copy its frame for {name} (status {status:#x}, '
                                    f'surface format {game.u32(cap + 28)})')

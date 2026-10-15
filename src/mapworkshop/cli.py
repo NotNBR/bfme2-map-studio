@@ -78,6 +78,9 @@ def parser():
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
     s.add_argument('--shot', nargs=4, action='append', required=True, metavar=('NAME', 'X', 'Y', 'HEIGHT'),
                    help='A view: the camera looks at the ground at X, Y (map units) from HEIGHT (the game camera; 300 is its usual zoom)')
+    s.add_argument('--at', type=int, action='append', metavar='FRAME',
+                   help='With one value per --shot, in order: take that shot once the game reaches this logic frame')
+    s.add_argument('--timeout', type=int, default=240, help='Seconds before the run gives up (240)')
     s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
                    help='Detail level (default Medium)')
     s.add_argument('--out', type=Path, help='Folder for the PNGs (default local/renders/game/<map>)')
@@ -327,9 +330,14 @@ def cmd_capture(args):
         raise LookupError('--shot takes a name and three numbers: NAME X Y HEIGHT') from None
     if len({s[0] for s in shots}) != len(shots):
         raise LookupError('Shot names must be unique')
+    if args.at:
+        if len(args.at) != len(shots) or args.at != sorted(args.at):
+            raise LookupError('--at takes one rising logic frame per --shot')
+        shots = [s+(frame,) for s, frame in zip(shots, args.at)]
     native.ready(progress=say)
     out = args.out or RENDERS/'game'/p.id
-    report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say, headless=not args.show)
+    report = capture(p, shots, out, graphics=args.graphics, settle=args.settle, progress=say, headless=not args.show,
+                     timeout=args.timeout)
     say(f'{len(report["shots"])} screenshot(s) in {out} ({report["seconds"]:.0f} s); capture.json has the details.')
     return 0
 
