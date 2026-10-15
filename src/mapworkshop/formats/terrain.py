@@ -2,8 +2,8 @@
 by one codec each, plus a read-only inspection of the texture records.
 
 Retain raw values alongside source-based names; legacy semantics may differ.
-See docs/reference/mapping/terrain-and-presentation/terrain.md for provenance
-and docs/reference/mapping/file-structure/specification/terrain.md for the layout.
+See docs/game/terrain-textures.md for provenance
+and docs/format/terrain.md for the layout.
 """
 
 import math

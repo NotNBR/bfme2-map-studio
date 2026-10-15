@@ -5,7 +5,7 @@ terrain.fx's Default technique adds sun x N.H^1200 x B x 0.9, B the composited
 normal texture's blue channel. Textures with a `_nrm` map bring their own
 normals and B; for those without one the renderer assumes a flat normal with
 B = 255, so flat ground there mirrors the sun over a wide patch seen from far
-(docs/rendering.md). Which is the game's?
+(docs/game/renderer/terrain.md). Which is the game's?
 
 The map is flat ground at 150, west half (x < 800) GrassShire01 (no _nrm),
 east half GrassOldForest04 (with one). The clear preset's sun stands in the

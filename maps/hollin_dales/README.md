@@ -18,4 +18,4 @@ mw play hollin-dales      install it into the game and start BFME2
 ```
 
 `map.py` builds the map: heights, textures, objects, water and sky. See
-[Making maps](../../docs/making-maps.md).
+[Making maps](../../docs/guide/projects-and-builds.md).

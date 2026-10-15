@@ -11,7 +11,7 @@ shape: put both ends on dry banks, ideally of equal height. Raising the ends
 above the terrain breaks this (units then cross on the riverbed beneath).
 
 Native evidence (bfme-workshop, 13 October 2026; see
-docs/reference/mapping/navigation/roads-and-bridges.md):
+docs/game/roads-and-bridges.md):
 - TEST_EuropeanBridgeWide spans 400 and 700 units cleanly; infantry, cavalry,
   catapults and trolls cross it on the deck as fast as on dry ground.
 - A map.ini Bridge type with the same model works the same way.

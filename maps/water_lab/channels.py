@@ -20,7 +20,7 @@ Eleven channels side by side, west to east, each falling south from its head
   Steep        the Hollin Dales torrent's look at 45%: smaller flat sprites,
                upright soft white water
 
-A particle stream (docs/research/water.md#particle-water): its course is cut
+A particle stream (docs/game/water.md#particle-water): its course is cut
 into equal straight segments; at the top of each, a carrier object turned
 down the segment carries the stream's effects, each emitting along a line
 from the segment's top to its foot, so the water slopes. A carrier is a stock

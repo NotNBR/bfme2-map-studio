@@ -1,6 +1,6 @@
 """Construct a BFME2 CkMp document from typed fields, without a donor map.
 
-GPL-3.0-only. See docs/research/ashen-march.md for format references and verification.
+GPL-3.0-only. See docs/format/ for the layouts and docs/history/ashen-march-findings.md for how it was verified.
 All spatial data is generated here. No .map file is read by this constructor.
 """
 

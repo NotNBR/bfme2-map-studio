@@ -1,6 +1,6 @@
 """Inspect BFME2 map scripts without applying another game's opcode enum.
 
-Source provenance and semantic limits: docs/reference/mapping/scripts/README.md.
+Source provenance and semantic limits: docs/game/scripts.md.
 formats.sections reads and writes the script chunks (PlayerScriptsList); this
 module labels that tree for inspection: each node's size, whether it decoded,
 and why not. It does not apply runtime compatibility migrations.

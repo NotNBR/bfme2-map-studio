@@ -51,4 +51,4 @@ mw play brightwater-fold      install it into the game and start BFME2
   other start and both outposts, and refuses an unfair result or an outpost
   that is not clearly its player's.
 
-`map.py` builds the map. See [Making maps](../../docs/making-maps.md).
+`map.py` builds the map. See [Making maps](../../docs/guide/projects-and-builds.md).

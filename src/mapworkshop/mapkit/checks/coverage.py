@@ -16,7 +16,7 @@ from mapworkshop.mapkit.checks.analyze import RECORD_SECTIONS, blend_details, ne
 def section(m, c):
     name=m.names[c.name_id]
     result=dict(name=name,version=c.version,bytes=len(c.data),layout='opaque',
-                semantics='See docs/reference/mapping/file-structure/reference.md; parsing alone is not semantic verification')
+                semantics='See docs/format/coverage.md; parsing alone is not semantic verification')
     try:
         if name in RECORD_SECTIONS:
             value=records(m,name)

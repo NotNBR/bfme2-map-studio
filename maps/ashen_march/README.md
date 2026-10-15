@@ -8,5 +8,5 @@ mw view ashen-march      look at it in the viewer
 mw play ashen-march      install it into the game and start BFME2
 ```
 
-See the [design and build notes](../../docs/research/ashen-march.md) and
-[native format findings](../../docs/reference/mapping/file-structure/ashen-march-findings.md).
+See the [design and build notes](../../docs/history/ashen-march.md) and
+[native format findings](../../docs/history/ashen-march-findings.md).

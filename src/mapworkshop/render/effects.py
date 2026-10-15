@@ -1,6 +1,6 @@
 """Particle effects on map objects: W3D emitters and FXParticleSystems.
 
-Objects get effects two ways (docs/rendering.md, "Particle effects"):
+Objects get effects two ways (docs/game/renderer/effects.md):
 
 - W3D emitters: the model's HLOD aggregate array names emitter files
   (GBTORCH's E_Fire_SM, E_Smoke_SM, E_FireSparks_SM), each on a bone.

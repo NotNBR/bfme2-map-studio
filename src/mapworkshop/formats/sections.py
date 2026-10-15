@@ -5,7 +5,7 @@ payload (`decode`) and writes one (`encode`), so the two directions cannot
 drift apart: `encode(name, version, decode(name, version, data, m), m) == data`
 for every stock map, base and library (see tests/test_sections.py and
 `mw test --corpus`). Field meanings and evidence are in
-docs/reference/mapping/file-structure/specification/.
+docs/format/.
 
     areas = read(m, 'StandingWaterAreas')        # a list of dicts
     areas[0]['water_height'] = 140

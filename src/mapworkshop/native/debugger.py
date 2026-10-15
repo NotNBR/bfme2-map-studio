@@ -2,7 +2,7 @@
 owner's profile, and serve breakpoints in it.
 
 Ported from openbfme2's tools/game_smoke.py and boot_smoke.py (GPL-3.0; see
-docs/reference/licenses/THIRD_PARTY.md), trimmed to what starting a skirmish
+docs/licenses/THIRD_PARTY.md), trimmed to what starting a skirmish
 needs. Retail's launcher lotrbfme2.exe hands game.dat its start-up token, so
 the launcher is started and the debugger follows it into game.dat. At each
 process's WOW64 loader breakpoint (imports bound, no game code run yet):

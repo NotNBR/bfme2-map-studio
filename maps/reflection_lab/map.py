@@ -3,7 +3,7 @@
 A still lake fills the middle of the map, 1400 x 700 (x 500..1900, y 500..1200),
 with ReflectionOn = Yes and the reflection plane at the water's height. At
 WaterLOD High the lake's model (wtr_Riv03, BumpSpecular) takes 80% of its
-colour from the reflection texture (docs/rendering.md).
+colour from the reflection texture (docs/game/renderer/water.md).
 
 What there is to reflect, all seen across the water by the game's camera,
 which looks north:
@@ -28,7 +28,7 @@ these points from 300 (cameraMaxHeight; higher is clamped to it):
 
 Game screenshots (High, 15 October 2026): the sky dome, the trees, Erebortower
 and the rock reflect; the other towers, the hill and the bushes do not. The
-renderer's reflection pass draws the same (docs/rendering.md).
+renderer's reflection pass draws the same (docs/game/renderer/water.md).
 """
 import numpy as np
 

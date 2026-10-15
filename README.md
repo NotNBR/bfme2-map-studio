@@ -62,13 +62,14 @@ mw play misty-vale      # Test it in-game
 ```
 
 You can also run `.\local\venv\Scripts\mw.exe` directly without activating the
-environment. More in [Getting started](docs/getting-started.md).
+environment. More in [Getting started](docs/guide/getting-started.md).
 
 ## The maps
 
 | Map | Players | |
 |---|---|---|
 | [The Greywater Marches](maps/greywater_marches/README.md) | 6 | Rocky grasslands, mountain passes and branching rivers |
+| [The Hollin Dales](maps/hollin_dales/README.md) | 6 | Autumn Eregion: a dale for each player, the Sirannon through the ruins of Ost-in-Edhil |
 | [Eight Kingdoms](maps/eight_kingdoms/README.md) | 8 | Eight realms around a ruined citadel, 24 stone bridges |
 | [The Crown of Cardolan](maps/crown_of_cardolan/README.md) | 8 | A fallen Arnorian hill-city, barrows and old woodland |
 | [The Ashen March](maps/ashen_march/README.md) | 2 | A ruined Gondorian watch on the edge of Mordor |
@@ -76,13 +77,19 @@ environment. More in [Getting started](docs/getting-started.md).
 | [Bramble Hollow](maps/bramble_hollow/README.md) | 2 | A Shire valley with a millpond hamlet, wooden footbridges and a creek gorge |
 | [Brightwater Fold](maps/brightwater_fold/README.md) | 2 | A Rohan dale: a river parting round an island hold, creeks, fords and horse paddocks |
 
+[maps/](maps/README.md) also holds a battle scene and the labs, small maps that
+each test one thing in the game.
+
 ## Documentation
 
-- [Making maps](docs/making-maps.md): projects, builds and the toolkit
+- [Getting started](docs/guide/getting-started.md), then [projects and builds](docs/guide/projects-and-builds.md)
+  and [the toolkit](docs/guide/toolkit.md)
+- [Designing maps](docs/guide/designing-maps.md): from composition to detail
 - [The viewer](docs/viewer.md): navigation, live reload, marks for agents
-- [Rendering](docs/rendering.md): headless renders and what is reproduced of the game
-- [Map workflow](docs/map-workflow.md): designing a map from composition to detail
-- [Mapping reference](docs/reference/mapping/README.md): the native map format
+- [How BFME2 behaves](docs/game/README.md): water, navigation, bridges, scripts and the rest, measured in the game
+- [The map-file format](docs/format/README.md)
+
+[docs/](docs/README.md) indexes every page.
 
 Agents start with [AGENTS.md](AGENTS.md).
 
@@ -92,7 +99,7 @@ Agents start with [AGENTS.md](AGENTS.md).
 |---|---|
 | `maps/` | the map projects |
 | `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `video`, `native` (the game runtime: test games, the pathfinding grid, screenshots) and the `mw` command |
-| `docs/` | guides, reference and research |
+| `docs/` | `guide/` (using the workshop), `game/` (how BFME2 behaves), `format/` (the map file), `history/` (earlier work) |
 | `misc/` | things made with the workshop, such as the viewer trailer |
 | `local/` | ignored: the environment, the game data, builds, marks and renders |
 
@@ -101,6 +108,6 @@ Agents start with [AGENTS.md](AGENTS.md).
 ## License
 
 Code is GPL-3.0-only; see [LICENSE.txt](LICENSE.txt) and the
-[third-party notices](docs/reference/licenses/README.md). The game and its assets
+[third-party notices](docs/licenses/README.md). The game and its assets
 are not included: you supply your own copy of BFME2, and Map Studio only reads
 it. This project is not affiliated with or endorsed by EA or its licensors.

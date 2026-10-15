@@ -78,7 +78,7 @@ PALETTE = ['GrassRohan04', 'GrassRohan01', 'GrassRohan14', 'GrassRohan21', 'Gras
 # --- Crossings -----------------------------------------------------------
 # A gravel ford on each arm where the island road crosses it, and a wooden
 # bridge where each of the north and south roads crosses the river.
-FORD_DEPTH = 2.5               # units wade through water up to 5 deep (docs/reference/mapping/navigation)
+FORD_DEPTH = 2.5               # units wade through water up to 5 deep (docs/game/navigation.md)
 BRIDGE = 'GenericTreeBridge'   # deck along its local y
 # Its model (nbtreebrdge.w3d) reaches 139 each way along the deck, and the
 # ramp ends sit 31.5 above the object's base: the base belongs in the bed.

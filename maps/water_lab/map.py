@@ -2,7 +2,7 @@
 
 Water in BFME2 is flat: a standing water area has one height, and a river
 strip too. The lab's three bands, south to north, show the ways water can
-still run downhill, and what does not work (docs/research/water.md):
+still run downhill, and what does not work (docs/game/water.md):
 
   falls.py     y 0..2700     waterfalls off cliffs into a pool, and a river
                              stepping down terraces and a cascade of weirs

@@ -29,4 +29,4 @@ mw play bramble-hollow      install it into the game and start BFME2
   distances and refuses an unfair result.
 
 `map.py` builds the map: heights, textures, objects, water and sky. See
-[Making maps](../../docs/making-maps.md).
+[Making maps](../../docs/guide/projects-and-builds.md).

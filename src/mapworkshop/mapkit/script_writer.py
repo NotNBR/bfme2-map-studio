@@ -1,7 +1,7 @@
 """Author original modern BFME2 scripts using explicit typed arguments.
 
 Ported from bfme-workshop's mapkit.script_writer (same author). Catalogue
-signatures (mapkit/data/bfme2-1.06-scripts.json, docs/reference/mapping/scripts)
+signatures (mapkit/data/bfme2-1.06-scripts.json, docs/game/scripts.md)
 validate storage shape, not gameplay semantics. No runtime enum is inferred
 from an argument's Python value. Unknown signatures are refused.
 

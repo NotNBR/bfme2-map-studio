@@ -7,7 +7,7 @@ mw view [MAP] [--lod medium] [--weather rain] [--sun ember] [--fps 60]
 `mw` alone opens the map you worked on last, and so does double-clicking
 `Map Workshop.cmd`. `MAP` is a project id or any unique start of it
 (`grey`), a stock map ("fords of isen") or a `.map` file. The window uses the
-[renderer](rendering.md), so maps look as they do in the game at the chosen
+[renderer](guide/rendering.md), so maps look as they do in the game at the chosen
 detail level.
 
 ## Moving around
@@ -58,7 +58,7 @@ aid, not proof that a particular unit can follow a route.
 `mw walkable <map> --compare` compares against an existing native capture
 without launching anything. For explicit verification, `--native` reads and
 reports the game's grid from a short skirmish (about 7 seconds, on the game
-runtime described under [testing in-game](making-maps.md#testing-in-game)).
+runtime described under [testing in-game](guide/testing-in-game.md)).
 Native captures are tied to the map file's hash; a changed build needs a new
 capture. The default CLI and viewer always use the local calculation.
 
@@ -74,7 +74,7 @@ capture. The default CLI and viewer always use the local calculation.
   water reflections; fog, clouds, snow and lightning. Each field shows the
   map's value, or in grey the game's default where `map.ini` leaves it out.
   For a project, **Save and build** writes the changed fields into `map.toml`
-  as [properties](making-maps.md#map-properties) and rebuilds; a field set
+  as [properties](guide/projects-and-builds.md#map-properties) and rebuilds; a field set
   there is marked `map.toml` and has a **Reset** button that hands it back to
   `map.py`. One of the game's maps, or a loose `.map` file, is shown read-only.
 - **Build** rebuilds the current project in the background, also while the
@@ -86,10 +86,10 @@ capture. The default CLI and viewer always use the local calculation.
   long it took, or that it failed.
 - **Test In-Game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
-  ([making maps](making-maps.md#testing-in-game)). The status bar says when
+  ([testing in-game](guide/testing-in-game.md)). The status bar says when
   the skirmish is playable and when the game has closed. Its camera zooms out
   to the whole map and tilts with the middle button
-  ([camera](making-maps.md#camera)). When the game is
+  ([camera](guide/testing-in-game.md#camera)). When the game is
   not BFME2 1.06, or for one of the game's own maps, it starts the normal
   game at its menu.
 - **Preview** shows the map another way without changing it. Its button shows

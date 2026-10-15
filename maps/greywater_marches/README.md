@@ -10,10 +10,6 @@ mw play greywater-marches      install it into the game and start BFME2
 
 `map.py` builds the terrain, textures, water, sky and lighting; `scenery.py` places the objects. See [the viewer](../../docs/viewer.md) for previews and marks.
 
-> The native checks, launch presets and captures recorded below were made with
-> [bfme-workshop](https://github.com/NotNBR/bfme-workshop), whose `workshop.py play` presets and launchers are not
-> part of this repository.
-
 ## Layout and fairness
 
 Distances below are walking distances over the passable ground and bridge decks (see [mapkit.strategy](../../src/mapworkshop/mapkit/checks/strategy.py)).
@@ -56,10 +52,10 @@ Weather presets ([mapkit.weather](../../src/mapworkshop/mapkit/weather.py)): `cl
 
 ## Checks
 
-Each build verifies that all six starts, the outposts, lairs and bridges share one connected walkable area (a conservative terrain-plus-footprint grid, separate from native movement tests), that the construction areas are flat, and that placed templates exist in the installed INIs. It also fails if the nearest-opponent distances differ by more than 400 or an own outpost is less than 1,000 safer for its owner; the figures are recorded under `strategy` in `build.json`. For a territory map and per-site detail, run `python -m mapkit.strategy --map <map> --out DIR --teams 1,2,3/4,5,6` (with `src` on the path). It writes `validation/build.json`, `detail-placement.json`, a heightmap comparison, a layout preview and `tour.json`.
+Each build verifies that all six starts, the outposts, lairs and bridges share one connected walkable area (a conservative terrain-plus-footprint grid, separate from native movement tests), that the construction areas are flat, and that placed templates exist in the installed INIs. It also fails if the nearest-opponent distances differ by more than 400 or an own outpost is less than 1,000 safer for its owner; the figures are recorded under `strategy` in `build.json`. For a territory map and per-site detail, run `python -m mapworkshop.mapkit.checks.strategy --map <map> --out DIR --teams 1,2,3/4,5,6`; it writes `strategy.json` and `strategy.png`.
 
 Not all vegetation is drawn in game. BFME2 keeps the first 1,200 trees and 2,000 shrubs in map order and drops the rest; this map places about 5,200 trees and 3,200 shrubs, so the woodland groves placed first appear in game while later pine belts, tor trees and copses do not. Headless previews show the full set.
 
-[mapkit.vegetation](../../src/mapworkshop/mapkit/vegetation.py) can move the overflow to map-local `GW_` templates in `map.ini` that draw the same models through `W3DModelDraw` (`VEGETATION_OVERFLOW` in build.py). It is off: with it, the game crashed while loading the map (logic frame 0, an empty "Game crash" dialog, no crash report). Probably the cause: the game hangs loading a map whose map.ini adds new object types, while changing its own objects works ([what a map.ini may define](../../docs/research/water.md#what-a-mapini-may-define)); the build now lists such blocks.
+[mapkit.vegetation](../../src/mapworkshop/mapkit/vegetation.py) can move the overflow to map-local `GW_` templates in `map.ini` that draw the same models through `W3DModelDraw` (`VEGETATION_OVERFLOW` in map.py). It is off: with it, the game crashed while loading the map (logic frame 0, an empty "Game crash" dialog, no crash report). Probably the cause: the game hangs loading a map whose map.ini adds new object types, while changing its own objects works ([what a map.ini may define](../../docs/game/water.md#what-a-mapini-may-define)); the build now lists such blocks.
 
-Authoring follows [the mapping workflow](../../docs/map-workflow.md), [heightmap conventions](../../docs/reference/mapping/terrain-and-presentation/heightmaps.md), [terrain records](../../docs/reference/mapping/terrain-and-presentation/terrain.md) and [native bridge evidence](../../docs/reference/mapping/navigation/roads-and-bridges.md). Reference images are copied without alteration.
+Authoring follows [designing maps](../../docs/guide/designing-maps.md), [heightmap conventions](../eight_kingdoms/heightmap.md), [terrain records](../../docs/game/terrain-textures.md) and [native bridge evidence](../../docs/game/roads-and-bridges.md). Reference images are copied without alteration.

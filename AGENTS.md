@@ -1,7 +1,7 @@
 # Agent guide
 
-Read this before working in the repository. The [README](README.md) has the
-layout; [docs/README.md](docs/README.md) indexes the rest.
+Read this before working in the repository. It routes each task to the page
+that covers it; [docs/README.md](docs/README.md) indexes them all.
 
 ## Basics
 
@@ -12,10 +12,29 @@ layout; [docs/README.md](docs/README.md) indexes the rest.
 - If `mw doctor` reports problems, `mw setup` fixes most of them.
 - Don't search `local/` or `.claude/` for source code: they hold build output and
   copies of the repository.
-- `mw test` runs the tests and checks (Python syntax, import layers, doc links).
-  Run it after changing code; after changing `src/mapworkshop/formats/`, run
-  `mw test --corpus`, which also reads and rewrites every stock map.
+- `mw test` runs the tests and checks (Python syntax, import layers, doc links
+  and indexes). Run it after changing code or docs; after changing
+  `src/mapworkshop/formats/`, run `mw test --corpus`, which also reads and
+  rewrites every stock map.
 - Commit or push only when the user asks.
+
+## Where to look
+
+| Task | Read |
+|---|---|
+| Change a map | its project in `maps/<folder>/` ([maps/README.md](maps/README.md)); its README or `map.py` docstring describes it |
+| Start a map, the build, `mw diff`, where output goes | [projects and builds](docs/guide/projects-and-builds.md) |
+| Which module to use in a `map.py` | [the toolkit](docs/guide/toolkit.md), then that module's docstring |
+| Find, look at and turn objects; textures, roads, sounds, effects | [finding assets](docs/guide/finding-assets.md) |
+| Design or rework a map's landscape | [designing maps](docs/guide/designing-maps.md) |
+| Water, fords, rivers, bridges, walls, sites, scripts: what the game does | [how BFME2 behaves](docs/game/README.md) |
+| A render disagrees with the game; changing the renderer | [how the game draws a map](docs/game/renderer/README.md) |
+| Render a view; check in the game | [rendering](docs/guide/rendering.md), [testing in the game](docs/guide/testing-in-game.md) |
+| The bytes of a `.map` | [the format](docs/format/README.md) |
+
+Pages in [docs/history/](docs/history/README.md) record earlier work, most of it
+in bfme-workshop, the repository this one grew out of; their commands do not
+exist here. Use them for evidence, not instructions.
 
 ## Acting on marks in the viewer
 
@@ -43,25 +62,18 @@ viewer's **Copy for agent** button copies.
      the build.
    - Write each mark's coordinates into the code. Mark files live in the ignored
      `local/marks/` and don't travel with the repository.
-   - Use names the game knows. `mw find` searches them: `mw find stone bridge`,
-     `mw find --type tree --region shire`, `mw find --textures mordor --type cliff`,
-     `--roads`, `--sounds`, `--effects`. Each result shows its group, type,
-     region, footprint, material and use in the stock maps; a `!` marks
-     obsolete, cinematic, game-spawned and faction gameplay templates.
-     `mw item <template> --info` prints what the game says about one: its INI
-     file and line, KindOf, footprint, effects, stock maps
-     ([finding objects](docs/making-maps.md#finding-objects-textures-and-effects)).
-   - To choose between objects, look at them: `mw find ... --render`, or
-     `mw items "*bridge*"` (or names, or `--from-map <map> --layer <layer>`),
-     renders a labelled collage with each one's size in map units, and its JSON
-     lists the sizes; `mw item <template>` renders one from any angle
-     ([rendering](docs/rendering.md)).
-   - Before setting a building's angle, find its front by looking: models don't
-     agree on which side that is, and many have doors on more than one side.
-     `mw items <template> --views 0/40,90/40,180/40,270/40` shows its local
-     -y, -x, +y and +x sides. Map angles are radians, counter-clockwise; at
-     angle 0 a model's local +y points north. Write in the code which side
-     you chose as its front.
+   - Use names the game knows: `mw find` searches them by what they are
+     (`mw find stone bridge`, `mw find --type tree --region shire`,
+     `mw find --textures mordor --type cliff`), and `mw item <template> --info`
+     prints what the game says about one. A `!` marks obsolete, cinematic,
+     game-spawned and faction gameplay templates
+     ([finding assets](docs/guide/finding-assets.md)).
+   - To choose between objects, look at them: `mw find ... --render` or
+     `mw items "*bridge*"` renders a labelled collage with each one's size.
+   - Before setting a building's angle, find its front by looking
+     (`mw items <template> --views 0/40,90/40,180/40,270/40`), and write in the
+     code which side you chose as its front
+     ([turning a building](docs/guide/finding-assets.md#turning-a-building-to-face-the-right-way)).
 3. **Build:** `mw build <map>`. A failed build leaves the previous one in place;
    an open viewer reloads a successful one by itself. The build ends with what
    it changed since the previous build; `mw diff <map>` shows it again.
@@ -74,12 +86,23 @@ viewer's **Copy for agent** button copies.
    areas cut off from every start; add `--walkable` to a render to see it.
    After changing rivers, add `--flow` to a render to see which way each strip
    flows and where strips join.
-   `--compare` checks against an existing native capture without starting the
-   game. Use `--native` only for an explicit game verification (about 7 s).
-   `mw capture <map> --shot NAME X Y HEIGHT [--graphics High]` saves screenshots
-   rendered by the game itself (about 10 s; it runs headless, unseen). Like
-   `--native`, use it only when the user wants the game's own view, for example
-   to check something the renderer cannot show (water reflections at High).
+   `mw walkable <map> --compare` checks against an existing native capture
+   without starting the game. Use `mw walkable --native` only for an explicit
+   game verification (about 7 s). `mw capture <map> --shot NAME X Y HEIGHT
+   [--graphics High]` saves screenshots rendered by the game itself (about
+   10 s; it runs headless, unseen). Like `--native`, use it only when the user
+   wants the game's own view, for example to check something the renderer
+   cannot show (water reflections at High).
 
-[Making maps](docs/making-maps.md) documents projects, the build and the
-toolkit; [the viewer](docs/viewer.md) documents marks.
+## Keeping the docs in order
+
+The docs are read by agents first; keep each fact in one place, in the page
+of its kind:
+
+- A new or changed command or option: its guide in `docs/guide/`. A new
+  `mapkit` module: a docstring, and a line in [the toolkit](docs/guide/toolkit.md).
+- Something measured about the game: its page in `docs/game/`, saying how it
+  was measured. A new lab: `maps/README.md` and its `map.py` docstring.
+- Run logs, map hashes, dated revisions: `docs/history/`, with a one-line
+  pointer from the page the finding is on.
+- Change a page in place; don't append notes to the end of a guide.

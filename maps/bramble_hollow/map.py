@@ -36,7 +36,7 @@ C = SPAN/2                     # map centre and centre of symmetry, also the pon
 WATER = 150.0                  # one water plane; only the brook and pond lie below it
 GROUND = 166.0                 # valley floor
 BASE = 168.0                   # level of both construction areas
-FORD_DEPTH = 2.5               # units wade through water up to 5 deep (docs/reference/mapping/navigation)
+FORD_DEPTH = 2.5               # units wade through water up to 5 deep (docs/game/navigation.md)
 STARTS = [(1000, 1000), (SPAN-1000, SPAN-1000)]
 BASE_FLAT, BASE_BLEND = 420, 820
 

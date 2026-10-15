@@ -617,7 +617,7 @@ def check_ini(assets, ini):
     """Lines naming what a map's map.ini defines that the game will not take:
     an `Object` block adding an object type the game doesn't define (BFME2
     hangs loading a map whose map.ini does; changing the game's own objects
-    works, docs/research/water.md), and a particle system whose texture the
+    works, docs/game/water.md), and a particle system whose texture the
     game doesn't have. `assets` are the game's, without the map's templates."""
     known = _object_names(assets)
     out = [f'Object {name}: adds an object type; BFME2 hangs loading a map whose map.ini does '
