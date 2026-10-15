@@ -1,0 +1,6 @@
+id = "water-lab"
+title = "Water Lab"
+native_name = "map mp water lab"
+players = 2
+description = "Test map: what water can do. Waterfalls, a river stepping down terraces and weirs, a river of pools and rapids, and channels down a slope with a river strip, roads and particle streams."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

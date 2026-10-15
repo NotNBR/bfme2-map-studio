@@ -54,6 +54,10 @@ Open-BFME-2) and the game's `RiverWater.fx` (`shaders/compiled/riverwater.fxo`):
   area first and the rivers over it, with nothing masked under a river.
 - A river whose minimum LOD is above the detail level's WaterLOD is not drawn.
 
+A strip is drawn flat at its height even over a sloping channel (Water Lab's
+[channels](../../../../maps/water_lab/channels.py), in game): a river runs downhill only in flat steps or as particle water, see
+[water that runs downhill](../../../research/water.md).
+
 Not confirmed: which stored end of a cross-section the game puts first (it
 mirrors the river texture across), and whether `Opacity` reaches the shader's
 w component. Whether a river strip alone (without standing water) affects

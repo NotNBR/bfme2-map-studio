@@ -24,6 +24,8 @@
 
 - [The Ashen March](research/ashen-march.md): the first map built from an empty
   native document
+- [Water that runs downhill](research/water.md): waterfalls, stepped rivers,
+  particle water, and what a map's `map.ini` may define
 
 Reference and research pages record measured behavior and what remains
 uncertain. Much of it was measured in the game with

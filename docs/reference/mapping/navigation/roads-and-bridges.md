@@ -68,6 +68,14 @@ This separate visual run used the strategic extension for camera/reveal control;
 it does not change the extension-free movement evidence or establish modifier
 semantics. Images and raw reports remain local, ignored outputs.
 
+A later check disagrees (October 2026, this repository's runtime, Medium):
+in headless captures (through DXVK) of Water Lab's
+[channels](../../../../maps/water_lab/channels.py) no road drew, neither a
+map-local `Road` type nor the stock `WagonTraveled` (chains of 100-long
+segments written as the stock maps write theirs, over plain grass), and Fords
+of Isen II looked the same with all its road objects removed. Why the two disagree is not known
+([water that runs downhill](../../../research/water.md#water-is-flat)).
+
 ## Walkable object bridges
 
 The original bridge lab uses `GondorIthilienBridge2`, also used by Eight Kingdoms.
