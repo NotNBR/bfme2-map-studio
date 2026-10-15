@@ -145,8 +145,8 @@ def say(text=''):
 # Commands ----------------------------------------------------------------------
 def cmd_setup(args):
     from mapworkshop import game
-    from mapworkshop.config import ROOT, GAME_LABEL, PROFILE
-    if PROFILE == 'bfme2' and (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
+    from mapworkshop.config import ROOT, GAME_LABEL
+    if (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
         import subprocess
         say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
         subprocess.run(['git', 'submodule', 'update', '--init'], cwd=ROOT, check=False)
@@ -196,11 +196,10 @@ def cmd_doctor(args):
         check(supported, 'Verified ROTWK engine for direct in-game tests',
               'Asset editing works independently; direct tests need the verified engine documented in docs/game/runtime.md.',
               required=False)
-    else:
-        from mapworkshop.config import ROOT
-        check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
-              'bfme2-map-quickload submodule (faster map loading in test games)',
-              'Run `git submodule update --init` (or `mw setup`).', required=False)
+    from mapworkshop.config import ROOT
+    check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
+          'bfme2-map-quickload submodule (faster map loading in test games)',
+          'Run `git submodule update --init` (or `mw setup`).', required=False)
     try:
         import moderngl
         ctx = moderngl.create_standalone_context(require=430)

@@ -33,8 +33,17 @@ verified by a live skirmish, not inferred solely from BFME2.
 Readiness requires skirmish mode 2 and advancing logic frames through the
 GameLogic pointer at `0x9E412C`. `mw play --check` closes after ten frames;
 interactive play reports ready after two. The close handler uses RVA `0x18EB`.
-The BFME2 loading/camera DLLs are not injected. ROTWK currently keeps its own
-camera and fog, and native screenshot/pathfinding capture is rejected.
+The shared quickload DLL recognizes ROTWK's separate terrain call sites and
+runs their D3DX compression/mipmaps on workers. The launcher flushes those
+jobs at RVA `0x225524` when GameLogic destroys its loading screen, after
+textures have been queued and before the map draws. Reports include the
+DLL's job counters. `start(..., fast=False)` disables the fix for comparisons.
+The isolated menu uses the standalone build, which handles subsequent loads
+itself; `mw patch install` can install that build into the configured ROTWK
+folder too. Both installers require the verified engine hash.
+
+ROTWK keeps its own camera and fog: BFME2's camera DLL is not injected, and
+native screenshot/pathfinding capture is rejected.
 
 [Validation record](../history/rotwk-integration.md) records the asset and
 gameplay checks. The rest of this page describes the BFME2 runtime.

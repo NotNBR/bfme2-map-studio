@@ -55,6 +55,8 @@ or playing it. Both profiles' stock maps appear in their viewer's Map menu.
 `mw play` and **Test In-Game** start a ROTWK skirmish directly on the build,
 you against an easy AI, in an isolated runtime with clean 2.01 assets. This
 requires the verified executable described in [the runtime](../game/runtime.md#rotwk-201).
+The shared quickload DLL accelerates its terrain textures automatically.
+`mw patch install` also applies it to your configured ROTWK installation.
 `mw play MAP --check` runs a short hidden gameplay test and closes it afterward.
 ROTWK uses its normal camera and fog; the studio's free-camera hooks, fog reveal,
 native screenshots and native pathfinding capture remain BFME2 1.06 features.

@@ -13,7 +13,9 @@ assets plus retail ROTWK and official 2.01 patches, excluding community mods.
 It needs the [verified ROTWK executable](../game/runtime.md#rotwk-201); other
 hashes are rejected before hooks run. ROTWK keeps its normal camera and fog;
 the free camera, automatic fog reveal (`--fog` controls BFME2 only),
-`mw capture`, `mw walkable --native`, and `mw patch` remain BFME2 1.06 features.
+`mw capture` and `mw walkable --native` remain BFME2 1.06 features. The shared
+loading fix accelerates ROTWK test games automatically; `mw patch install`
+also supports the verified ROTWK engine in your configured game folder.
 
 `mw play MAP --check` works in either profile: it runs a hidden skirmish until
 ten logic frames have elapsed, closes the test, and saves `check-MAP.json` in
@@ -113,7 +115,7 @@ High, and when a check needs the game's own view.
 
 Test games load maps in a few seconds instead of tens of seconds (Brightwater
 Fold 4.5 s instead of 17 s, the Greywater Marches 9.2 s instead of 49 s).
-`mw patch install` puts the same faster loading into your BFME2 folder, for
+`mw patch install` puts the same faster loading into the selected game's folder, for
 every map and every game you start there, skirmish or multiplayer:
 
 ```
@@ -122,8 +124,10 @@ mw patch install    # copy dinput8.dll into the game folder
 mw patch remove     # take it out again
 ```
 
-- It works only with BFME2 1.06 (`install` checks `game.dat`); in any other
-  version, or any other program that loads it, it only forwards DirectInput.
+- It supports BFME2 1.06 and the verified ROTWK 2.01 engine (`install` checks
+  `game.dat` by hash). Use `mw --profile rotwk patch install` for ROTWK or
+  `mw --profile bfme2 patch install` for BFME2. The DLL only forwards DirectInput
+  when it does not recognize the engine's code layout.
 - It changes how fast textures are built, not what the game simulates, so it
   should not affect multiplayer; that is untested.
 - `install` never replaces a `dinput8.dll` that is not this patch (another

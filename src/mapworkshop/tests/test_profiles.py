@@ -115,11 +115,14 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(expansion['GAME_EXE'], 'lotrbfme2ep1.exe')
 
     def test_cli_selects_profile_before_command_import(self):
+        script = ('from mapworkshop import cli; '
+                  'cli.cmd_config = lambda args: print(__import__("mapworkshop.config", fromlist=["PROFILE"]).PROFILE); '
+                  'cli.main(["--profile", "rotwk", "config"])')
         output = subprocess.run(
-            [sys.executable, '-m', 'mapworkshop.cli', '--profile', 'rotwk', 'patch'],
+            [sys.executable, '-c', script],
             env=dict(os.environ, MW_GAME_PROFILE='bfme2'), text=True, capture_output=True)
-        self.assertEqual(output.returncode, 1)
-        self.assertIn('supports BFME2 1.06 only', output.stdout)
+        self.assertEqual(output.returncode, 0)
+        self.assertEqual(output.stdout.strip(), 'rotwk')
 
     def test_native_runtime_rejects_unknown_rotwk_before_copying(self):
         from mapworkshop.native import rotwk

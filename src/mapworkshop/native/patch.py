@@ -1,22 +1,23 @@
 """Faster map loading in the normal game: mw patch install / remove / status.
 
-Installs native/loading/bin/dinput8.dll into the BFME2 folder: the player
+Installs native/loading/bin/dinput8.dll into the selected game's folder: the player
 build of bfme2-map-quickload (the native/loading submodule,
 https://github.com/NotNBR/bfme2-map-quickload; loading.cpp built with
-MW_STANDALONE). The game imports DirectInput8Create from dinput8.dll
-and finds this copy before the system's, which it forwards to; in game.dat
-1.06 the DLL also builds the terrain textures on worker threads while a map
-loads, and skips the five-second title logo after loading. Removing it puts
+MW_STANDALONE). The game imports DirectInput8Create from dinput8.dll and finds
+this copy before the system's, which it forwards to. In BFME2 1.06 or the
+verified ROTWK 2.01 engine, the DLL builds terrain textures on worker threads
+while a map loads and skips the five-second title logo afterward. Removing it puts
 the folder back as it was. A dinput8.dll that is not ours is never replaced
 or removed.
 """
 import hashlib
 from pathlib import Path
 
-from mapworkshop.config import PROFILE, game_dir
+from mapworkshop.config import game_dir
 from mapworkshop.native import msvc
 from mapworkshop.native.pe import PE
 from mapworkshop.native.runtime import SUPPORTED_SHA256
+from mapworkshop.native.rotwk import SUPPORTED_SHA256 as SUPPORTED_ROTWK_SHA256
 
 NAME = 'dinput8.dll'
 
@@ -30,11 +31,9 @@ def is_ours(path):
 
 
 def folder(game=None):
-    if game is None and PROFILE == 'rotwk':
-        raise RuntimeError('The studio loading patch supports BFME2 1.06 only; use the bfme2 profile')
     game = Path(game or game_dir() or '')
     if not (game/'game.dat').is_file():
-        raise RuntimeError('BFME2 not found: run `mw setup`')
+        raise RuntimeError('Game not found: run `mw setup` for the selected profile')
     return game
 
 
@@ -54,8 +53,8 @@ def install(game=None):
     if not msvc.dll('dinput8').exists():
         raise RuntimeError('The bfme2-map-quickload submodule is missing: run `git submodule update --init`, '
                            'or get dinput8.dll from github.com/NotNBR/bfme2-map-quickload/releases')
-    if hashlib.sha256((game/'game.dat').read_bytes()).hexdigest() != SUPPORTED_SHA256:
-        raise RuntimeError(f'{game/"game.dat"} is not BFME2 1.06: the patch works only with that version')
+    if hashlib.sha256((game/'game.dat').read_bytes()).hexdigest() not in (SUPPORTED_SHA256, SUPPORTED_ROTWK_SHA256):
+        raise RuntimeError(f'{game/"game.dat"} is not a verified BFME2 1.06 or ROTWK 2.01 engine')
     if status(game) == 'foreign':
         raise RuntimeError(f'{game/NAME} belongs to another program; remove it first if you want this patch')
     try:

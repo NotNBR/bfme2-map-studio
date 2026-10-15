@@ -26,6 +26,7 @@ FILE_SLOTS_SET = 0x23CB7B
 GAME_INFO, SKIRMISH_INFO = 0x9E892C, 0x9E8930
 GAME_LOGIC, ENGINE_UPDATE, LOAD_LIBRARY_SLOT = 0x9E412C, 0x2325A0, 0x7D0188
 CLOSE_ARM = 0x18EB
+LOAD_SCREEN_DESTROY = 0x225524   # GameLogic deletes LoadScreen (+0x120), before the map draws
 
 
 def runtime_files(source, base):
@@ -126,7 +127,7 @@ def skirmish_setup(game, tid, ctx):
 
 
 def configure(game, skirmish=True):
-    """Use ROTWK addresses only; never inject BFME2-specific DLLs."""
+    """Use ROTWK addresses only; camera/capture DLLs remain BFME2-specific."""
     # This hash-pinned engine supports direct invocation, as the local runtime
     # harness established. Its retail launcher stalls before GameEngine::init.
     game.executable = 'game.dat'
@@ -156,11 +157,15 @@ def launch_menu():
 
 def main():
     """Menu supervisor; the game runs until its window or menu closes it."""
-    from mapworkshop.native import debugger, runtime
+    from mapworkshop.native import debugger, msvc, runtime
     folder = prepare()
     runtime.set_options('Medium')
     args = subprocess.list2cmdline(['-win', '-xres', str(runtime.WIDTH), '-yres', str(runtime.HEIGHT)])
     game = configure(debugger.Game(folder, args, runtime.APPDATA), skirmish=False)
+    # The menu can load several maps in one process. The standalone build
+    # detects each loading screen and flushes before the tactical view draws.
+    if msvc.dll('dinput8').exists():
+        game.inject(runtime.staged(msvc.dll('dinput8')))
     def close(game, tid, ctx):
         if ctx.ebx == 0x10:
             game.stop('closed')

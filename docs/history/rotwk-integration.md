@@ -38,3 +38,31 @@ The public command with `--graphics Low` subsequently reached frame 11 at
 suite passed in both profiles: 269 tests, four skipped, plus syntax, import
 layer, documentation link and index checks. ROTWK `mw doctor` passed and
 the catalogue indexed 4,605 templates, 1,260 terrain textures and 3,082 effects.
+
+## Loading fix
+
+Later on the same day, the shared `bfme2-map-quickload` DLL gained a separate
+ROTWK engine layout. Local disassembly identified the D3DX import slots at
+`0x7D0A1C`/`0x7D0A20`, terrain call returns at `0xEEFBD`/`0xEEFE3`, the camera
+update at `0x8546A`, and the title wait at `0x245CB1`. GameLogic's LoadScreen
+is still at `+0x120`; function `0x625524` destroys it. The studio flushes its
+queued textures there before gameplay. The standalone build detects each
+load and flushes at the camera update, as it does for BFME2.
+
+Water Lab (same map hash as the integration check) at Medium detail, hidden
+DXVK, reached frame 10 in 23.2 seconds without acceleration, 11.6 seconds
+with the launcher DLL and 10.2 seconds with the standalone DLL. Each patched
+run deferred and copied all 1,260 terrain textures on 15 workers, with zero
+failed jobs or first-chance exceptions. All three runs already skipped the
+title logo; timings are individual local measurements, not general promises.
+BFME2 regression runs also completed 1,260 textures without failures: 12.7
+seconds with the launcher/camera DLLs together, 10.6 with the standalone DLL.
+Automatic loading of `dinput8.dll` from the isolated ROTWK game folder also
+passed, reaching frame 11 in 12.3 seconds with all 1,260 textures copied and
+zero failures. This verifies the proxy's import forwarding as well as its
+hooks; the earlier standalone comparison injected the same DLL explicitly.
+
+The repository suite passed 271 tests (four skipped), plus syntax, import
+layer, documentation and index checks. Source and both DLL builds live in
+the quickload submodule. Native screenshot/pathfinding capture and the free
+camera remain BFME2-only.

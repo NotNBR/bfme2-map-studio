@@ -13,12 +13,12 @@
     logs/      launcher logs and run reports
 
 prepare() builds or refreshes it from the configured install (`mw setup`),
-which must be BFME2 1.06: the breakpoints are at its addresses. start()
+which must match the selected profile's verified engine. start()
 starts a skirmish on an installed map, you against an easy AI, and by
 default loads it faster: loading.dll (native/loading/loading.cpp) runs the
 terrain textures' D3DX compression on worker threads, with the same calls and
 input as the game, so the same result (Brightwater Fold at Medium: gameplay
-4.5 s after the start instead of 12). Every game also loads ingame.dll
+4.5 s after the start instead of 12). BFME2 also loads ingame.dll
 (native/ingame/ingame.cpp): the free camera you steer in test games (the
 wheel zooms out to the whole map, the middle button tilts) and the
 screenshot hooks of native.capture.
@@ -335,6 +335,7 @@ def fast_loading(game):
     """Load loading.dll (native/loading, the bfme2-map-quickload submodule:
     the terrain textures' D3DX work on worker threads) and flush it when the
     new-game pass has loaded the skirmish's map, before its first frame.
+    ROTWK flushes when its completed loading screen is destroyed instead.
     Without the submodule (a zip download) the map loads at the game's speed."""
     from mapworkshop.native import msvc
     if not msvc.dll('loading').exists():
@@ -343,13 +344,29 @@ def fast_loading(game):
     exports = {}
     game.inject(staged(msvc.dll('loading')), lambda game, found: exports.update(found))
 
+    def flushed(game, results):
+        state = game.read(exports['mwLoading'], 40)
+        if state:
+            names = ('installed', 'active', 'workers', 'deferred', 'copied', 'synchronous',
+                     'failed', 'peak_queue', 'last_error', 'flushes')
+            game.res['loading'] = dict(zip(names, struct.unpack('<10I', state)))
+        game.res['fast_loading'] = results[0]
+
     def flush(game, tid, ctx):
         if game.logic()[1] != debugger.SKIRMISH:     # the pass also runs for the menu's shell map
             return True
         if not exports:                              # loading.dll did not load: nothing to flush
             return False
-        return {'call': exports['mwFlush'], 'done': lambda game, results: game.res.update(fast_loading=results[0])}
-    game.on(NEW_GAME_DONE, flush)
+        # ROTWK also tears down old load screens during initialization. Keep
+        # waiting until this load has actually queued terrain textures.
+        if PROFILE == 'rotwk' and not game.u32(exports['mwLoading'] + 12):
+            return True
+        return {'call': exports['mwFlush'], 'done': flushed}
+    if PROFILE == 'rotwk':
+        from mapworkshop.native import rotwk
+        game.on(rotwk.LOAD_SCREEN_DESTROY, flush)
+    else:
+        game.on(NEW_GAME_DONE, flush)
 
 
 def ingame(game):
@@ -371,7 +388,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     this detail level (not yet running: add breakpoints, then game.run()).
     `headless`: on a hidden desktop, with DXVK (see the module notes).
     `fast`: with fast_loading (False loads the map as the game alone does).
-    The game loads ingame.dll in either case."""
+    BFME2 also loads ingame.dll; ROTWK keeps its normal camera."""
     running = debugger.running_games()
     if running:
         raise RuntimeError(f'A game is already running ({running[0][1]}); close it before starting {GAME_LABEL}')
@@ -385,7 +402,10 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     game.headless = headless
     if PROFILE == 'rotwk':
         from mapworkshop.native import rotwk
-        return rotwk.configure(game)
+        rotwk.configure(game)
+        if fast:
+            fast_loading(game)
+        return game
     game.on(FILE_SLOTS_SET, skirmish_setup)
     ingame(game)
     if fast:

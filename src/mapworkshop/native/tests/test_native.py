@@ -175,6 +175,43 @@ class RuntimeTests(unittest.TestCase):
     def test_dinput8_build_forwards_directinput(self):
         self.assertIn('DirectInput8Create', PE(msvc.dll('dinput8')).exports())
 
+    def test_patch_accepts_verified_rotwk_and_refuses_an_unknown_engine(self):
+        import hashlib
+        from mapworkshop.native import patch
+        with tempfile.TemporaryDirectory() as folder:
+            game = Path(folder)
+            (game/'game.dat').write_bytes(b'rotwk fixture')
+            with mock.patch.object(patch, 'SUPPORTED_ROTWK_SHA256', hashlib.sha256(b'rotwk fixture').hexdigest()):
+                patch.install(game)
+                self.assertEqual(patch.status(game), 'installed')
+            (game/'game.dat').write_bytes(b'unknown engine')
+            with self.assertRaisesRegex(RuntimeError, 'not a verified'):
+                patch.install(game)
+
+    def test_rotwk_loading_flush_waits_for_textures_and_records_completion(self):
+        from mapworkshop.native import rotwk
+        game = mock.Mock(res={})
+        game.logic.return_value = (0, debugger.SKIRMISH)
+        with mock.patch.object(runtime, 'PROFILE', 'rotwk'), mock.patch.object(runtime, 'staged', side_effect=lambda p: p):
+            runtime.fast_loading(game)
+        game.on.assert_called_once()
+        address, flush = game.on.call_args.args
+        self.assertEqual(address, rotwk.LOAD_SCREEN_DESTROY)
+        game.inject.call_args.args[1](game, {'mwLoading': 0x1000, 'mwFlush': 0x2000})
+        game.u32.return_value = 0
+        with mock.patch.object(runtime, 'PROFILE', 'rotwk'):
+            self.assertIs(flush(game, 1, None), True)
+        game.u32.return_value = 12
+        # The handler's profile stays pinned in its process.
+        with mock.patch.object(runtime, 'PROFILE', 'rotwk'):
+            request = flush(game, 1, None)
+        self.assertEqual(request['call'], 0x2000)
+        game.read.return_value = struct.pack('<10I', 1, 0, 4, 12, 12, 0, 0, 8, 0, 1)
+        request['done'](game, [12])
+        self.assertEqual(game.res['fast_loading'], 12)
+        self.assertEqual(game.res['loading']['copied'], 12)
+        self.assertEqual(game.res['loading']['failed'], 0)
+
     def test_install_copies_the_build_and_replaces_its_cache_entry(self):
         with tempfile.TemporaryDirectory() as folder:
             build = Path(folder)/'build'
