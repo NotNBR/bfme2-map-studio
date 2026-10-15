@@ -32,10 +32,12 @@ files. The source maps, INIs and archive contents are never edited.
 | `<map-name>/terrain-plan.png` | Shaded material categories, contours, numbered starts, scenery, stored roads and optional design overlays |
 | `<map-name>/terrain-overview.png` | Material-category relief with scenery and water, without planning annotations |
 | `<map-name>/heightmap.png` | Border-free elevation, individually normalized to 8-bit grayscale |
+| `<map-name>/elevation.png` | Ground height in color with a labeled scale shared by every input map, north up, with optional contours; includes the riverbed beneath water |
 | `<map-name>/slope.png` | Geometric steepness: green low, red high; rise/run capped at 1.5 for coloring |
 | `<map-name>/passability.png` | Stored impassable terrain flags in red, other cells green, water blue |
 
-Open `index.html` in a browser or inspect the PNGs directly. Keep the folder
+Open `index.html` and use each map's **Analysis view** selector to switch between
+elevation, slope and the other diagnostics, or inspect the PNGs directly. Keep the folder
 together: the HTML uses relative image links. A one-map run also produces the
 atlas and equal-scale patch, so the same workflow covers individual maps and
 comparisons.
@@ -132,11 +134,32 @@ proof of unit navigation or bridge traversal.
 - `--crown-radius 16`: illustrative tree-dot radius, shared by all panels. It is
   **not** the measured canopy or collision radius of the native model.
 - `--contour-step 25`: elevation interval; use 0 to disable contours.
+- `--height-range LOW HIGH`: absolute elevation color limits in map units;
+  defaults to the combined minimum and maximum of all input maps. Use the same
+  limits across separate runs to compare revisions. A constant-height map gets
+  a one-unit range centered on its height. Limits must be finite and increasing.
 - `--overwrite`: explicitly regenerate into an existing output directory.
 
-Read the terrain outputs together: the heightmap shows relative elevation,
+Read the terrain outputs together: the elevation view shows absolute height,
 the slope map shows how quickly it changes, and contours show the shape and
-spacing of landforms. Heightmap PNGs normalize each map independently;
+spacing of landforms. The color elevation view uses an unshaded, dark-to-light
+scale so equal colors mean equal heights across the compared maps. Water,
+materials and objects do not cover the height samples. Heights outside the
+chosen range use its endpoint colors; contours are limited to that range.
+`elevation_scale` in each map's metrics records the scale and the numbers of
+samples below and above it. `height_range` still records the actual terrain range.
+
+For subtle lowland relief in the Hollin Dales, for example:
+
+```powershell
+mw graphics --map 'local/build/hollin-dales/map mp the hollin dales.map' `
+  --name 'Hollin Dales' --height-range 160 300 --contour-step 5 `
+  --out local/renders/hollin-lowland-analysis
+```
+
+This exposes the fields, courts and dale floors while higher mountains share
+the upper endpoint color. Omit `--height-range` to see the whole elevation range.
+The separate grayscale heightmap PNGs normalize each map independently;
 `height_range` in `metrics.json` records the original range. Tall peaks can
 leave lowland relief almost invisible in grayscale. The slope colors span
 rise/run from 0 to 1.5, so similar green areas need not be equally level.

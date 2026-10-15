@@ -6,8 +6,9 @@ gate-court, a long walled hollow in front of them, so teammates reach each
 other only through the court and never from behind. The court opens onto the
 shared field through three gates. The field is the ruined heart of Hollin:
 the Sirannon winds down it from the north edge to the south, with a ford at
-each team's north and south gates and a broad ford through the ruins of
-Ost-in-Edhil in the middle.
+each team's north and south gates and a stone bridge through the ruins of
+Ost-in-Edhil in the middle. Shallow dale floors open into rolling courts;
+low spurs descend into the field and soften into shelves beside the river.
 
 The layout is point-symmetric about the map centre: the east team's dales,
 court and gates are the west team's turned through 180 degrees, and so are
@@ -262,6 +263,34 @@ def bowl(x, y, bx, by, line, k):
     return sd
 
 
+def lowland_relief(x, y, sd, stream):
+    """Broad open-ground relief, with long spurs and shallow intervening hollows.
+
+    The west's three crests have turned counterparts for equal opportunities.
+    Smaller variation breaks their regular outlines. River margins fade to
+    lower ground; the build grades the crossings and construction pads later.
+    """
+    warp = symmetric(fbm(x+1700, y-900, scale=700, seed=SEED+80, octaves=2))
+    broad = symmetric(fbm(x+1200, y-600, scale=1050, seed=SEED+5, octaves=2))
+    folds = symmetric(fbm(x-300, y+1500, scale=420, seed=SEED+15, octaves=2))
+    relief = 38*broad+13*folds
+    # Centre, long and short radii, heading and rise, all in map units.
+    # The first two are spurs from the field's west wall towards the river;
+    # the third is a low shoulder in the court between the dale mouths.
+    crests = [(4810, 4510, 660, 300, -.65, 48),
+              (4780, 2840, 720, 320, .55, 42),
+              (3290, 4370, 600, 270, 1.15, 26)]
+    for px, py, long, short, angle, rise in crests:
+        for cx, cy in ((px, py), (SPAN_X-px, SPAN_Y-py)):
+            dx, dy = x-cx, y-cy
+            along = (dx*math.cos(angle)+dy*math.sin(angle))/long
+            across = (-dx*math.sin(angle)+dy*math.cos(angle)+65*warp)/short
+            relief += rise*np.exp(-2*(along*along+across*across))
+    # Texture-scale irregularity stays small beside the authored landforms.
+    relief += 1.8*fbm(x+450, y-700, scale=110, seed=SEED+81, octaves=2)
+    return relief*(1-smooth(-220, 40, sd))*smooth(25, 230, stream)
+
+
 def terrain():
     rows, cols = HEIGHT+2*BORDER, WIDTH+2*BORDER
     y, x = (np.mgrid[0:rows, 0:cols]-BORDER)*10.0
@@ -273,7 +302,10 @@ def terrain():
         d, along = polyline_distance(line, x, y)
         s = along/length(line)
         width = (265+105*smooth(0, .5, s))*S
-        parts.append((smooth_min(d-width, bowl(x, y, bx, by, line, k), 160), COURT_Z+(BASE_Z-COURT_Z)*smooth(0, .8, s)))
+        # A broad trough down the dale, rising gradually towards its sides.
+        shoulders = 19*smooth(35, width, d)
+        parts.append((smooth_min(d-width, bowl(x, y, bx, by, line, k), 160),
+                      COURT_Z+(BASE_Z-COURT_Z)*smooth(0, .8, s)+shoulders))
     cx, cy, hx, hy = COURT
     for px, py in ((cx, cy), (SPAN_X-cx, SPAN_Y-cy)):
         parts.append((rounded_box(x, y, px, py, hx, hy, 320), np.full(x.shape, COURT_Z)))
@@ -314,7 +346,7 @@ def terrain():
     wall_height = 230+90*fbm(x+400, y-900, scale=700, seed=SEED+14, octaves=2)
     wall = wall_height*smooth(0, 280+80*warp, sd+60*warp)
     peaks = 560*smooth(150, 1300, sd)*(.4+.8*ridged**2)+90*smooth(100, 600, sd)*crags**3
-    foothills = 34*smooth(-260, 0, sd)*(.7+.6*fbm(x, y, scale=300, seed=SEED+4, octaves=2))
+    foothills = 34*smooth(-500, 0, sd)*(.7+.6*fbm(x, y, scale=450, seed=SEED+4, octaves=2))
     # Rock faces broken into ribs, ledges and gullies, strongest mid-height
     # on the walls; nothing of it reaches the open ground.
     ribs = fbm(x*1.6+y*.3, y*.7-x*.2, scale=240, seed=SEED+16, octaves=4)
@@ -338,12 +370,13 @@ def terrain():
     knolls = KNOLL_RISE*smooth(5, 150, sd)+35*smooth(140, 330, sd)+sides+rim
     mountains = ((wall+faces)*(1-knoll)+knolls*knoll+peaks*(1-knoll))*(.25+.75*ravine)
 
-    # Gentle rolls on the open ground, stronger in the field than in the
-    # dales, with knolls and hollows of their own on each half.
-    rolls = symmetric(fbm(x+1200, y-600, scale=900, seed=SEED+5, octaves=3))
-    rolls = (16*rolls+7*fbm(x-300, y+1500, scale=380, seed=SEED+15, octaves=3))*(1-smooth(-400, 0, sd))
-    land = floor+rolls+foothills+mountains
-    land -= 8*(1-smooth(0, 650, stream_sd))*(1-smooth(-50, 300, sd))      # the river's broad, shallow valley
+    land = floor+lowland_relief(x, y, sd, stream_sd)+foothills+mountains
+    # Low river shelves ease up into the meadow at a changing distance
+    # from the bank. Keep the land above water; only the channel is wet.
+    shelf_width = 230+70*symmetric(fbm(x, y, scale=650, seed=SEED+82, octaves=2))
+    shelf_floor = WATER+9+2*fbm(x, y, scale=320, seed=SEED+83, octaves=2)
+    valley = (1-smooth(20, shelf_width, stream_sd))*(1-smooth(-80, 160, sd))
+    land = land*(1-valley)+shelf_floor*valley
     # Scree and talus: the mountains settle under their own weight, the open ground keeps its shape.
     settled = thermal_erosion(land, iterations=24, spacing=10, talus=.95)
     land = land+(settled-land)*smooth(-30, 120, sd)*(1-.8*knoll)
@@ -361,7 +394,6 @@ def terrain():
         cut = 1-smooth(TRAIL_WIDTH, TRAIL_WIDTH+30, d)
         land = land*(1-cut)+grade*cut
         climb |= d < TRAIL_WIDTH+6
-    # Banks: a short drop to the water, then a bed shelving to 16 deep.
     # Banks: a short, firm bank up from the water to the meadow, steeper in
     # places, gentler in others; under water the bed drops away quickly.
     # A little variety along it: the bank's run and steepness, how fast the

@@ -1,6 +1,7 @@
 """Generate diagnostic map graphics without changing maps or launching BFME2.
 
-Run: mw graphics --help
+Run: mw graphics --help. Elevation plans use one labeled height scale across
+all input maps; --height-range LOW HIGH isolates relief such as valley floors.
 """
 import argparse
 from collections import Counter
@@ -27,6 +28,9 @@ COLORS = {'tree':'#7bcb59', 'understory':'#348660', 'rock':'#b8bab3',
           'other prop':'#b896be', 'neutral':'#efdd8b'}
 START_COLORS = ('#e35548','#438fe5','#55bd56','#e3cb51','#b56bea','#42c6c3','#e89447','#da72a3')
 BACKGROUND = '#10181d'
+# Sequential dark-to-light elevation colors, independent of materials and water.
+ELEVATION_COLORS = np.array([(68,1,84),(59,82,139),(33,145,140),
+                             (94,201,98),(253,231,37)], dtype=float)
 
 
 def font(size):
@@ -432,7 +436,71 @@ def overlays(image, scene, pixel, scale):
     return result
 
 
-def per_map(scene, output, contour_step):
+def elevation_limits(scenes, requested=None):
+    """One absolute elevation scale for every map, including constant terrain."""
+    if requested is not None:
+        low, high = requested
+        if not all(math.isfinite(v) for v in (low, high)) or low >= high:
+            raise ValueError('Height range needs finite LOW < HIGH')
+        return float(low), float(high)
+    low = min(float(s.z.min()) for s in scenes)
+    high = max(float(s.z.max()) for s in scenes)
+    return (low, high) if low < high else (low-.5, high+.5)
+
+
+def elevation_colors(z, limits):
+    """Color absolute ground heights; clipped values keep the endpoint color."""
+    low, high = limits
+    value = np.clip((np.asarray(z)-low)/(high-low), 0, 1)
+    stops = np.linspace(0, 1, len(ELEVATION_COLORS))
+    return np.stack([np.interp(value, stops, channel) for channel in ELEVATION_COLORS.T],
+                    axis=-1).round().astype(np.uint8)
+
+
+def elevation_plan(scene, limits, contour_step=0):
+    """North-up ground elevation with contours and an absolute color legend.
+
+    Water is deliberately not painted over the riverbed. No material colors,
+    objects or hillshade alter the elevation scale. End colors include heights
+    outside a requested range; contours are limited to that range.
+    """
+    low, high = limits
+    rgb = elevation_colors(scene.z, limits)
+    if contour_step:
+        levels = np.floor(np.clip(scene.z, low, high)/contour_step)
+        edges = np.zeros(scene.z.shape, bool)
+        edges[1:] |= levels[1:] != levels[:-1]
+        edges[:,1:] |= levels[:,1:] != levels[:,:-1]
+        rgb[edges] = (rgb[edges].astype(float)*.65).astype(np.uint8)
+    w, h = scene.extent
+    scale = min(1400/w, 1100/h)
+    size = max(1, round(w*scale)), max(1, round(h*scale))
+    image = Image.fromarray(np.flipud(rgb)).resize(size, Image.Resampling.NEAREST)
+    width = max(640, image.width+40)
+    canvas = Image.new('RGB', (width, image.height+200), BACKGROUND)
+    canvas.paste(image, ((width-image.width)//2, 70))
+    draw = ImageDraw.Draw(canvas)
+    draw.text((20,13), scene.name+' | ELEVATION', font=font(22), fill='white')
+    draw.text((20,43), f'North up | ground height in map units | contours {contour_step:g}',
+              font=font(14), fill='#b4c4bc')
+    bar_y = image.height+90
+    ramp = elevation_colors(np.linspace(low, high, width-40)[None,:], limits)
+    canvas.paste(Image.fromarray(ramp).resize((width-40,18)), (20,bar_y))
+    for fraction in (0,.25,.5,.75,1):
+        x = 20+fraction*(width-41)
+        label = f'{low+fraction*(high-low):.1f}'
+        if fraction == 0:
+            label = '<= '+label
+        elif fraction == 1:
+            label = '>= '+label
+        draw.text((x,bar_y+25), label, font=font(14), fill='white',
+                  anchor='lt' if fraction==0 else 'rt' if fraction==1 else 'mt')
+    draw.text((20,bar_y+52), 'Ground beneath water is included; endpoint colors include clipped heights.',
+              font=font(14), fill='#b4c4bc')
+    return canvas
+
+
+def per_map(scene, output, contour_step, height_range=None):
     directory = output/slug(scene.name)
     directory.mkdir(exist_ok=True)
     w,h = scene.extent
@@ -443,6 +511,11 @@ def per_map(scene, output, contour_step):
         image.save(directory/filename)
     gray = ((scene.z-scene.z.min())/max(1,float(np.ptp(scene.z)))*255).astype(np.uint8)
     Image.fromarray(np.flipud(gray)).save(directory/'heightmap.png')
+    height_range = elevation_limits([scene], height_range)
+    elevation_plan(scene, height_range, contour_step).save(directory/'elevation.png')
+    scene.metrics['elevation_scale'] = dict(range=list(height_range), units='map units',
+        below_range_samples=int(np.count_nonzero(scene.z < height_range[0])),
+        above_range_samples=int(np.count_nonzero(scene.z > height_range[1])))
     image,pixel,scale = viewport(scene,1400,1100,'materials',contour_step)
     draw = ImageDraw.Draw(image)
     for road in scene.roads:
@@ -471,17 +544,31 @@ def report(scenes, output, options):
         median = r['tree_spacing']['nearest_p10_p50_p90'][1] if r['tree_spacing'] else 'n/a'
         values = (scene.name,scene.source,r['categories'].get('tree',0),median,r['understory_per_tree'],r['categories'].get('rock',0))
         rows.append('<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in values)+'</tr>')
+        views = (('terrain-plan','Terrain plan'),('terrain-overview','Terrain overview'),
+                 ('elevation','Elevation'),('heightmap','Grayscale heightmap'),
+                 ('slope','Slope'),('passability','Stored passability'))
+        ident = slug(scene.name)
         links.append('<h3>'+html.escape(scene.name)+'</h3><p>'+ ' · '.join(
             f'<a href="{slug(scene.name)}/{file}.png">{label}</a>' for file,label in
-            (('terrain-plan','Terrain plan'),('terrain-overview','Terrain overview'),('heightmap','Heightmap'),('slope','Slope'),('passability','Stored passability')))+
-            '</p><img loading="lazy" src="'+slug(scene.name)+'/terrain-plan.png">')
+            views)+f'</p><label for="view-{ident}">Analysis view </label>'+
+            f'<select id="view-{ident}" data-image="image-{ident}">'+
+            ''.join(f'<option value="{ident}/{file}.png">{label}</option>' for file,label in views)+
+            f'</select><p><img id="image-{ident}" loading="lazy" src="{ident}/terrain-plan.png" '+
+            f'data-map="{html.escape(scene.name, quote=True)}" alt="{html.escape(scene.name, quote=True)}: Terrain plan"></p>')
     page = '''<!doctype html><meta charset="utf-8"><title>Map graphics</title>
 <style>body{background:#10181d;color:#e2e8e6;font:17px/1.6 Segoe UI,sans-serif;max-width:1400px;margin:30px auto;padding:20px}table{width:100%;border-collapse:collapse}td,th{padding:10px;text-align:left;border-bottom:1px solid #3c4a49}img{max-width:100%;height:auto}a{color:#91d7d1}</style>
 <h1>Map graphics</h1><p>Read-only graphics from serialized native map data. Tree spacing is the median nearest-neighbor distance in world units. Ground cover includes grass, shrubs and ferns. Full-area density includes water and impassable terrain. Unknown templates remain gameplay/other.</p>
 <table><tr><th>Map</th><th>Source</th><th>Trees</th><th>Tree spacing</th><th>Ground cover / tree</th><th>Rocks</th></tr>'''+''.join(rows)+'''</table>
 <h2>Placement atlas</h2><p>Each map fits its own panel. Object dots are schematic, not model footprints. White rings mark starts.</p><img src="placement-atlas.png">
 <h2>Equal-scale forest patches</h2><p>All panels cover the same world extent. Centers select a locally dense area, not average forest coverage; circle size is illustrative and equal between maps.</p><img src="equal-scale-forest-patches.png">
-<h2>Terrain plans</h2><p>Material colors approximate texture categories and omit native blends, lighting and art. Contours describe elevation. Slope is geometric rise/run, capped at 1.5 for coloring. Stored passability shows the native terrain flag, with water overlaid; it excludes unit footprints, props and bridge deck traversal. Heightmap images normalize each map to 8-bit grayscale; recover the range from metrics.json. Design overlays do not establish actual routes.</p>'''+''.join(links)+'''<p><a href="metrics.json">Measurements, map hashes and settings</a></p>'''
+<h2>Terrain plans</h2><p>Material colors approximate texture categories and omit native blends, lighting and art. Contours describe elevation. Elevation uses the same labeled height scale for every map, including ground beneath water; endpoint colors include clipped heights. Slope is geometric rise/run, capped at 1.5 for coloring. Stored passability shows the native terrain flag, with water overlaid; it excludes unit footprints, props and bridge deck traversal. Grayscale heightmaps normalize each map separately; recover the range from metrics.json. Design overlays do not establish actual routes.</p>'''+''.join(links)+'''<p><a href="metrics.json">Measurements, map hashes and settings</a></p>
+<script>document.querySelectorAll('select[data-image]').forEach(select => {
+  select.addEventListener('change', () => {
+    const image = document.getElementById(select.dataset.image);
+    image.src = select.value;
+    image.alt = image.dataset.map + ': ' + select.selectedOptions[0].textContent;
+  });
+});</script>'''
     (output/'index.html').write_text(page,encoding='utf-8')
 
 
@@ -499,8 +586,15 @@ def main(argv=None):
     parser.add_argument('--patch-size',type=float,default=1000,help='World extent of equal-scale panels')
     parser.add_argument('--crown-radius',type=float,default=16,help='Illustrative tree-dot radius in world units')
     parser.add_argument('--contour-step',type=float,default=25,help='Elevation interval, or 0 to disable contours')
+    parser.add_argument('--height-range',type=float,nargs=2,metavar=('LOW','HIGH'),
+                        help='Elevation color limits in map units (default: shared range of all maps)')
     parser.add_argument('--overwrite',action='store_true',help='Replace generated graphics in a nonempty output directory')
     args = parser.parse_args(argv)
+    if args.height_range is not None:
+        try:
+            elevation_limits([], args.height_range)
+        except ValueError as error:
+            parser.error(str(error))
     if not 1<=args.columns<=6:
         parser.error('--columns must be between 1 and 6')
     for name,minimum in (('patch_size',1),('crown_radius',0),('contour_step',0)):
@@ -528,6 +622,7 @@ def main(argv=None):
         parser.error('Output directory is not empty; choose a new directory or use --overwrite')
     templates = Templates(resolve(args.ini,Path.cwd()))
     scenes = [load_scene(s,base,templates,archive) for s in specs]
+    height_range = elevation_limits(scenes, args.height_range)
     selected = config.get('patch_maps',[s.name for s in scenes])
     if not selected or any(n not in {s.name for s in scenes} for n in selected):
         parser.error('patch_maps must name at least one map from maps')
@@ -536,9 +631,10 @@ def main(argv=None):
     forest_patches([next(s for s in scenes if s.name==n) for n in selected],output,
                    args.columns,args.patch_size,args.crown_radius)
     for scene in scenes:
-        per_map(scene,output,args.contour_step)
+        per_map(scene,output,args.contour_step,height_range)
     report(scenes,output,dict(columns=args.columns,patch_size=args.patch_size,
            illustrative_crown_radius=args.crown_radius,contour_step=args.contour_step,
+           height_range=list(height_range),
            ini_directory=str(resolve(args.ini,Path.cwd()))))
     print(json.dumps(dict(output=str(output),maps=len(scenes),report=str(output/'index.html'))))
     return 0

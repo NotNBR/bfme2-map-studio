@@ -1,11 +1,16 @@
 """Independent geometry and classification checks for read-only diagnostics."""
 import tempfile
 import unittest
+import json
 from pathlib import Path
+from types import SimpleNamespace
 import numpy as np
+from PIL import Image
 
-from mapworkshop.mapkit.graphics import Scene, Templates, spacing, viewport, water_mask, resolve
-from mapworkshop.mapkit.blank import create
+from mapworkshop.mapkit.graphics import (Scene, Templates, spacing, viewport, water_mask,
+                                        resolve, elevation_colors, elevation_limits,
+                                        elevation_plan, main)
+from mapworkshop.mapkit.blank import create, set_heights
 
 
 class MapGraphicsTests(unittest.TestCase):
@@ -60,6 +65,60 @@ class MapGraphicsTests(unittest.TestCase):
         with self.temporary() as folder:
             p=Path(folder);(p/'config').mkdir();(p/'input.map').write_bytes(b'test')
             self.assertEqual(resolve('../input.map',p/'config'),p/'input.map')
+
+    def test_elevation_scale_is_shared_clipped_and_handles_flat_maps(self):
+        scenes = [SimpleNamespace(z=np.array([100.,200.])),
+                  SimpleNamespace(z=np.array([200.,500.]))]
+        limits = elevation_limits(scenes)
+        self.assertEqual(limits, (100.,500.))
+        first, second = [elevation_colors(s.z, limits) for s in scenes]
+        np.testing.assert_array_equal(first[1], second[0])
+        clipped = elevation_colors(np.array([0,100,500,600]), limits)
+        np.testing.assert_array_equal(clipped[0], clipped[1])
+        np.testing.assert_array_equal(clipped[2], clipped[3])
+        self.assertEqual(elevation_limits([SimpleNamespace(z=np.full((2,2),200.))]),
+                         (199.5,200.5))
+        for invalid in ((1,1),(2,1),(0,float('inf')),(float('nan'),1)):
+            with self.assertRaises(ValueError):
+                elevation_limits(scenes, invalid)
+
+    def test_elevation_keeps_riverbed_height_and_north_up(self):
+        z = np.array([[100.,100.],[300.,300.]])
+        scene = Scene('Elevation', 'test', z, np.ones((2,2),bool),
+                      np.zeros((2,2),bool), np.zeros((2,2,3),np.uint8), [],[],[],{}, {})
+        plan = elevation_plan(scene, (100,300))
+        expected = elevation_colors(np.array([100,300]), (100,300))
+        self.assertEqual(plan.getpixel((plan.width//2,71)), tuple(expected[1]))
+        self.assertEqual(plan.getpixel((plan.width//2,1168)), tuple(expected[0]))
+
+    def test_cli_exports_elevation_scale_and_gallery_without_changing_map(self):
+        with self.temporary() as folder:
+            root = Path(folder)
+            m = create(64,64,3)
+            shape = m.heightmap()['elevations'].shape
+            heights = np.full(shape, 200.)
+            heights[3,3], heights[4,4] = 100., 300.
+            set_heights(m, heights)
+            source = m.encode()
+            path = root/'input.map'
+            path.write_bytes(source)
+            ini = root/'ini'
+            ini.mkdir()
+            (ini/'object.ini').write_text('Object Test\n KindOf = IMMOBILE\nEnd\n')
+            out = root/'output'
+            self.assertEqual(main(['--map',str(path),'--name','Elevation test','--ini',str(ini),
+                                   '--out',str(out),'--height-range','150','250','--columns','1']),0)
+            metrics = json.loads((out/'metrics.json').read_text())
+            self.assertEqual(metrics['options']['height_range'],[150,250])
+            self.assertEqual(metrics['maps'][0]['height_range'],[100,300])
+            self.assertEqual(metrics['maps'][0]['elevation_scale'],dict(range=[150,250],
+                             units='map units',below_range_samples=1,above_range_samples=1))
+            with Image.open(out/'elevation-test/elevation.png') as image:
+                self.assertEqual(image.mode,'RGB')
+            page = (out/'index.html').read_text(encoding='utf-8')
+            self.assertIn('value="elevation-test/elevation.png"',page)
+            self.assertIn('value="elevation-test/slope.png"',page)
+            self.assertEqual(path.read_bytes(),source)
 
 
 if __name__=='__main__':
