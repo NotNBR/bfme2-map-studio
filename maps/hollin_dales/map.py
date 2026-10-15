@@ -27,6 +27,7 @@ import random
 import numpy as np
 
 from mapworkshop.mapkit.blank import create, set_heights, set_materials, starts, add_object, terrain_cell_sizes, water_plane
+from mapworkshop.mapkit.lines import nearest, polyline_distance
 from mapworkshop.mapkit.earth import fbm, thermal_erosion
 from mapworkshop.mapkit.ambient import ambient, along
 from mapworkshop.mapkit.cliffs import steep_cells
@@ -114,21 +115,6 @@ def smooth_min(a, b, k):
     """The smaller of two distances with a rounded fillet of size k where they meet."""
     h = np.clip(.5+.5*(b-a)/k, 0, 1)
     return b*(1-h)+a*h-k*h*(1-h)
-
-
-def polyline_distance(points, x, y):
-    """Distance from every sample to the polyline, and the arc length of its nearest point."""
-    best = np.full(x.shape, np.inf); along = np.zeros(x.shape); s = 0.
-    for (ax, ay), (bx, by) in zip(points, points[1:]):
-        dx, dy = bx-ax, by-ay; length2 = dx*dx+dy*dy
-        if length2 == 0:
-            continue
-        t = np.clip(((x-ax)*dx+(y-ay)*dy)/length2, 0, 1)
-        d = np.hypot(x-ax-t*dx, y-ay-t*dy)
-        closer = d < best
-        best = np.where(closer, d, best); along = np.where(closer, s+t*math.sqrt(length2), along)
-        s += math.sqrt(length2)
-    return best, along
 
 
 def length(points):
@@ -343,10 +329,9 @@ def lanes():
 
 
 def lane_field(t, lines):
-    d = np.full(t['z'].shape, np.inf)
-    for line in lines:
-        d = np.minimum(d, polyline_distance(line, t['x'], t['y'])[0])
-    return d
+    """Distance to the nearest of the lines, exact within 500 (every use compares
+    it against less); inf beyond."""
+    return nearest(lines, t['x'], t['y'], reach=500)
 
 
 def materials(t):
@@ -754,9 +739,8 @@ def build(b):
     t['woods'] = woods_field(t)
     placed = sites(m, t)
     level_sites(t, placed)
-    from mapworkshop.render.assets import GameAssets
     keep = [(px, py, 70 if template == 'CaptureFlag' else 190) for template, px, py in placed]
-    s = Scenery(m, t, GameAssets(), keep)
+    s = Scenery(m, t, b.assets, keep)
     rng = random.Random(SEED+300)
     print('Raising the ruins, planting the woods...', flush=True)
     ruins(s, t, rng)

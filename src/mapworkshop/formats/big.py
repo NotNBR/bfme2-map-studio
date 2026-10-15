@@ -15,11 +15,21 @@ import re
 import struct
 import subprocess
 
+_DIRECTORIES = {}   # (path, size, mtime) -> entries: a process reads each archive's directory once
+
+
 class BigArchive:
     def __init__(self, path):
         self.path = pathlib.Path(path)
-        self.entries = {}
-        total = self.path.stat().st_size
+        stat = self.path.stat()
+        key = (str(self.path.resolve()), stat.st_size, stat.st_mtime_ns)
+        if key not in _DIRECTORIES:
+            _DIRECTORIES[key] = self._directory(stat.st_size)
+        self.entries = dict(_DIRECTORIES[key])
+
+    def _directory(self, total):
+        """The archive's entries, from its directory read in one piece."""
+        entries = {}
         with self.path.open('rb') as stream:
             header = stream.read(16)
             if len(header) != 16 or header[:4] not in (b'BIG4', b'BIGF'):
@@ -27,23 +37,21 @@ class BigArchive:
             count, directory_end = struct.unpack('>II', header[8:])
             if count > 100000 or not 16 <= directory_end <= total:
                 raise ValueError('Invalid archive directory')
-            for _ in range(count):
-                entry = stream.read(8)
-                if len(entry) != 8:
-                    raise ValueError('Truncated archive entry')
-                offset, size = struct.unpack('>II', entry)
-                name = bytearray()
-                while True:
-                    c = stream.read(1)
-                    if not c or len(name) > 4096 or stream.tell() > directory_end:
-                        raise ValueError('Unterminated archive path')
-                    if c == b'\0':
-                        break
-                    name.extend(c)
-                if offset < directory_end or offset + size > total:
-                    raise ValueError('Archive entry lies outside payload')
-                key = name.decode('cp1252').replace('\\', '/').lower()
-                self.entries[key] = (offset, size)
+            directory = stream.read(directory_end - 16)
+        pos = 0
+        for _ in range(count):
+            if pos + 8 > len(directory):
+                raise ValueError('Truncated archive entry')
+            offset, size = struct.unpack_from('>II', directory, pos)
+            end = directory.find(b'\0', pos + 8, pos + 8 + 4098)
+            # The path's terminator must lie inside the directory, the path at most 4096 bytes.
+            if end < 0:
+                raise ValueError('Unterminated archive path')
+            if offset < directory_end or offset + size > total:
+                raise ValueError('Archive entry lies outside payload')
+            entries[directory[pos + 8:end].decode('cp1252').replace('\\', '/').lower()] = (offset, size)
+            pos = end + 1
+        return entries
 
     def read_bytes(self, key):
         offset, size = self.entries[key]

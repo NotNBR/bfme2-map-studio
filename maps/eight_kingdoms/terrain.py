@@ -9,6 +9,7 @@ from collections import deque
 import numpy as np
 from PIL import Image, ImageFilter
 from mapworkshop.mapkit.earth import fbm, thermal_erosion
+from mapworkshop.mapkit.lines import polyline_distance
 
 
 def build(k):
@@ -55,7 +56,7 @@ def build(k):
     z=thermal_erosion(z,iterations=6)
     road=np.full(k.SHAPE,np.inf)
     for path in k.reference_routes():
-        road=np.minimum(road,k.distance(x,y,path))
+        road=np.minimum(road,polyline_distance(path,x,y,reach=500)[0])   # every use compares it against less
     # Grade only narrow passes. Retain the reference's rolling ground around them.
     grade=(1-k.smooth(80,210,road))*k.smooth(.78,.98,shore)
     target=k.GROUND+np.minimum(relief*.18,45)+4*broad
@@ -78,7 +79,7 @@ def build(k):
         # Conservative authoring-grid proxy inside the documented 76 x 275
         # model half-extents. This is not a replacement for native ramp layers.
         deck|=(np.abs(along)<=275)&(np.abs(across)<=64)
-        road=np.minimum(road,k.distance(x,y,bridge['ends']))
+        road=np.minimum(road,polyline_distance(bridge['ends'],x,y,reach=500)[0])
     # Preserve the internal hollows without the former bridge's rectangular bed
     # or level abutments. Uneven oval rims blend into the surrounding rock slopes.
     for gap in k.ISLAND_GAPS:

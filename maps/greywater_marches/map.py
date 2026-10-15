@@ -619,7 +619,7 @@ def plan_sites(t):
 def decorate(m,t):
     rng=random.Random(SEED); placed=Counter(); occupied=[];buckets={};largest_gap=0
     from mapworkshop.render.assets import GameAssets
-    assets=GameAssets(); kinds={}
+    assets=GameAssets.shared(); kinds={}
     def vegetation(template):
         if template not in kinds:
             r=assets.template_model(template)
@@ -733,7 +733,7 @@ def build(b):
     # the overflow to map-local full-model templates (see mapkit.vegetation).
     from mapworkshop.mapkit.vegetation import plan as vegetation_plan, rename as vegetation_rename
     from mapworkshop.render.assets import GameAssets
-    assets=GameAssets()
+    assets=GameAssets.shared()
     def model_texture(model):
         key=assets.model_key(model)
         found=re.search(rb'([A-Za-z0-9_]+\.(?:tga|dds))',assets.read(key),re.I) if key else None

@@ -55,6 +55,17 @@ class GameAssets:
             stem = key.rsplit('/', 1)[-1]
             self.basenames.setdefault(stem.rsplit('.', 1)[0], []).append(key)
 
+    _shared = None
+
+    @classmethod
+    def shared(cls):
+        """One instance of the configured game's assets for the whole process,
+        so that a build indexes the archives and parses the INIs once. Treat
+        it as read-only; for a map's own templates use for_map, which copies."""
+        if cls._shared is None:
+            cls._shared = cls()
+        return cls._shared
+
     # Files ------------------------------------------------------------------
     def read(self, key):
         key = key.replace('\\', '/').lower()

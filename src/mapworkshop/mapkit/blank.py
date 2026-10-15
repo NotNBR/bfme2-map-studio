@@ -64,7 +64,7 @@ def terrain_cell_sizes(palette):
     declared, so the declaration must not exceed the installed texture.
     """
     from mapworkshop.render.assets import GameAssets
-    assets = GameAssets()
+    assets = GameAssets.shared()
     sizes = []
     for name in palette:
         file = assets.terrain_textures.get(name.lower())

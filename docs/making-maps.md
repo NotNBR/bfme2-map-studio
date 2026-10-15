@@ -89,6 +89,11 @@ Building blocks, in `src/mapworkshop/`:
   `set_world` (WorldInfo values by name, e.g. `cameraMaxHeight`).
 - `mapkit.earth` (`fbm` noise, `thermal_erosion`) and `mapkit.relief`
   (`distance_to`, smoothing): landforms.
+- `mapkit.lines`: distance from every terrain sample to authored lines
+  (`polyline_distance` with the arc length along the line, `nearest` of
+  several). Pass `reach` for fields only compared against short distances,
+  such as roads and lanes: it measures each segment only against the samples
+  near it, with the same values there, and is far faster on long lines.
 - `mapkit.variety`: `spot_random(seed, template, x, y)`, an object's own random
   numbers for its size and rotation. Drawn from one shared stream instead, every
   object after an added or skipped placement would get a new size, and a small

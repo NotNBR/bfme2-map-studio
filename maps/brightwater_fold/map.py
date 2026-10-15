@@ -23,6 +23,7 @@ import numpy as np
 
 from mapworkshop.mapkit.blank import (add_object, create, set_heights, set_materials, starts, terrain_cell_sizes,
                                       water_plane)
+from mapworkshop.mapkit.lines import nearest, polyline_distance
 from mapworkshop.mapkit.earth import fbm
 from mapworkshop.mapkit.variety import spot_random
 from mapworkshop.mapkit.ambient import ambient, along
@@ -197,21 +198,6 @@ def smooth_min(a, b, k):
     return b*(1-h)+a*h-k*h*(1-h)
 
 
-def polyline_distance(points, x, y):
-    """Distance from every sample to the polyline, and the arc length of its nearest point."""
-    best = np.full(x.shape, np.inf); along = np.zeros(x.shape); s = 0.
-    for (ax, ay), (bx, by) in zip(points, points[1:]):
-        dx, dy = bx-ax, by-ay; length2 = dx*dx+dy*dy
-        if length2 == 0:
-            continue
-        t = np.clip(((x-ax)*dx+(y-ay)*dy)/length2, 0, 1)
-        d = np.hypot(x-ax-t*dx, y-ay-t*dy)
-        closer = d < best
-        best = np.where(closer, d, best); along = np.where(closer, s+t*math.sqrt(length2), along)
-        s += math.sqrt(length2)
-    return best, along
-
-
 def river_line():
     """The whole river, smoothed."""
     return chaikin(UPSTREAM[:-1]+[(C, C)]+turned(UPSTREAM[:-1])[::-1], 4)
@@ -333,10 +319,9 @@ def roads():
 
 
 def road_field(t, lines):
-    d = np.full(t['z'].shape, np.inf)
-    for line in lines:
-        d = np.minimum(d, polyline_distance(line, t['x'], t['y'])[0])
-    return d
+    """Distance to the nearest of the lines, exact within 500 (every use compares
+    it against less); inf beyond."""
+    return nearest(lines, t['x'], t['y'], reach=500)
 
 
 def materials(t):
@@ -1227,7 +1212,6 @@ def fairness(t, solids, sites):
 
 
 def build(b):
-    from mapworkshop.render.assets import GameAssets
     if b.project.players != len(STARTS):
         raise ValueError(f'map.toml has {b.project.players} players, but the dale has {len(STARTS)} starts')
     m = create(WIDTH, HEIGHT, BORDER, title=b.project.title, description=b.project.description,
@@ -1237,7 +1221,7 @@ def build(b):
     crossings(t)
     t['paddock'] = paddock_distance(t)
     t['hold_paths'] = hold_paths(t)
-    s = Scenery(m, t, GameAssets())
+    s = Scenery(m, t, b.assets)
     bridges(s, t)
     sites = neutral_sites(t)
     relief(t)
