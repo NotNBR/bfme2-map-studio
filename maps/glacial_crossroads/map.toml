@@ -2,5 +2,11 @@ id = "glacial-crossroads"
 title = "Glacial Crossroads"
 native_name = "map mp glacial crossroads"
 players = 16
-description = "Phase-one 16-site high mountain landscape with a central ice field. Terrain review draft."
+description = "Sixteen-site alpine landscape with twin glacier ruptures, narrow snowy passes, spruce groves, moraine boulders and ruined Dwarven waystations."
 weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+[properties.ini.Weather]
+# The stock 660-unit cloud repeat looks like a grid across this large sheet.
+# Broad moving cloud shade lets the snow and blue fracture textures read.
+CloudTextureSize = [5200.0, 4700.0]
+CloudOffsetPerSecond = [-0.002, -0.003]

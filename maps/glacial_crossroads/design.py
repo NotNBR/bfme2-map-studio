@@ -1,7 +1,8 @@
-"""Phase-one geometry from the supplied vector layout, x east and y north.
+"""Layout anchors and natural route geometry, x east and y north.
 
-All sixteen numbered sites and sixty route axes retain their reference
-positions. Its 68 ridge shapes define the base cirques and valley divides.
+All sixteen numbered sites retain their reference positions. The sixty
+connections follow gently warped routes through the mountain shoulders.
+The 68 reference ridge shapes guide the base cirques and valley divides.
 The SVG map rectangle is uniformly scaled into 28,500 units,
 leaving mountain space at the edges. Its background is not elevation data.
 """
@@ -73,7 +74,30 @@ def reference():
     return sorted(bases, key=lambda b: b['number']), routes
 
 
-BASES, ROUTES = reference()
+BASES, REFERENCE_ROUTES = reference()
+
+
+def natural_points(points, spacing=100.):
+    """A shared, smooth geographic deformation preserves route junctions.
+
+    All paths and crests use the same field, so crossing lines stay joined.
+    Base anchors and the ice field are pinned; bends emerge between them.
+    """
+    points = np.asarray(points, float)
+    samples = []
+    for a, b in zip(points[:-1], points[1:]):
+        count = max(1, int(np.ceil(np.linalg.norm(b-a)/spacing)))
+        samples.extend(a+(b-a)*t for t in np.linspace(0, 1, count, endpoint=False))
+    samples.append(points[-1])
+    p = np.asarray(samples)
+    x, y = p.T
+    weight = np.clip((np.hypot(x-CENTRE[0], y-CENTRE[1])-2300)/1800, 0, 1)
+    for base in BASES:
+        weight = np.minimum(weight, np.clip((np.hypot(x-base['x'], y-base['y'])-1050)/1500, 0, 1))
+    weight = weight*weight*(3-2*weight)
+    dx = 520*np.sin(y/2350+.5*np.sin(x/4400))+180*np.sin((x+y)/1200+.4)
+    dy = 470*np.sin(x/2600+1.1+.4*np.sin(y/3500))+160*np.sin((y-x)/1450)
+    return (p+np.column_stack((dx*weight, dy*weight))).tolist()
 
 
 def floor_height(radius):
@@ -115,7 +139,7 @@ def mountain_ridges():
     for group in root.find("s:g[@id='mountain-ridges']", NS):
         name = group.get('id')
         crest = group.findall('s:path', NS)[-1]
-        p = simplify(path_points(crest.get('d')))
+        p = simplify(natural_points(path_points(crest.get('d'))))
         if 'outer-corner' in name:
             rise, spread = 850., 740.
         elif 'outer-shoulder' in name:
@@ -134,3 +158,6 @@ def mountain_ridges():
 
 
 RIDGES = mountain_ridges()
+ROUTES = [dict(route, reference_points=route['points'],
+               points=simplify(natural_points(route['points']), tolerance=5).tolist())
+          for route in REFERENCE_ROUTES]

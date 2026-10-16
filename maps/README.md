@@ -10,7 +10,7 @@ docstring at the top of its `map.py`.
 
 | Map | Id | Players | Build | |
 |---|---|---|---|---|
-| [Glacial Crossroads](glacial_crossroads/README.md) | `glacial-crossroads` | 16-site draft | `map.py`, `design.py` | first-phase mountain terrain from the supplied SVG: high corners, middle terraces, low inner bases and a central ice field |
+| [Glacial Crossroads](glacial_crossroads/README.md) | `glacial-crossroads` | 16-site landscape | `map.py`, `design.py`, `terrain.py`, `features.py`, `scenery.py` | eroded alpine ranges, snowy passes, spruce groves and Dwarven ruins around a central ice field split by two deep ruptures |
 | [The Greywater Marches](greywater_marches/README.md) | `greywater-marches` | 6 | `map.py`, `scenery.py` | rocky grasslands, mountain passes and branching rivers, from a supplied heightmap |
 | [The Hollin Dales](hollin_dales/README.md) | `hollin-dales` | 6 (3 vs 3) | `map.py` | autumn Eregion: a closed dale per player, gate-courts, the Sirannon through the ruins of Ost-in-Edhil |
 | [Bramble Hollow](bramble_hollow/README.md) | `bramble-hollow` | 2 | `map.py` | a Shire valley: millpond hamlet, wooden footbridges, a creek gorge |
