@@ -27,14 +27,23 @@ Every object of the original (1,883) belongs to one of these:
   builds farms at the one nearest its base): spread evenly over walkable
   ground at the original's spacing and its clearance from blocked ground, as
   many as the original's per area. Each comes with its half-turn twin.
-- Neutral sites and lairs, for sixteen players: two for each of the
-  original's, side by side where it stands. Outposts east and west of it;
-  signal fires and the strip's lairs across the raised centre strip, one on
-  each team's side; inns north and south in the central arena; cave troll
-  lairs on either side of their (widened) ramp's foot. They keep their
-  original's facing and flag offset. The north ones are made from the
-  original's north ones and the south ones are their half-turn twins, so
-  every team finds the same.
+- Neutral sites and lairs, all in the middle as in the original: none on
+  the plateau, the pockets or the forward terraces, so the game is fought
+  forward, side against side. What scales with the players is the economy:
+  - COPIED: the original's own, one for one where it stands: an outpost in
+    each basin lane's far corner, a cave troll lair at each forward ramp's
+    foot, and on each centre strip a signal fire on its tip above the arena,
+    a fire drake lair halfway and a goblin lair at its far end. They keep
+    their original's facing and flag offset. The north ones are made from
+    the original's north ones and the south ones are their half-turn twins,
+    so every team finds the same.
+  - One inn, as in the original, in the central arena, its flag on the
+    centre of the half-turn: as far from every base as from its twin.
+  - A second outpost in each basin lane (`lanes`, chosen in map.py), at its
+    inner end, where it opens into the arena: so each lane has a safe
+    expansion in its corner and an exposed one the enemy reaches over the
+    strip, and sixteen players have eight outposts, as the original's eight
+    have four.
 - One for one, stretched: the plateau columns, Gollum's spawn points and the
   ambient sound stream.
 
@@ -51,7 +60,7 @@ import numpy as np
 
 from mapworkshop.mapkit.blank import add_object
 from mapworkshop.mapkit.relief import distance_to
-from mapworkshop.mapkit.sites import creep_lair, gollum_spawns, neutral_site
+from mapworkshop.mapkit.sites import creep_lair, flag_position, gollum_spawns, neutral_site
 
 SEED = 'nanduhirion-v1'
 LIFE = ('Crow', 'Rabbit', 'Boar', 'Dog', 'Dog1', 'Wolf', 'AnimalWanderPoint')
@@ -71,9 +80,8 @@ OBJECTIVE_CLEAR = dict(ruin=140, tree=130, shrub=90, life=90, sound=0, farm=0)
 RUIN_CLEAR = 40                 # trees and shrubs keep this from ruins
 FARM_FROM_BLOCKED = 115         # the original's farm sites: at least this from blocked ground
 
-# Neutral sites and lairs: how the pair stands where the original's one did.
-PAIRS = {'Outpost': ('east-west', 650), 'SignalFire': ('strip', 330), 'FireDrakeLair': ('strip', 330),
-         'MoriarGoblinLair': ('strip', 330), 'Inn': ('arena', 500), 'CaveTrollLair': ('ramp', 330)}
+# Neutral sites and lairs copied one for one where the original's stand.
+COPIED = ('Outpost', 'SignalFire', 'FireDrakeLair', 'MoriarGoblinLair', 'CaveTrollLair')
 OBJECTIVE_GROUND = 120          # a neutral site's ground within this is walkable and level
 OBJECTIVE_RELIEF = 20.0
 
@@ -308,36 +316,32 @@ def flag_offset(site, flags):
     return math.hypot(dx, dy), math.atan2(dy, dx) - site['angle']
 
 
-def objectives(originals, scale, centre, twin, ramps):
-    """The neutral sites and lairs: (template, x, y, angle, flag or None),
-    two for each north original and the twins of those."""
+def objectives(originals, scale, centre, twin, lanes, sites):
+    """The neutral sites and lairs: (template, x, y, angle, flag or None):
+    a copy of each north original (COPIED) and its twin, the inn, and the
+    lanes' second outposts (`lanes`: the north ones) and their twins, each
+    facing its nearest base site."""
     sx, sy, _ = scale
     flags = [o for o in originals if o['template'] == 'CaptureFlag']
-    north = [o for o in originals if o['template'] in PAIRS and o['y']*sy > centre[1]]
     out = []
-    for o in north:
-        x, y = o['x']*sx, o['y']*sy
-        how, off = PAIRS[o['template']]
-        if how == 'east-west':
-            pair = [(x - off, y), (x + off, y)]
-        elif how == 'strip':
-            pair = [(centre[0] - off, y), (centre[0] + off, y)]
-        elif how == 'arena':
-            pair = [(centre[0], centre[1] + off)]          # its twin is the south one
-        else:
-            top, bottom = min(ramps, key=lambda r: math.dist(r[1], (x, y)))
-            ux, uy = bottom[0] - top[0], bottom[1] - top[1]
-            length = math.hypot(ux, uy); ux, uy = ux/length, uy/length
-            s = (x - top[0])*ux + (y - top[1])*uy
-            a = max(abs(-(x - top[0])*uy + (y - top[1])*ux), off)
-            pair = [(top[0] + ux*s - uy*a, top[1] + uy*s + ux*a), (top[0] + ux*s + uy*a, top[1] + uy*s - ux*a)]
-        link = flag_offset(o, flags) if o['template'] in ('Outpost', 'SignalFire', 'Inn') else None
-        for p in pair:
-            for (px, py), angle in ((p, o['angle']), (twin(p), o['angle'] + math.pi)):
-                flag = None
-                if link:
-                    flag = (px + link[0]*math.cos(angle + link[1]), py + link[0]*math.sin(angle + link[1]))
-                out.append((o['template'], px, py, angle, flag))
+
+    def add(template, p, angle, link=None):
+        for (px, py), a in ((p, angle), (twin(p), angle + math.pi)):
+            flag = (px + link[0]*math.cos(a + link[1]), py + link[0]*math.sin(a + link[1])) if link else None
+            out.append((template, px, py, a, flag))
+    for o in originals:
+        if o['template'] in COPIED and o['y']*sy > centre[1]:
+            link = flag_offset(o, flags) if o['template'] in ('Outpost', 'SignalFire') else None
+            add(o['template'], (o['x']*sx, o['y']*sy), o['angle'], link)
+    inn = next(o for o in originals if o['template'] == 'Inn')
+    distance, turn = flag_offset(inn, flags)
+    a = inn['angle'] + turn
+    out.append(('Inn', centre[0] - distance*math.cos(a), centre[1] - distance*math.sin(a), inn['angle'], centre))
+    for p in lanes:
+        near = min(sites, key=lambda s: math.dist(s, p))
+        facing = math.atan2(near[1] - p[1], near[0] - p[0])
+        fx, fy = flag_position('Outpost', 0, 0, facing)
+        add('Outpost', p, facing, (math.hypot(fx, fy), math.atan2(fy, fx) - facing))
     return out
 
 
@@ -353,13 +357,14 @@ def check_objectives(placed, ground):
     return problems
 
 
-def populate(m, original, source, ground, scale, sites, centre, twin, ramps):
+def populate(m, original, source, ground, scale, sites, centre, twin, lanes):
     """Add the original's objects to `m` (see the module docstring).
     `original`: the original's objects; `source`, `ground`: Ground of the
     original and of this map; `scale`: (sx, sy, sz); `sites`: the sixteen
-    base sites. Returns what was placed, for the report."""
+    base sites; `lanes`: the north basin lanes' second outposts. Returns what
+    was placed, for the report."""
     sx, sy, _ = scale
-    placed = objectives(original, scale, centre, twin, ramps)
+    placed = objectives(original, scale, centre, twin, lanes, sites)
     problems = check_objectives(placed, ground)
     if problems:
         raise ValueError('Neutral sites on blocked or uneven ground: ' + '; '.join(problems))
@@ -389,4 +394,5 @@ def populate(m, original, source, ground, scale, sites, centre, twin, ramps):
     sown = farm_sites(farms[0], ground, sites, twin, round(len(farms)*sx*sy))
     tally['farm'] = dict(original=len(farms), wanted=round(len(farms)*sx*sy), placed=len(sown))
     m.set_objects(m.objects() + scenery + sown)
-    return dict(objects=tally, objectives=Counter(t for t, *_ in placed), spawns=len(spawns))
+    return dict(objects=tally, objectives=Counter(t for t, *_ in placed), spawns=len(spawns),
+                outposts=[(x, y) for t, x, y, *_ in placed if t == 'Outpost'])

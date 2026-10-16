@@ -43,6 +43,9 @@ so every site and ramp in the west has a twin in the east.
   has one. Site k+8 is site k's twin.
 - STARTS: the sites with player starts while the game seats eight, one per
   base area a side; players 1-4 west, 5-8 east.
+- Neutral sites stay in the middle, as in the original (scenery.py). The
+  original's four outposts become eight: LANE_OUTPOSTS adds a second to each
+  basin lane.
 - RAMPS: the forward terraces' ramps down into the north and south basins
   were 460 wide after the stretch, against 700-850 for the map's other
   ramps, and with eight armies a side they would be the narrowest way into
@@ -63,8 +66,9 @@ so every site and ramp in the west has a twin in the east.
 
 The build refuses a layout in which a site has less than MIN_OPEN units of
 flat, open ground around it, cannot be walked to from the centre, or walks
-there more than 5% farther than its twin. report.json lists both per site,
-and layout.png shows the levels, the sites and the ramps.
+there or to its nearest outpost more than 5% farther than its twin.
+report.json lists these per site, and layout.png shows the levels, the sites
+and the ramps.
 """
 import math
 import re
@@ -117,6 +121,13 @@ SITES = [p for _, p in WEST_SITES] + [twin(p) for _, p in WEST_SITES]
 SITE_NAMES = [f'west {name}' for name, _ in WEST_SITES] + [f'east, twin of {k}' for k in range(1, 9)]
 STARTS = [1, 4, 6, 8, 9, 12, 14, 16]   # site numbers; all sixteen once the game seats sixteen
 MIN_OPEN = 650                  # flat open ground every site needs around it, map units
+
+# Each basin lane's second outpost, north lanes (the south ones are their
+# twins): at the lane's inner end, where it opens into the arena, under the
+# forward terrace's cliff; the nearest ground to it level enough for a
+# neutral site, here and at its twin. The lane's first is the original's, in
+# its far corner.
+LANE_OUTPOSTS = [(5810, 10380), (8390, 10340)]
 
 # The forward terraces' ramps into the north and south basins, (top, bottom).
 WEST_RAMPS = [((4696, 10857), (5197, 11275)), ((4647, 3018), (5085, 2658))]
@@ -444,7 +455,7 @@ def build(b):
     sections.write(m, 'BlendTileData', blend)
     starts(m, [SITES[k - 1] for k in STARTS])
     placed = populate(m, src['objects'], Ground(src['heights'], src['impassable'], src['labels'], names, src['border']),
-                      Ground(z, impassable, painted, names, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
+                      Ground(z, impassable, painted, names, BORDER), (sx, sy, sz), SITES, CENTRE, twin, LANE_OUTPOSTS)
     look = dict(src['look'])
     look['EnvironmentData'] = dict(look['EnvironmentData'], macro_texture_stretched=1)
     for name, value in look.items():
@@ -456,17 +467,22 @@ def build(b):
     walk, _ = walk_grid(m)
     field = distance_field(walk, CENTRE)
     walks = [at(field, walk, p) for p in SITES]
+    outposts = [distance_field(walk, p) for p in placed['outposts']]
+    to_outpost = [min(at(f, walk, p) for f in outposts) for p in SITES]
     b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed, ramps_cleaned=cleaned,
                     blends={f'{names[a]} > {names[b]}': [names[k] for k in steps] for (a, b), steps in chosen.items()},
                     sites=[
         dict(site=k, name=name, x=p[0], y=p[1], open=round(r), walk_to_centre=round(d),
-             player=STARTS.index(k) + 1 if k in STARTS else None)
-        for k, (name, p, r, d) in enumerate(zip(SITE_NAMES, SITES, opens, walks), 1)])
+             walk_to_outpost=round(o), player=STARTS.index(k) + 1 if k in STARTS else None)
+        for k, (name, p, r, d, o) in enumerate(zip(SITE_NAMES, SITES, opens, walks, to_outpost), 1)])
     b.image('layout.png', plan(z, impassable, opens))
     problems = [f'site {k}: {r:.0f} units of open ground' for k, r in enumerate(opens, 1) if r < MIN_OPEN]
     problems += [f'site {k}: no way to the centre' for k, d in enumerate(walks, 1) if not math.isfinite(d)]
     problems += [f'sites {k} and {k + 8}: {walks[k - 1]:.0f} and {walks[k + 7]:.0f} to the centre'
                  for k in range(1, 9) if abs(walks[k - 1] - walks[k + 7]) > .05*min(walks[k - 1], walks[k + 7])]
+    problems += [f'sites {k} and {k + 8}: {to_outpost[k - 1]:.0f} and {to_outpost[k + 7]:.0f} to an outpost'
+                 for k in range(1, 9)
+                 if abs(to_outpost[k - 1] - to_outpost[k + 7]) > .05*min(to_outpost[k - 1], to_outpost[k + 7])]
     if problems:
         raise ValueError('Layout: ' + '; '.join(problems))
     clouds = (f'Weather\n  CloudTextureSize = X:{CLOUD_SIZE[0]:.1f} Y:{CLOUD_SIZE[1]:.1f}\n'
