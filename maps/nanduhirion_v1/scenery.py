@@ -3,18 +3,25 @@ its placement logic, on this map's scale.
 
 Every object of the original (1,883) belongs to one of these:
 
-- Scenery and life: trees, shrubs, Amon Hen ruins, animals and ambient sound
-  emitters. Their density is kept. Each original object stands for the
-  ground around it, which is now SX*SY (8.2) times as large, so it gets that
-  many copies, drawn within its own spacing to its nearest neighbour around
-  it in the original's frame and stretched onto this map. Groves, thickets
-  and ruin fields therefore keep their density and outline and grow with the
-  terrain. A copy keeps its original's template and properties, and stands
-  on the same kind of ground: the same passability, within HEIGHT_MATCH of
-  its height (scaled), on a texture its group stands on in the original, and
-  at least its group's closest original spacing (10th percentile) from the
-  others. Trees, shrubs and life turn freely; ruins keep their original's
-  facing, within 0.3, as they line the cliff edges.
+- Scenery and life: trees, shrubs, Amon Hen ruins and animals are copied by
+  the clump. The original keeps them in small clumps (mostly 2 to 6, linked
+  within twice their group's median spacing), and each clump is copied whole
+  with its layout and spacing. A clump lining a cliff edge (a member within
+  EDGE of it: all the ruins, about 40% of the trees and shrubs) gets as many
+  copies as the cliff edges grew (2.9 times), at its own distance from the
+  edge and unturned; one in the open gets as many as the ground grew (SX*SY,
+  8.2 times), turned freely. The copies are drawn around the clump's place in
+  the original's frame, within the distance to its nearest neighbouring
+  clump, stretched onto this map, and stand as far from other clumps as the
+  original's do. So each kind of place looks as in the original at the same
+  zoom: the same clumps at the same spacing in the open, the same spacing
+  along the cliffs. Then AMOUNT (1.5) times as many copies are asked for,
+  for a fuller map; where the clumps' spacing leaves no room, fewer stand.
+  Ambient sound emitters are copied one by one, by the same rule. Every copy keeps its original's template and properties and stands on
+  the same kind of ground: the same passability, within HEIGHT_MATCH of its
+  height (scaled) and on a texture its group stands on in the original.
+  Trees, shrubs and life turn freely; ruins keep their original's facing,
+  within 0.3, turned with their clump.
 - The skirmish AI's farm sites (FarmTemplate, invisible in the game; the AI
   builds farms at the one nearest its base): spread evenly over walkable
   ground at the original's spacing and its clearance from blocked ground, as
@@ -48,9 +55,13 @@ from mapworkshop.mapkit.sites import creep_lair, gollum_spawns, neutral_site
 SEED = 'nanduhirion-v1'
 LIFE = ('Crow', 'Rabbit', 'Boar', 'Dog', 'Dog1', 'Wolf', 'AnimalWanderPoint')
 GROUPS = ('ruin', 'tree', 'shrub', 'life', 'sound')          # placed in this order
+CLUMPED = ('ruin', 'tree', 'shrub', 'life')                   # copied by the clump; sound one by one
 LAYERS = dict(ruin='Ruins', tree='Trees', shrub='Shrubs', life='Life', sound='Sound', farm='Farm sites')
 HEIGHT_MATCH = 40.0             # a copy stands within this of its original's height, scaled
-TRIES = 40                      # attempts per copy
+TRIES = 60                      # attempts per copy
+AMOUNT = 1.5                    # copies asked for, over what the original's density gives
+EDGE = 60.0                     # a clump with a member this close to a cliff edge lines the edge
+EDGE_MATCH = 20.0               # its copies stand within this of its distance to the edge
 # Free space the original keeps (its nearest object of each group) around
 # its starts and around its neutral sites and lairs, map units.
 SITE_CLEAR = dict(ruin=450, tree=190, shrub=130, life=190, sound=0, farm=510)
@@ -97,10 +108,24 @@ class Spacing:
 
 
 class Ground:
-    """A terrain's height, passability and texture at map points."""
+    """A terrain's height, passability, texture and distance to the cliff
+    edges at map points."""
     def __init__(self, z, impassable, labels, names, border):
         self.z, self.impassable, self.labels, self.names, self.border = z, impassable, labels, names, border
         self.extent = (z.shape[1] - 2*border)*10, (z.shape[0] - 2*border)*10
+        blocked = np.asarray(impassable, bool)
+        # Signed: positive on open ground, negative on blocked ground.
+        self.edges = (distance_to(blocked) - distance_to(~blocked))*10
+
+    def edge(self, x, y):
+        """Distance to the nearest edge of blocked ground, negative on it."""
+        return float(self.edges[self.cell(x, y)])
+
+    def edge_length(self):
+        """The length of the edges between open and blocked playable ground."""
+        b = self.border
+        play = np.asarray(self.impassable, bool)[b:-b, b:-b]
+        return float(((play[1:] != play[:-1]).sum() + (play[:, 1:] != play[:, :-1]).sum())*10)
 
     def cell(self, x, y):
         return int(y//10) + self.border, int(x//10) + self.border
@@ -141,53 +166,110 @@ def clear_masks(shape, border, points):
     return masks
 
 
+def clumps(P, link):
+    """The objects at points P in clumps: chains of neighbours at most `link`
+    apart. Lists of indices."""
+    parent = list(range(len(P)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    cells = defaultdict(list)
+    for i, (x, y) in enumerate(P):
+        cells[int(x//link), int(y//link)].append(i)
+    for (cx, cy), ids in cells.items():
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in cells.get((cx + dx, cy + dy), ()):
+                    for i in ids:
+                        if i < j and math.dist(P[i], P[j]) <= link:
+                            parent[root(i)] = root(j)
+    out = defaultdict(list)
+    for i in range(len(P)):
+        out[root(i)].append(i)
+    return list(out.values())
+
+
+def nearest(P):
+    """Each point's distance to its nearest other point."""
+    d = np.hypot(P[:, None, 0] - P[None, :, 0], P[:, None, 1] - P[None, :, 1])
+    np.fill_diagonal(d, np.inf)
+    return d.min(1)
+
+
 def copies(originals, source, ground, scale, masks, ruins):
     """The scenery and life copies, as object dicts, and per group how many
-    the original's density asks for and how many were placed."""
+    the original's clumps ask for and how many were placed."""
     sx, sy, sz = scale
-    k = sx*sy
+    area, line = sx*sy, ground.edge_length()/source.edge_length()
     out, tally, n = [], {}, 0
     for g in GROUPS:
         objs = [o for o in originals if group(o['template']) == g]
         P = np.array([(o['x'], o['y']) for o in objs])
-        d = np.hypot(P[:, None, 0] - P[None, :, 0], P[:, None, 1] - P[None, :, 1])
-        np.fill_diagonal(d, np.inf)
-        nearest = d.min(1)
-        median = float(np.median(nearest))
-        reach = np.clip(nearest, median/2, 4*median)
-        gap = float(np.percentile(nearest, 10))
+        spacing = nearest(P)
+        link = 2*float(np.median(spacing)) if g in CLUMPED else 0.0
+        found = clumps(P, link) if link else [[i] for i in range(len(objs))]
+        centres = np.array([P[c].mean(0) for c in found])
+        apart = nearest(centres) if len(found) > 1 else np.array([link])
+        reach = np.clip(apart, link or float(np.median(spacing)), 4*float(np.median(apart)))
         hosts = Counter(source.texture(o['x'], o['y']) for o in objs)
         allowed = {t for t, c in hosts.items() if c >= .01*len(objs)}
-        spacing, mask = Spacing(gap), masks[g]
-        wanted = placed = 0
-        for i, o in enumerate(objs):
-            rng = random.Random(f'{SEED}:{g}:{i}')
-            count = int(k) + (rng.random() < k - int(k))
-            wanted += count
-            level, blocked = source.height(o['x'], o['y'])*sz, source.blocked(o['x'], o['y'])
+        others = Spacing(link or float(np.percentile(spacing, 10)))   # from the other clumps
+        mask = masks[g]
+        wanted = placed = edge_clumps = 0
+        for k, members in enumerate(found):
+            rng = random.Random(f'{SEED}:{g}:{k}')
+            c = centres[k]
+            lines = min(source.edge(*P[i]) for i in members) <= EDGE
+            edge_clumps += lines
+            factor = (line if lines else area)*AMOUNT
+            count = int(factor) + (rng.random() < factor - int(factor))
+            wanted += count*len(members)
             made = 0
             for _ in range(TRIES*count):
                 if made == count:
                     break
-                a, r = rng.uniform(-math.pi, math.pi), reach[i]*math.sqrt(rng.random())
-                x, y = (o['x'] + r*math.cos(a))*sx, (o['y'] + r*math.sin(a))*sy
-                if not ground.inside(x, y) or mask[ground.cell(x, y)]:
+                a, r = rng.uniform(-math.pi, math.pi), reach[k]*math.sqrt(rng.random())
+                cx, cy = (c[0] + r*math.cos(a))*sx, (c[1] + r*math.sin(a))*sy
+                if not ground.inside(cx, cy):
                     continue
-                if (ground.blocked(x, y) != blocked or abs(ground.height(x, y) - level) > HEIGHT_MATCH
-                        or ground.texture(x, y) not in allowed or not spacing.free(x, y)):
-                    continue
-                if g in ('tree', 'shrub') and not ruins.free(x, y, RUIN_CLEAR):
-                    continue
-                angle = o['angle'] + rng.uniform(-.3, .3) if g == 'ruin' else rng.uniform(-math.pi, math.pi)
-                n += 1
-                out.append(dict(template=o['template'], x=x, y=y, z=o['z'], angle=angle, flags=o['flags'],
-                                properties=properties(o, f"{o['template']} {n}", LAYERS[g])))
-                spacing.add(x, y)
-                if g == 'ruin':
-                    ruins.add(x, y)
-                made += 1
-            placed += made
-        tally[g] = dict(original=len(objs), wanted=wanted, placed=placed)
+                if lines:
+                    if abs(ground.edge(cx, cy) - source.edge(*c)) > EDGE_MATCH:
+                        continue
+                    turn = 0.0
+                else:
+                    if ground.edge(cx, cy) <= EDGE:
+                        continue
+                    turn = rng.uniform(-math.pi, math.pi)
+                cos, sin = math.cos(turn), math.sin(turn)
+                spots = []
+                for i in members:
+                    o = objs[i]
+                    dx, dy = o['x'] - c[0], o['y'] - c[1]
+                    x, y = cx + dx*cos - dy*sin, cy + dx*sin + dy*cos
+                    if (not ground.inside(x, y) or mask[ground.cell(x, y)]
+                            or ground.blocked(x, y) != source.blocked(o['x'], o['y'])
+                            or abs(ground.height(x, y) - source.height(o['x'], o['y'])*sz) > HEIGHT_MATCH
+                            or ground.texture(x, y) not in allowed or not others.free(x, y)
+                            or (g in ('tree', 'shrub') and not ruins.free(x, y, RUIN_CLEAR))):
+                        break
+                    spots.append((o, x, y))
+                else:
+                    for o, x, y in spots:
+                        angle = (o['angle'] + turn + rng.uniform(-.3, .3) if g == 'ruin'
+                                 else rng.uniform(-math.pi, math.pi))
+                        n += 1
+                        out.append(dict(template=o['template'], x=x, y=y, z=o['z'], angle=angle, flags=o['flags'],
+                                        properties=properties(o, f"{o['template']} {n}", LAYERS[g])))
+                        others.add(x, y)
+                        if g == 'ruin':
+                            ruins.add(x, y)
+                    placed += len(spots)
+                    made += 1
+        tally[g] = dict(original=len(objs), clumps=len(found), along_cliffs=edge_clumps,
+                        wanted=wanted, placed=placed)
     return out, tally
 
 
@@ -196,9 +278,8 @@ def farm_sites(prototype, ground, sites, twin, count):
     walkable ground FARM_FROM_BLOCKED from blocked ground and SITE_CLEAR
     from the base sites, each with its twin."""
     z, border = ground.z, ground.border
-    clear = distance_to(ground.impassable)*10
     yy, xx = ((np.mgrid[0:z.shape[0], 0:z.shape[1]] - border)*10.0 + 5)
-    ok = (clear >= FARM_FROM_BLOCKED) & ~ground.impassable
+    ok = ground.edges >= FARM_FROM_BLOCKED
     ok[:border + 2] = ok[-border - 2:] = False
     ok[:, :border + 2] = ok[:, -border - 2:] = False
     for x, y in sites:

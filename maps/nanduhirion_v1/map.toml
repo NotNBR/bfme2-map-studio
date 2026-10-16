@@ -2,5 +2,4 @@ id = "nanduhirion-v1"
 title = "Nanduhirion v1"
 native_name = "map mp nanduhirion v1"
 players = 8
-description = "The terrain of Nanduhirion, stretched to 14250 x 14250 map units. Terrain and player starts only."
-weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+description = "Nanduhirion stretched to 14250 x 14250 map units and laid out for 8 vs 8, with its scenery, light and neutral sites."

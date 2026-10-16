@@ -14,9 +14,13 @@ its heights 2.86 times, the geometric mean of the two, so cliffs stay cliffs.
   way; every new cell takes the texture whose field is highest, and
   set_materials blends the boundaries again. The source has no cliff mapping.
 - The impassable and flammability planes are resampled the same way.
-Not copied: the source's lighting and camera settings. Its objects are
-placed again at their density and by their placement logic, on this map's
-scale: scenery.py.
+- Its look is copied as it is (LOOK): the lighting (overbright, warm sun,
+  green fill), the environment's macro and cloud textures, the colour grade
+  (a lookup table post effect, which the renderer does not draw) and its
+  map.ini, which leaves the game's default weather. map.toml names no
+  weather preset for that reason.
+Not copied: the source's camera settings. Its objects are placed again at
+their density and by their placement logic, on this map's scale: scenery.py.
 
 The layout. Nanduhirion is a stepped bowl, west against east: the battle
 basin in the middle (height 0), a forward terrace on each side (143), an
@@ -55,12 +59,13 @@ from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.blank import create, set_heights, set_materials, starts, terrain_cell_sizes
 from mapworkshop.mapkit.checks.strategy import at, distance_field, walk_grid
 from mapworkshop.mapkit.relief import distance_to
-from mapworkshop.mapkit.weather import apply_weather, ini_block
 
 from .scenery import Ground, populate
 
 ARCHIVE = '__patch202.big'      # in the ROTWK folder
 SOURCE = 'maps/map mp nanduhirion/map mp nanduhirion.map'
+SOURCE_INI = 'maps/map mp nanduhirion/map.ini'
+LOOK = ('GlobalLighting', 'EnvironmentData', 'PostEffectsChunk')   # copied from the source
 WIDTH = HEIGHT = 1425           # playable size in cells: 14,250 map units
 BORDER = 30                     # cells of unplayable border around it
 
@@ -98,18 +103,21 @@ STEEP = 10.0                    # a cell whose corners differ more than this is 
 
 def source():
     """Nanduhirion's heights (map units), texture names and labels per cell,
-    impassable and flammability planes, border and objects."""
+    impassable and flammability planes, border, objects, its LOOK sections
+    and its map.ini."""
     folder = setting('rotwk')
     if not folder:
         raise RuntimeError('The source map is in the ROTWK folder: mw config rotwk DIR')
-    m = Map(BigArchive(Path(folder)/ARCHIVE).read_bytes(SOURCE))
+    archive = BigArchive(Path(folder)/ARCHIVE)
+    m = Map(archive.read_bytes(SOURCE))
     t, b = m.heightmap(), m.blend()
     tile_starts = [tex['tile_start'] for tex in b['textures']]
     return dict(heights=t['elevations']*.0390625, border=t['border'],
                 names=[tex['name'] for tex in b['textures']],
                 labels=np.searchsorted(tile_starts, b['arrays']['tiles'], side='right') - 1,
                 impassable=b['arrays']['impassable'], flammability=b['arrays']['flammability'],
-                objects=m.objects())
+                objects=m.objects(), look={name: sections.read(m, name) for name in LOOK},
+                ini=archive.read(SOURCE_INI))
 
 
 def grid(cells, scale, border, size, centre=False):
@@ -277,7 +285,8 @@ def build(b):
     starts(m, [SITES[k - 1] for k in STARTS])
     placed = populate(m, src['objects'], Ground(src['heights'], src['impassable'], src['labels'], names, src['border']),
                       Ground(z, impassable, labels, palette, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
-    apply_weather(m, b.project.weather)
+    for name, value in src['look'].items():
+        sections.write(m, name, value)
 
     # Every site needs open ground, a way to the centre, and the same walk as its twin.
     space = open_ground(z, impassable)
@@ -296,4 +305,4 @@ def build(b):
                  for k in range(1, 9) if abs(walks[k - 1] - walks[k + 7]) > .05*min(walks[k - 1], walks[k + 7])]
     if problems:
         raise ValueError('Layout: ' + '; '.join(problems))
-    b.save(m, ini=ini_block(b.project.weather))
+    b.save(m, ini=src['ini'])
