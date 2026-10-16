@@ -1,0 +1,6 @@
+id = "nanduhirion-enlarged"
+title = "Nanduhirion Enlarged"
+native_name = "map mp nanduhirion enlarged"
+players = 8
+description = "The terrain of Nanduhirion, stretched to 14250 x 14250 map units. Terrain and player starts only."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

@@ -19,6 +19,9 @@ docstring at the top of its `map.py`.
 | [The Crown of Cardolan](crown_of_cardolan/README.md) | `crown-of-cardolan` | 8 | `build.py` | a fallen Arnorian hill-city, barrows and old woodland |
 | [The Ashen March](ashen_march/README.md) | `ashen-march` | 2 | `build.py` | a ruined Gondorian watch on the edge of Mordor; the first map built from an empty document |
 | [Ithilien Frontier](ithilien_frontier/README.md) | `ithilien-frontier` | 2 | `build.py` | the stock Ithilien enlarged threefold, with new relief and scenery |
+| [Nanduhirion](nanduhirion/map.py) | `nanduhirion` | 8 | `map.py` | the community 2.02 patch's Nanduhirion, unchanged, beside its enlarged copy |
+| [Nanduhirion Enlarged](nanduhirion_enlarged/map.py) | `nanduhirion-enlarged` | 8 | `map.py` | the terrain of the 2.02 patch's Nanduhirion stretched to 14,250 x 14,250; terrain and player starts only |
+| [Nanduhirion v1](nanduhirion_v1/map.py) | `nanduhirion-v1` | 8 (16 sites) | `map.py` | Nanduhirion Enlarged laid out for 8 vs 8: sixteen base sites, eight with starts while the game seats eight, wider ramps into the basins |
 
 The `build.py` projects are older: their `main()` reads output folders from
 globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
