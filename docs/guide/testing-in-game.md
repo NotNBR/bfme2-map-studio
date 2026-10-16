@@ -5,7 +5,8 @@ The renderer and the walkability estimate are fast previews; the game decides.
 showing it: `mw walkable --native` (its pathfinding grid) and `mw capture`
 (screenshots). All three run an isolated copy of the game, so your own install,
 profile and saved games are untouched. [The runtime](../game/runtime.md)
-describes how they work.
+describes how they work. `mw play --godot` opens the map in OpenBFME, the
+Godot rebuild of ROTWK, instead ([below](#openbfme-mw-play---godot)).
 
 With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
 directly in a player-versus-easy-AI skirmish. The isolated runtime uses BFME2
@@ -72,6 +73,48 @@ much of the screen per step at any zoom. The camera stays the game's own
 until you first zoom or tilt, and scripted camera moves hand it back to the
 game. The game draws no sky near the horizon, so low angles show black above
 the terrain, and the map's edge shows as black.
+
+## OpenBFME: `mw play --godot`
+
+`mw play <map> --godot` opens the map in
+[OpenBFME](https://github.com/Open-BFME/openbfme-godot), a rebuild of ROTWK
+2.01 in Godot, instead of the original game. OpenBFME opens at its main menu;
+pick the map under Skirmish. In the viewer, choose **OpenBFME (Godot)** in the
+dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
+skirmish instead: OpenBFME clicks through its menus, starts the map against an
+AI, plays five seconds of game time and closes. The report goes to
+`local/openbfme/logs/check-<map>.json`, with the load time, the logic frame
+and the number of objects. A failure prints OpenBFME's reason. Either uses the
+current build of the active profile; OpenBFME always plays it with ROTWK 2.01's
+data.
+
+The first run sets up everything in `local/openbfme/`, in about three
+minutes plus the time to check the game files:
+
+- **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
+  `mw setup`). It also downloads llvm-mingw and Godot 4.7.2, pinned to their
+  releases' SHA-256, then builds the engine. CMake and Ninja must be on PATH
+  or in the studio's environment (`pip install cmake ninja`). Windows only.
+  A later run rebuilds only when the submodule's commit changes.
+- **Engine patch:** `native/openbfme.patch` adds one thing upstream lacks:
+  the `OPENBFME_EXTRA_ARCHIVES` variable, which mounts extra `.big` files.
+  OpenBFME reads maps only from verified archives and ignores loose map files.
+  So each map is packed into `local/openbfme/maps/<name>.big`, and
+  `local/openbfme/mapcache.big` carries the Skirmish list (retail's
+  `maps\mapcache.ini` plus every packed map).
+- **Game files:** OpenBFME accepts only unmodified English ROTWK 2.01 and
+  BFME2 1.06 archives (its policies are in the submodule's
+  `engine/data/retail-archives/`). Mod, patch 2.02 and other-language archives
+  are refused. The run hard-links every file whose MD5 matches from your
+  configured installs (`mw config game` and `rotwk`) into
+  `local/openbfme/assets/`. If some are missing, it lists them, and
+  `--download` fetches them from the service the OpenBFME launcher uses,
+  checking each file's MD5.
+
+OpenBFME has eight player slots, so a map lists its first eight starts. Its
+profile, options and logs stay in `local/openbfme/appdata/`. `mw doctor`
+reports how far the setup has got. OpenBFME is an alpha: what it does not do
+yet is listed in its README.
 
 ## The game's pathfinding grid: `mw walkable --native`
 

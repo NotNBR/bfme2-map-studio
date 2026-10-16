@@ -1,3 +1,8 @@
 [submodule "src/mapworkshop/native/loading"]
 	path = src/mapworkshop/native/loading
 	url = https://github.com/NotNBR/bfme2-map-quickload.git
+[submodule "src/mapworkshop/native/openbfme-godot"]
+	path = src/mapworkshop/native/openbfme-godot
+	url = https://github.com/Open-BFME/openbfme-godot
+	update = none
+	ignore = dirty

@@ -21,6 +21,7 @@ USAGE = """
                              --no-cache: make every stored calculation again)
   mw view [MAP]              open the viewer
   mw play [MAP]              test it in-game: start BFME2 straight in a skirmish on it
+                             (--godot: in OpenBFME, RotWK rebuilt in Godot)
   mw marks [MAP] [--json]    print the viewer's marks, for an agent
   mw history [MAP]           earlier builds
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
@@ -73,6 +74,11 @@ def parser():
                    help='Detail level of the test game (default Medium)')
     s.add_argument('--fog', action='store_true',
                    help='Keep the shroud and fog of war (by default the map is revealed)')
+    s.add_argument('--godot', '--openbfme', dest='godot', action='store_true',
+                   help='Start OpenBFME (RotWK rebuilt in Godot) instead, with the map in its Skirmish list; '
+                        'the first time builds the engine (with --check: a headless scripted skirmish)')
+    s.add_argument('--download', action='store_true',
+                   help="With --godot: download the unmodified game files your installs lack (the OpenBFME launcher's source)")
     s = sub.add_parser('history', help='Earlier builds of a map')
     s.add_argument('map', nargs='?')
     s = sub.add_parser('config', help='Show or change settings')
@@ -200,6 +206,9 @@ def cmd_doctor(args):
     check((ROOT/'src/mapworkshop/native/loading/bin/loading.dll').exists(),
           'bfme2-map-quickload submodule (faster map loading in test games)',
           'Run `git submodule update --init` (or `mw setup`).', required=False)
+    from mapworkshop.native import openbfme
+    ok, text = openbfme.status()
+    check(ok, f'OpenBFME (mw play --godot): {text}', required=False)
     try:
         import moderngl
         ctx = moderngl.create_standalone_context(require=430)
@@ -294,12 +303,26 @@ def cmd_play(args, extra):
     from mapworkshop.config import GAME_LABEL, PROFILE
     if args.check and args.normal_game:
         raise RuntimeError('--check cannot be combined with --normal-game')
+    if args.godot and args.normal_game:
+        raise RuntimeError('--godot cannot be combined with --normal-game')
+    if args.download and not args.godot:
+        raise RuntimeError('--download is for --godot')
     p = project.find(args.map)
     if args.rebuild or not p.map_file.exists():
         code = _build(p, extra)
         if code:
             return code
     project.remember(p)
+    if args.godot:
+        from mapworkshop.native import openbfme
+        if args.check:
+            report = openbfme.check(p, progress=say, download=args.download)
+            say(f'OpenBFME played {p.title}: loaded in {report.get("load_ms", 0)/1000:.1f} s, logic frame {report["frame"]} '
+                f'with {report["objects"]} objects. Report: {openbfme.LOGS/f"check-{p.id}.json"}')
+            return 0
+        openbfme.play(p, progress=say, download=args.download)
+        say(f'OpenBFME is starting: pick "{p.title}" under Skirmish. Its logs: {openbfme.APPDATA}')
+        return 0
     if args.check:
         from mapworkshop import native
         native.check(p, graphics=args.graphics, progress=say)

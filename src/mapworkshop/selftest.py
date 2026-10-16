@@ -44,9 +44,25 @@ def _units(node):
     return found
 
 
+def submodules():
+    """The submodules' folders: other repositories, which the checks leave alone."""
+    return [ROOT/line.split('=', 1)[1].strip() for line in (ROOT/'.gitmodules').read_text().splitlines()
+            if line.strip().startswith('path')] if (ROOT/'.gitmodules').exists() else []
+
+
+def _ours(paths, modules=None):
+    modules = submodules() if modules is None else modules
+    return [p for p in paths if not any(m in p.parents for m in modules)]
+
+
+# The OpenBFME submodule's own tools: another project's Python, not the studio's.
+# (native/loading's build.py is the studio's and stays checked.)
+FOREIGN_PYTHON = [ROOT/'src/mapworkshop/native/openbfme-godot']
+
+
 def check_layers():
     problems = []
-    for path in sorted((ROOT/'src/mapworkshop').rglob('*.py')):
+    for path in sorted(_ours((ROOT/'src/mapworkshop').rglob('*.py'), FOREIGN_PYTHON)):
         rel = path.relative_to(ROOT/'src/mapworkshop')
         if 'tests' in rel.parts:
             continue
@@ -64,7 +80,7 @@ def check_layers():
 def check_syntax():
     problems = []
     for base in ('src', 'maps', 'misc'):
-        for path in (ROOT/base).rglob('*.py'):
+        for path in _ours((ROOT/base).rglob('*.py'), FOREIGN_PYTHON):
             if '__pycache__' in path.parts:
                 continue
             try:
@@ -76,10 +92,7 @@ def check_syntax():
 
 def documents():
     """The repository's Markdown files, without local/ and the submodules (other repositories)."""
-    modules = [ROOT/line.split('=', 1)[1].strip() for line in (ROOT/'.gitmodules').read_text().splitlines()
-               if line.strip().startswith('path')] if (ROOT/'.gitmodules').exists() else []
-    return [p for p in ROOT.rglob('*.md') if not ({'local', '.git', '.claude', 'node_modules'} & set(p.relative_to(ROOT).parts))
-            and not any(m in p.parents for m in modules)]
+    return _ours(p for p in ROOT.rglob('*.md') if not ({'local', '.git', '.claude', 'node_modules'} & set(p.relative_to(ROOT).parts)))
 
 
 def _prose(text):

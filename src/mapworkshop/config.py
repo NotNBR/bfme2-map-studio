@@ -10,6 +10,7 @@ Everything the workshop writes stays in the ignored `local/` folder:
     local/renders/       renders and viewer screenshots
     local/videos/        videos
     local/cache/         caches
+    local/openbfme/      OpenBFME for `mw play --godot` (native.openbfme)
 
 ROTWK keeps the same layout under local/profiles/rotwk/, except for the
 shared config.toml. Map sources are shared; generated output is isolated.

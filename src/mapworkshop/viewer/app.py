@@ -32,7 +32,9 @@ Toolbar
   Build      rebuild the current project; the scene reloads when it is done and
              a failed build shows its error in the status bar. The chip at the
              right shows a running build, then when the last one ended
-  Test In-Game  start BFME2 straight in a skirmish on the current project (mw play)
+  Test In-Game  start BFME2 straight in a skirmish on the current project (mw play);
+             the dropdown beside it picks OpenBFME instead (mw play --godot), and
+             is remembered (test_game in local/config.toml)
   Preview    how the map is shown, without changing it: detail level (Low,
              Medium, High), the map's own weather or a preset (clear, haze, rain,
              snow, dusk), the weather's own sun or a light rig over it
@@ -75,12 +77,12 @@ import moderngl
 import numpy as np
 
 from mapworkshop import game, project
-from mapworkshop.config import RENDERS, GAME_LABEL
+from mapworkshop.config import RENDERS, GAME_LABEL, save_setting, setting
 from mapworkshop.mapkit.weather import PRESETS, SUNS
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.camera import Camera
 from mapworkshop.viewer.commands import Command, Commands
-from mapworkshop.viewer.jobs import Build, MarksSummary, Status, Walkability, play
+from mapworkshop.viewer.jobs import TEST_GAMES, Build, MarksSummary, Status, Walkability, play
 from mapworkshop.viewer.marking import CLICK_PIXELS, MarkEditor, summary_lines
 from mapworkshop.viewer.overlay import MarkOverlay
 from mapworkshop.viewer.palette import Palette
@@ -178,12 +180,16 @@ class Viewer:
         self.focus_text, self.focus_sample = '', 0.0
         self.properties = None             # the Properties window (viewer.properties)
         self.properties_saved = None       # the project its Save wrote, for the frame loop to build
+        self.test_game = setting('test_game', 'original')   # what Test In-Game starts: TEST_GAMES
+        if self.test_game not in TEST_GAMES:
+            self.test_game = 'original'
         # Map actions, then how the map is previewed and what is shown, then
         # the camera; at the right the status text, the last build and the
         # frame rate.
         self.toolbar = Toolbar(ctx, [
             dict(kind='dropdown', id='map', label='Map'), dict(kind='button', id='properties', label='Properties'),
             dict(kind='button', id='build', label='Build'), dict(kind='button', id='play', label='Test In-Game'),
+            dict(kind='dropdown', id='test_game'),
             dict(kind='gap'),
             dict(kind='dropdown', id='preview', label='Preview'),
             dict(kind='dropdown', id='view', title='View'),
@@ -234,7 +240,7 @@ class Viewer:
             # Toolbar buttons and keys. Build, Test In-Game and Properties need
             # no scene: they work while the first load is still running or after it failed.
             Command('build', lambda: self.build.start(self.session.owner), keys=('Ctrl+B',), needs_scene=False),
-            Command('play', lambda: play(self.session.owner, self.status), needs_scene=False),
+            Command('play', lambda: play(self.session.owner, self.status, self.test_game), needs_scene=False),
             Command('properties', self.open_properties, needs_scene=False),
             Command('reload', self.request_reload, keys=('F5',), needs_scene=False),
             Command('back', self.back, keys=('Esc',), needs_scene=False),
@@ -304,6 +310,10 @@ class Viewer:
                     [(None, 'Sun', None), entry('sun', 'own', "Weather's own")] +
                     [entry('sun', k, v['label']) for k, v in SUNS.items()] +
                     [(None, '', None), (None, "The map's own weather: Properties", None)])
+        if menu == 'test_game':
+            return [(None, 'Test In-Game starts', None),
+                    ('original', f'{GAME_LABEL}, straight in a skirmish', self.test_game == 'original'),
+                    ('openbfme', 'OpenBFME (Godot), at its menu', self.test_game == 'openbfme')]
         if menu == 'fps':
             label = lambda v: dict(vsync='VSync (monitor rate)', unlimited='Unlimited').get(v, f'{v} fps')
             return [(v, label(v), self.fps_limit == v) for v in FPS_LIMITS[:-2]] + [(None, '', None)] + \
@@ -334,6 +344,7 @@ class Viewer:
         if o['sun'] != 'own':
             preview.append(SUNS[o['sun']]['label'])
         return dict(map=self.session.title(), preview=' · '.join(preview), status=status,
+                    test_game='OpenBFME' if self.test_game == 'openbfme' else GAME_LABEL,
                     build_chip=self.build_chip(),
                     fps=f'{self.fps:.0f} fps' + ('' if self.fps_limit in ('vsync', 'unlimited')
                                                  else f' / {self.fps_limit}'))
@@ -403,7 +414,11 @@ class Viewer:
             self.toolbar.open_menu = (menu, self.menu_entries(menu))
             return
         self.toolbar.open_menu = None
-        if menu == 'fps':
+        if menu == 'test_game':
+            self.test_game = value
+            save_setting('test_game', value)
+            self.status.set('Test In-Game starts ' + ('OpenBFME' if value == 'openbfme' else GAME_LABEL), 4)
+        elif menu == 'fps':
             self.fps_limit = value
             glfw.swap_interval(1 if value == 'vsync' else 0)
             self.next_frame = 0.0

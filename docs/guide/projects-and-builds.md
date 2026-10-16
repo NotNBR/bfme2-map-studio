@@ -212,13 +212,15 @@ local/history/<map>/   earlier builds, one folder per build
 local/marks/           viewer marks, one file per map
 local/renders/         renders and viewer screenshots
 local/runtime/         the isolated copy of the game test games run in
+local/openbfme/        OpenBFME for `mw play --godot`: its tools, build, game files and packed maps
 local/workspaces/      hand-edit workspaces for single .map files
 local/cache/           caches (the asset catalogue among them)
 ```
 
 `mw config` prints the settings; `mw config KEY` one of them and
 `mw config KEY VALUE` changes it (`game`, the BFME2 folder, which also runs the
-setup; `last_map`, the map commands use when none is given).
+setup; `last_map`, the map commands use when none is given; `test_game`, what
+the viewer's **Test In-Game** starts: `original` or `openbfme`).
 
 `profile` selects `bfme2` or `rotwk`; `rotwk` is the expansion folder. The ROTWK
 profile puts the output folders above under `local/profiles/rotwk/`, while

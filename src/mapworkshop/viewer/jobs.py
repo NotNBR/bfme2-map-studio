@@ -84,12 +84,18 @@ class Build:
         threading.Thread(target=work, daemon=True).start()
 
 
-def play(owner, status):
+TEST_GAMES = ('original', 'openbfme')     # the toolbar's choice for Test In-Game (setting test_game)
+
+
+def play(owner, status, test_game='original'):
     """Test In-Game: BFME2 straight in a skirmish on the project (native.play),
     or, when that cannot run (no BFME2 1.06) or for a game map (owner None),
-    the normal game at its menu."""
+    the normal game at its menu. With test_game 'openbfme', OpenBFME at its
+    menu with the project's map in the Skirmish list (native.openbfme)."""
     from mapworkshop import game
     from mapworkshop.config import GAME_LABEL, PROFILE
+    if test_game == 'openbfme':
+        return play_openbfme(owner, status)
 
     def normal_game(note=''):
         if owner:
@@ -124,6 +130,23 @@ def play(owner, status):
             threading.Thread(target=work, daemon=True).start()
     except Exception as error:
         status.set(str(error)[:140], 10)
+
+
+def play_openbfme(owner, status):
+    """OpenBFME at its menu (mw play --godot); the first time also builds it,
+    which the status follows. A game map (owner None) is in its list already."""
+    def work():
+        try:
+            from mapworkshop.native import openbfme
+            process = openbfme.play(owner, progress=lambda line: status.set(line.strip()[:140], 600))
+            status.set(f'OpenBFME is open: pick {owner.title} under Skirmish' if owner else 'OpenBFME is open', 600)
+            process.wait()
+            status.set('OpenBFME has closed', 8)
+        except Exception as error:
+            status.set(f'OpenBFME: {str(error)[:130]}', 20)
+
+    status.set('preparing OpenBFME' + (f' with {owner.title}...' if owner else '...'), 600)
+    threading.Thread(target=work, daemon=True).start()
 
 
 class Walkability:

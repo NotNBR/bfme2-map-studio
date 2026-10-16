@@ -1,0 +1,425 @@
+"""OpenBFME: The Rise of the Witch-king 2.01 rebuilt in Godot
+(https://github.com/Open-BFME/openbfme-godot), started on a project's build
+by `mw play --godot`.
+
+The engine's source is the submodule native/openbfme-godot (`update = none`
+in .gitmodules: it is checked out on first use, not by every `mw setup`).
+openbfme.patch, applied to it before building, adds one thing upstream
+lacks: OPENBFME_EXTRA_ARCHIVES, .big files mounted over the retail archives.
+OpenBFME reads maps only from verified archives and ignores loose map files,
+so each installed map goes into a .big of its own, and the skirmish list's
+maps\\mapcache.ini (retail's, with the maps' entries added) into another.
+
+Everything else stays in local/openbfme/:
+
+    tools/      llvm-mingw (the C++ toolchain upstream cross-builds Windows
+                with) and Godot, downloaded once, checked against their
+                releases' SHA-256
+    build/      the engine's CMake build; the GDExtension goes to the
+                submodule's godot/bin/, where Godot loads it
+    assets/     rotwk/ and bfme2/: every archive OpenBFME's policies list
+                (engine/data/retail-archives), hard links to your installs'
+                files where their MD5 matches; OpenBFME refuses mod, patch
+                2.02 and other-language archives, which those installs may
+                hold. download=True fetches the rest from the service the
+                OpenBFME launcher uses (its pinned owner, MD5-checked).
+    maps/       <native name>.big and .ini (its map-cache entry) per map
+    mapcache.big  the merged maps\\mapcache.ini, mounted last
+    appdata/    the APPDATA the game gets: its options, logs and saves stay here
+    logs/       build and check logs, check-<map>.json
+
+OpenBFME has eight player slots; a map lists its first eight starts. Windows
+only: the toolchain is llvm-mingw's Windows-hosted build. CMake and Ninja
+must be on PATH or in the studio's virtual environment.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import time
+import zipfile
+from pathlib import Path
+
+from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
+
+SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
+PATCH = Path(__file__).resolve().parent/'openbfme.patch'
+HOME = LOCAL/'openbfme'
+TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
+MAPCACHE = HOME/'mapcache.big'
+
+LLVM_MINGW = 'llvm-mingw-20261006-ucrt-x86_64'
+LLVM_MINGW_URL = f'https://github.com/mstorsjo/llvm-mingw/releases/download/20261006/{LLVM_MINGW}.zip'
+LLVM_MINGW_SHA256 = '317492c456aa27ee607a5919f1d2d38dcdc1112516a24d0bf4b00d078f52d17a'   # GitHub's digest
+GODOT = 'Godot_v4.7.2-stable_win64'
+GODOT_URL = f'https://github.com/godotengine/godot/releases/download/4.7.2-stable/{GODOT}.exe.zip'
+GODOT_SHA256 = '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953'          # GitHub's digest
+DLL = 'godot/bin/openbfme.windows.template_debug.x86_64.dll'
+FILES = 'https://workshop-files.bfmeladder.com'      # aio_install.gd's FILES: <owner>/<md5>
+INSTALL = {'rotwk': 'ROTWK_INSTALL', 'bfme2': 'BFME2_INSTALL'}
+POLICY = {'rotwk': 'rotwk-201', 'bfme2': 'bfme2-106'}
+
+TOOLCHAIN = """# mapworkshop.native.openbfme: llvm-mingw on a Windows host (upstream's
+# engine/cmake/toolchains/windows-x64-llvm-mingw.cmake expects the Linux-hosted build's names).
+set(LLVM_MINGW_ROOT "{root}" CACHE PATH "llvm-mingw install root")
+set(CMAKE_C_COMPILER "${{LLVM_MINGW_ROOT}}/bin/x86_64-w64-mingw32-clang.exe")
+set(CMAKE_CXX_COMPILER "${{LLVM_MINGW_ROOT}}/bin/x86_64-w64-mingw32-clang++.exe")
+set(CMAKE_RC_COMPILER "${{LLVM_MINGW_ROOT}}/bin/x86_64-w64-mingw32-windres.exe")
+set(CMAKE_AR "${{LLVM_MINGW_ROOT}}/bin/llvm-ar.exe")
+set(CMAKE_RANLIB "${{LLVM_MINGW_ROOT}}/bin/llvm-ranlib.exe")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-static")
+"""
+
+
+# The engine -----------------------------------------------------------------------
+def _git(*args, cwd=ROOT):
+    result = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True)
+    if result.returncode:
+        raise RuntimeError(f'git {" ".join(args)}: {(result.stderr or result.stdout).strip()[-400:]}')
+    return result.stdout.strip()
+
+
+def source(progress=print):
+    """The submodule checked out (with its godot-cpp) and openbfme.patch applied."""
+    if not (SOURCE/'engine'/'CMakeLists.txt').exists():
+        progress('Fetching the OpenBFME submodule (about 90 MB, once)...')
+        _git('submodule', 'update', '--init', '--checkout', '--', SOURCE.relative_to(ROOT).as_posix())
+    if not (SOURCE/'engine/thirdparty/godot-cpp/CMakeLists.txt').exists():
+        _git('submodule', 'update', '--init', cwd=SOURCE)
+    try:
+        _git('apply', '--reverse', '--check', str(PATCH), cwd=SOURCE)       # already applied
+    except RuntimeError:
+        try:
+            _git('apply', str(PATCH), cwd=SOURCE)
+        except RuntimeError as error:
+            raise RuntimeError(f'openbfme.patch does not apply to OpenBFME {_git("rev-parse", "--short", "HEAD", cwd=SOURCE)}; '
+                               f'update {PATCH.name} for it ({error})') from None
+    return SOURCE
+
+
+def _fetch(url, target, progress=print, sha256=None, md5=None):
+    """Download url to target through target.part; the digest must match."""
+    import urllib.request
+    part = target.with_name(target.name + '.part')
+    part.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256() if sha256 else hashlib.md5()
+    request = urllib.request.Request(url, headers={'User-Agent': 'bfme2-map-workshop (+https://github.com/Open-BFME/openbfme-godot)'})
+    with urllib.request.urlopen(request, timeout=120) as response, part.open('wb') as out:
+        while block := response.read(1 << 20):
+            digest.update(block)
+            out.write(block)
+    if digest.hexdigest() != (sha256 or md5):
+        part.unlink()
+        raise RuntimeError(f'{url} does not match its pinned {"SHA-256" if sha256 else "MD5"}')
+    part.replace(target)
+    return target
+
+
+def toolchain(progress=print):
+    """llvm-mingw's folder and Godot's (window, console) executables, downloaded once."""
+    if os.name != 'nt':
+        raise RuntimeError('OpenBFME from the studio needs Windows (llvm-mingw\'s Windows-hosted toolchain)')
+    for name, url, sha256, size in ((LLVM_MINGW, LLVM_MINGW_URL, LLVM_MINGW_SHA256, '190 MB'),
+                                    (GODOT, GODOT_URL, GODOT_SHA256, '86 MB')):
+        done = TOOLS/name/'.complete'
+        if done.exists():
+            continue
+        progress(f'Downloading {name} ({size}, once)...')
+        archive = _fetch(url, TOOLS/(url.rsplit('/', 1)[1]), progress, sha256=sha256)
+        shutil.rmtree(TOOLS/name, ignore_errors=True)
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(TOOLS if name == LLVM_MINGW else TOOLS/name)    # llvm-mingw's zip has its own top folder
+        archive.unlink()
+        done.write_text(sha256, encoding='utf-8')
+    return TOOLS/LLVM_MINGW, TOOLS/GODOT/f'{GODOT}.exe', TOOLS/GODOT/f'{GODOT}_console.exe'
+
+
+def _program(name):
+    found = shutil.which(name) or next((str(p) for p in [Path(sys.executable).parent/f'{name}.exe'] if p.exists()), None)
+    if not found:
+        raise RuntimeError(f'Building OpenBFME needs {name}: install it, or `pip install cmake ninja` into the studio\'s environment')
+    return found
+
+
+def _stamp():
+    """What the build depends on: the submodule's commit, the patch, the toolchain."""
+    head = _git('rev-parse', 'HEAD', cwd=SOURCE)
+    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes()).hexdigest()
+
+
+def build(progress=print):
+    """Build the GDExtension and import the Godot project, unless already done for
+    this commit, patch and toolchain. Returns Godot's (window, console) executables."""
+    source(progress)
+    llvm, gui, console = toolchain(progress)
+    stamp = BUILD/'stamp.txt'
+    if stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (SOURCE/DLL).exists():
+        return gui, console
+    cmake, ninja = _program('cmake'), _program('ninja')
+    BUILD.mkdir(parents=True, exist_ok=True)
+    LOGS.mkdir(parents=True, exist_ok=True)
+    (BUILD/'toolchain.cmake').write_text(TOOLCHAIN.format(root=llvm.as_posix()), encoding='utf-8')
+    env = dict(os.environ, PATH=os.pathsep.join([str(llvm/'bin'), str(Path(ninja).parent), os.environ.get('PATH', '')]))
+    log = LOGS/'build.log'
+    with log.open('w', encoding='utf-8') as out:
+        steps = [[cmake, '-S', str(SOURCE/'engine'), '-B', str(BUILD), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+                  '-DOPENBFME_LAME=OFF', '-DOPENBFME_BUILD_GODOT=ON', f'-DCMAKE_MAKE_PROGRAM={ninja}',
+                  f'-DPython3_EXECUTABLE={sys.executable}', f'-DCMAKE_TOOLCHAIN_FILE={(BUILD/"toolchain.cmake").as_posix()}'],
+                 [cmake, '--build', str(BUILD), '--target', 'openbfme']]
+        progress('Building the OpenBFME engine (the first build takes a few minutes)...')
+        for command in steps:
+            process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                       encoding='utf-8', errors='replace')
+            shown = 0
+            for line in process.stdout:
+                out.write(line)
+                if m := re.match(r'\[(\d+)/(\d+)\]', line):
+                    percent = int(m[1])*100//int(m[2])
+                    if percent >= shown + 10:
+                        shown = percent - percent % 10
+                        progress(f'  {shown}%')
+            if process.wait():
+                raise RuntimeError(f'The OpenBFME build failed (exit {process.returncode}); see {log}')
+    progress('Importing the Godot project...')
+    result = subprocess.run([str(console), '--headless', '--path', str(SOURCE/'godot'), '--import'], env=_environment([]),
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=1200)
+    if result.returncode:
+        (LOGS/'import.log').write_text(result.stdout + result.stderr, encoding='utf-8')
+        raise RuntimeError(f'Godot could not import the OpenBFME project; see {LOGS/"import.log"}')
+    stamp.write_text(_stamp(), encoding='utf-8')
+    return gui, console
+
+
+# The game's files -------------------------------------------------------------------
+def required():
+    """{game: [(path, md5, size)]}: every archive of OpenBFME's English policies,
+    and RotWK's cursors (pinned in the launcher's download list)."""
+    files = {}
+    for game, name in POLICY.items():
+        policy = json.loads((SOURCE/f'engine/data/retail-archives/{name}-english-archives.json').read_text(encoding='utf-8'))
+        files[game] = [(a['path'], a['md5'], a['size']) for a in policy['archives']]
+    _, pinned = pins()['rotwk']
+    files['rotwk'] += [f for f in pinned if f[0].lower().startswith('data/cursors/')]
+    return files
+
+
+def pins(text=None):
+    """{game: (owner, [(path, md5, size)])} from the launcher's aio_pins.gd."""
+    text = text if text is not None else (SOURCE/'launcher/scripts/core/aio_pins.gd').read_text(encoding='utf-8')
+    found = {}
+    for block in text.split('{"key": "')[1:]:
+        key = block.split('"', 1)[0]
+        owner = re.search(r'"owner": "([0-9a-f-]+)"', block)[1]
+        found[key] = owner, [(p, m, int(s)) for p, m, s in re.findall(r'\["([^"]+)", "([0-9a-f]{32})", (\d+)\]', block)]
+    return found
+
+
+class Hashes:
+    """MD5s of files, kept in local/openbfme/md5.json by path, size and time."""
+    def __init__(self, path):
+        self.path = path
+        try:
+            self.known = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            self.known = {}
+
+    def md5(self, path):
+        stat = path.stat()
+        key, seen = str(path.resolve()), self.known.get(str(path.resolve()))
+        if seen and seen[:2] == [stat.st_size, stat.st_mtime_ns]:
+            return seen[2]
+        with path.open('rb') as f:
+            digest = hashlib.file_digest(f, 'md5').hexdigest()
+        self.known[key] = [stat.st_size, stat.st_mtime_ns, digest]
+        return digest
+
+    def save(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self.known), encoding='utf-8')
+
+
+def gather(files, target, roots, hashes, fetch=None, progress=print):
+    """Put every (path, md5, size) of `files` into `target`: kept if already there,
+    else a hard link (or copy) of the first root's file with that MD5, else
+    fetch(path, md5, destination) when given. Returns the files still missing."""
+    missing = []
+    for path, md5, size in files:
+        destination = target/path
+        if destination.exists() and destination.stat().st_size == size and hashes.md5(destination) == md5:
+            continue
+        for root in roots:
+            candidate = Path(root)/path
+            if candidate.is_file() and candidate.stat().st_size == size and hashes.md5(candidate) == md5:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.unlink(missing_ok=True)
+                try:
+                    os.link(candidate, destination)
+                except OSError:
+                    shutil.copy2(candidate, destination)
+                break
+        else:
+            if fetch is None:
+                missing.append((path, md5, size))
+            else:
+                progress(f'  downloading {path} ({size/1e6:.1f} MB)')
+                fetch(path, md5, destination)
+    return missing
+
+
+def assets(progress=print, download=False, roots=None):
+    """local/openbfme/assets/{rotwk,bfme2}, complete and verified. `roots`
+    ({game: [folders]}) are searched before the configured installs."""
+    roots = roots or {}
+    installs = {'rotwk': setting('rotwk'), 'bfme2': base_game_dir()}
+    hashes = Hashes(HOME/'md5.json')
+    owners = {game: owner for game, (owner, _) in pins().items()}
+    missing = {}
+    try:
+        for game, files in required().items():
+            folders = [*roots.get(game, []), *([installs[game]] if installs[game] else [])]
+            fetch = None
+            if download:
+                def fetch(path, md5, destination, game=game):
+                    _fetch(f'{FILES}/{owners[game]}/{md5}', destination, md5=md5)
+            missing[game] = gather(files, ASSETS/game, folders, hashes, fetch, progress)
+    finally:
+        hashes.save()
+    gi = ASSETS/'rotwk'/'gi.dat'                # UserDataLeafName: the profile folder's name
+    if not gi.exists() and installs['rotwk'] and (Path(installs['rotwk'])/'gi.dat').exists():
+        shutil.copy2(Path(installs['rotwk'])/'gi.dat', gi)
+    lacking = [(game, *f) for game, files in missing.items() for f in files]
+    if lacking:
+        size = sum(f[3] for f in lacking)
+        raise RuntimeError(f'OpenBFME needs {len(lacking)} unmodified English game files your installs lack '
+                           f'({", ".join(f"{g}/{p}" for g, p, _, _ in lacking[:4])}{", ..." if len(lacking) > 4 else ""}; '
+                           f'{size/1e6:.0f} MB). Add --download to fetch them from the service the OpenBFME launcher uses.')
+    return ASSETS
+
+
+# Maps ---------------------------------------------------------------------------------
+def write_big(path, files):
+    """A BIG4 archive of (name, bytes or Path): little-endian size, big-endian
+    count and end of directory; entries big-endian offset, size, then the path."""
+    names = [name.replace('/', '\\').encode('cp1252') + b'\0' for name, _ in files]
+    sizes = [len(data) if isinstance(data, bytes) else Path(data).stat().st_size for _, data in files]
+    end = 16 + sum(8 + len(n) for n in names) + 8               # + retail's 'L253' tail
+    offset, table = end, b''
+    for name, size in zip(names, sizes):
+        table += struct.pack('>II', offset, size) + name
+        offset += size
+    part = path.with_name(path.name + '.part')
+    with part.open('wb') as out:
+        out.write(b'BIG4' + struct.pack('<I', offset) + struct.pack('>II', len(files), end) + table + b'L253\0\0\0\0')
+        for _, data in files:
+            if isinstance(data, bytes):
+                out.write(data)
+            else:
+                with Path(data).open('rb') as f:
+                    shutil.copyfileobj(f, out, 1 << 22)
+    part.replace(path)
+    return path
+
+
+def merged_cache(retail, entries):
+    """Retail's mapcache.ini with each entry added (replacing one with its key)."""
+    for entry in entries:
+        key = entry.split('\n', 1)[0]
+        retail = re.sub(rf'(?ms)^{re.escape(key)}\s*\n.*?^END\s*\n?', '', retail)
+    return (retail.rstrip() + '\n\n' + '\n'.join(e.rstrip() + '\n' for e in entries)).replace('\r\n', '\n')
+
+
+def install(project, progress=print):
+    """Pack the project's build for OpenBFME and refresh the merged map cache.
+    Returns the archives to mount, the map cache last."""
+    from mapworkshop.formats.map import Map
+    from mapworkshop.mapkit.cache import cache_entry
+    name = project.native_name
+    files = [p for p in sorted(project.build_dir.iterdir()) if p.suffix.lower() in ('.map', '.tga') or p.name == 'map.ini']
+    archive, entry = MAPS/f'{name}.big', MAPS/f'{name}.ini'
+    MAPS.mkdir(parents=True, exist_ok=True)
+    if not (archive.exists() and entry.exists()) or archive.stat().st_mtime_ns < max(p.stat().st_mtime_ns for p in files):
+        progress(f'Packing {project.title} for OpenBFME...')
+        entry.write_text(cache_entry(project.map_file, Map(project.map_file.read_bytes()), name, project.title,
+                                     project.description or project.title), encoding='cp1252')
+        write_big(archive, [(f'maps/{name}/{p.name}', p) for p in files])
+    return archives()
+
+
+def archives():
+    """Every packed map's archive and the merged map cache, written again from
+    them; the archives to mount, the map cache last."""
+    from mapworkshop.formats.big import BigArchive
+    maps = [p for p in sorted(MAPS.glob('*.big')) if p.with_suffix('.ini').exists()]
+    retail = BigArchive(ASSETS/'rotwk'/'_patch201maps.big').read('maps/mapcache.ini')
+    cache = merged_cache(retail, [p.with_suffix('.ini').read_text(encoding='cp1252') for p in maps])
+    write_big(MAPCACHE, [('maps/mapcache.ini', cache.replace('\n', '\r\n').encode('cp1252'))])
+    return [*maps, MAPCACHE]
+
+
+# Running it ---------------------------------------------------------------------------
+def _environment(archives):
+    env = dict(os.environ, APPDATA=str(APPDATA), OPENBFME_EXTRA_ARCHIVES=';'.join(str(a) for a in archives))
+    env.update({variable: str(ASSETS/game) for game, variable in INSTALL.items()})
+    APPDATA.mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def prepare(project, progress=print, download=False):
+    """Engine, game files and the project's archive ready: (gui, console,
+    environment, map key). Without a project, only the maps packed before."""
+    gui, console = build(progress)
+    assets(progress, download)
+    if project is None:
+        return gui, console, _environment(archives()), None
+    return gui, console, _environment(install(project, progress)), f'maps/{project.native_name}/{project.native_name}.map'
+
+
+def play(project, progress=print, download=False):
+    """Open OpenBFME at its main menu with the project's map in the Skirmish
+    list (None: the game's maps and those packed before); returns the process."""
+    gui, _, env, _ = prepare(project, progress, download)
+    return subprocess.Popen([str(gui), '--path', str(SOURCE/'godot'), '--', '--no-intro', '--no-update-check', '--free-camera'],
+                            env=env, cwd=HOME, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def check(project, progress=print, download=False, seconds=5, timeout=600):
+    """A headless scripted skirmish on the map (OpenBFME's --auto: the menus are
+    clicked, you against an AI) for `seconds` of game time; saves
+    logs/check-<map>.json and raises RuntimeError unless the game ran."""
+    _, console, env, key = prepare(project, progress, download)
+    progress(f'Starting a headless OpenBFME skirmish on {project.title}...')
+    started = time.time()
+    result = subprocess.run([str(console), '--headless', '--path', str(SOURCE/'godot'), '--', '--auto', f'--map={key}',
+                             f'--advance={seconds}', '--no-intro', '--no-update-check'], env=env, cwd=HOME,
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
+    log = LOGS/f'check-{project.id}.log'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(result.stdout + result.stderr, encoding='utf-8')
+    report = dict(map=key, map_sha256=hashlib.sha256(project.map_file.read_bytes()).hexdigest(), exit=result.returncode,
+                  seconds=round(time.time() - started, 1), log=str(log),
+                  failures=re.findall(r'^GAME FAIL.*$', result.stdout, re.M))
+    if m := re.search(r'^GAME load: (\d+) ms', result.stdout, re.M):
+        report['load_ms'] = int(m[1])
+    if m := re.search(r'^GAME ran ([\d.]+) s: logic frame (\d+), (\d+) objects', result.stdout, re.M):
+        report.update(game_seconds=float(m[1]), frame=int(m[2]), objects=int(m[3]))
+    (LOGS/f'check-{project.id}.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+    if result.returncode or report['failures'] or 'frame' not in report:
+        raise RuntimeError(f'OpenBFME did not play {project.title}: '
+                           f'{(report["failures"] or ["exit " + str(result.returncode)])[0][:300]}; see {log}')
+    return report
+
+
+def status():
+    """(ready, text) for `mw doctor`."""
+    if not (SOURCE/'engine').exists():
+        return False, 'not set up: the first `mw play --godot` fetches and builds it'
+    if not (SOURCE/DLL).exists():
+        return False, 'submodule present, engine not built yet: `mw play --godot` builds it'
+    if not (ASSETS/'rotwk'/'_patch201maps.big').exists():
+        return False, 'engine built, game files not gathered yet: `mw play --godot` gathers them'
+    return True, f'built ({_git("rev-parse", "--short", "HEAD", cwd=SOURCE)}), game files in {ASSETS}'

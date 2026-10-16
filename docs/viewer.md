@@ -82,7 +82,12 @@ compilation can still cause short pauses.
   ([testing in the game](guide/testing-in-game.md)). The status bar says when
   the skirmish is playable and when the game has closed. When the game is not
   BFME2 1.06, or for one of the game's own maps, it starts the normal game at
-  its menu.
+  its menu. The dropdown beside the button picks what it starts: the selected
+  game, or **OpenBFME (Godot)**, which opens at its menu with the project's map
+  in the Skirmish list, as `mw play --godot` does
+  ([OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)). The first
+  OpenBFME start builds it, which the status bar follows. The choice is kept as
+  `test_game` in `local/config.toml`.
 - **Preview** shows the map another way without changing it. Its button shows
   the current choice, for example `Medium · Map's own`, and the menu stays open
   while you switch:
