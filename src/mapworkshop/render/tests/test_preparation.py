@@ -84,6 +84,24 @@ class PreparationTests(unittest.TestCase):
         self.assertIsNone(ref())
         self.assertFalse(hasattr(task.args[0], 'ctx'))
 
+    def test_world_builder_models_are_editor_markers_unless_they_stand_in(self):
+        draw = ('  Draw = W3DScriptedModelDraw ModuleTag_01\n'
+                '    DefaultModelConditionState\n      Model = {default}\n    End\n'
+                '    ModelConditionState = WORLD_BUILDER\n      Model = {editor}\n    End\n'
+                '    ModelConditionState = SNOW\n      Model = {snow}\n    End\n  End\n')
+        assets = GameAssets.__new__(GameAssets)
+        assets._templates = {
+            'farm': dict(name='Farm', parent=None, kind='Object', body='KindOf = TACTICAL_MARKER INERT\n'
+                         + draw.format(default='None', editor='GBFarm_WB', snow='None')),
+            'horde': dict(name='Horde', parent=None, kind='Object', body='KindOf = SELECTABLE HORDE\n'
+                          + draw.format(default='None', editor='HordeBanner', snow='None')),
+            'ruin': dict(name='Ruin', parent=None, kind='Object', body='KindOf = IMMOBILE\n'
+                         + draw.format(default='None', editor='RuinEditor', snow='RuinSnow'))}
+        farm, horde, ruin = (assets.template_model(name) for name in ('Farm', 'Horde', 'Ruin'))
+        self.assertEqual((farm['model'], farm['editor']), ('gbfarm_wb', True))
+        self.assertEqual((horde['model'], horde['editor']), ('hordebanner', False))
+        self.assertEqual((ruin['model'], ruin['editor']), ('ruinsnow', False))
+
 
 if __name__ == '__main__':
     unittest.main()

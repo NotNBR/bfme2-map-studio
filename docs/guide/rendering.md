@@ -58,6 +58,7 @@ Reusable view sets go in a JSON file passed with `--views`:
 | `--no-weather` | ignore the map.ini Weather block (fog, falling rain or snow) |
 | `--time SECONDS` | animation time: water ripples, clouds, falling rain and snow, particle effects (0) |
 | `--vegetation-limits` | keep only the game's first 1,200 trees and 2,000 shrubs, as the game does (default: draw every one) |
+| `--editor-markers` | also draw the WorldBuilder-only models the game never shows, such as the AI's farm sites (default: leave them out, as the game does) |
 | `--no-objects`, `--no-shadows`, `--no-clouds` | leave those out (the cloud texture is on in game, frozen at time 0 here) |
 | `--normal-maps auto\|on\|off` | terrain normal maps; auto follows `--lod` |
 | `--border` | draw the 30-cell border outside the playable area, which the game draws black (generators often fill it by repeating the edge, which looks streaked) |

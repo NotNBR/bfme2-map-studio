@@ -22,6 +22,11 @@ TEXTURE_EXTENSIONS = ('.dds', '.tga', '.jpg')
 # body, up to the next one. The game also reads indented definitions.
 TEMPLATE = re.compile(r'(?ms)^[ \t]*(Object|ObjectReskin|ChildObject)[ \t]+([^\s=]+)(?:[ \t]+([^\s;]+))?[^\n]*\n(.*?)'
                       r'(?=^[ \t]*(?:Object|ObjectReskin|ChildObject)[ \t]+[^\s=]|\Z)')
+# A draw module's WorldBuilder-only state: the editor shows its model, the game never does.
+WORLD_BUILDER = re.compile(r'(?ims)^\s*ModelConditionState\s*=\s*WORLD_BUILDER\b.*?^\s*End\b')
+# Templates whose editor model stands in for what the game makes of them:
+# a horde's units, a castle centre's castle.
+STAND_INS = {'HORDE', 'CASTLE_CENTER', 'BASE_FOUNDATION'}
 
 
 class GameAssets:
@@ -166,9 +171,13 @@ class GameAssets:
         """Draw information for a template's default state, or None.
 
         Returns dict(model, scale, texture, fuzziness, shadow, tree, kinds,
-        tainted). W3DTreeDraw's TextureName replaces the model's own texture,
-        as the tree buffer does; `kinds` is the template's KindOf set and
-        `tainted` W3DTreeDraw's TaintedTree (no sway).
+        tainted, editor). W3DTreeDraw's TextureName replaces the model's own
+        texture, as the tree buffer does; `kinds` is the template's KindOf set
+        and `tainted` W3DTreeDraw's TaintedTree (no sway). A model of the
+        WORLD_BUILDER state is taken only when the template has no other:
+        `editor` is then True for an editor marker the game does not draw at
+        all (FarmTemplate, the cinematic particle proxies), False for a horde
+        or castle centre, whose units or castle the game shows in its place.
         """
         cache = self.__dict__.setdefault('_models', {})
         if template.lower() not in cache:
@@ -208,20 +217,29 @@ class GameAssets:
                         found['texture'] = texture.group(1) if texture else None
                         found['tree'] = True
                         found['tainted'] = bool(re.search(r'(?im)^\s*TaintedTree\s*=\s*Yes', tree.group(0)))
-                for match in re.finditer(r'(?im)^\s*(?:Model|ModelName)\s*=\s*([\w.]+)', body):
+                game = WORLD_BUILDER.sub('', body)
+                for match in re.finditer(r'(?im)^\s*(?:Model|ModelName)\s*=\s*([\w.]+)', game):
                     if 'model' not in found and match.group(1).lower() != 'none':
                         found['model'] = match.group(1).lower()
                         # A model-condition texture swap (Texture = old new).
-                        swap = re.search(r'(?im)^\s*Texture\s*=\s*[\w.]+\s+([\w.]+)', body[match.end():])
+                        swap = re.search(r'(?im)^\s*Texture\s*=\s*[\w.]+\s+([\w.]+)', game[match.end():])
                         if swap and 'texture' not in found:
                             found['texture'] = swap.group(1)
+                for state in WORLD_BUILDER.findall(body):
+                    match = re.search(r'(?im)^\s*Model\s*=\s*(?!none\b)([\w.]+)', state)
+                    if match and 'editor_model' not in found:
+                        found['editor_model'] = match.group(1).lower()
             name = entry['parent']
+        editor = 'model' not in found and 'editor_model' in found
+        if editor:
+            found['model'] = found['editor_model']
         if 'model' not in found:
             return None
         return dict(model=found['model'], scale=found.get('scale', 1.0), texture=found.get('texture'),
                     fuzziness=found.get('fuzziness', 0.0), shadow=found.get('shadow', 'SHADOW_NONE'),
                     tree=found.get('tree', False), kinds=found.get('kinds', set()),
-                    tainted=found.get('tainted', False), prop=found.get('prop', False))
+                    tainted=found.get('tainted', False), prop=found.get('prop', False),
+                    editor=editor and not found.get('kinds', set()) & STAND_INS)
 
     def model_key(self, model):
         stem = model.lower().rsplit('.', 1)[0] if model.lower().endswith('.w3d') else model.lower()

@@ -58,6 +58,19 @@ Previews draw every tree and shrub of the map. The game keeps only the first
 `MapRenderer(vegetation_limits=True)`) applies those limits, and the render
 report lists how many were dropped under `vegetation`.
 
+A draw module's `ModelConditionState = WORLD_BUILDER` is the editor's: the
+game never enters that state. Templates whose only model is there are drawn
+by WorldBuilder and not by the game: the AI's `FarmTemplate`,
+`ExpansionLocatorTemplate`, `WallHubTemplate` and `ThreatFinder`, the
+cinematic particle, fire and smoke proxies, and the summoning eggs
+(`FarmTemplate`: `DefaultModelConditionState` `Model = None`,
+`WORLD_BUILDER` `GBFarm_WB`). The renderer leaves these editor markers out
+(`render --editor-markers`, `MapRenderer(editor_markers=True)` and the
+viewer's **Editor markers** draw them, and the render report counts them
+under `editor_markers`). Hordes and castle centres also have only an editor
+model; the game shows their units or castle in its place, so the renderer
+keeps drawing the editor model for them as a stand-in.
+
 ## Open questions
 
 - Sway phases: the game rolls each sway type's speed and amplitude with

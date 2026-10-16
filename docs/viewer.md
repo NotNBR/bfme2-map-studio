@@ -30,7 +30,7 @@ The controls are those of a 3D editor, not the game's:
 | W A S D / arrows | Move (Shift faster, Ctrl slower) |
 | Q / E, R / F, Z / X | Rotate, tilt, zoom |
 | Space / Home, T | Reset to the whole map, toggle top-down |
-| 1 2 3 4 5 6 7 8 | Objects, water, shadows, normal maps, clouds, weather, walkable, river flow arrows |
+| 1 2 3 4 5 6 7 8 9 | Objects, water, shadows, normal maps, clouds, weather, walkable, river flow arrows, editor markers |
 | M | Show or hide the marks |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, reload, build, controls |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change |
@@ -103,9 +103,12 @@ compilation can still cause short pauses.
 - **View**: check marks that stay open while you switch them: objects, water,
   shadows; cloud shadows, normal maps, fog and rain/snow; grid, map border,
   walkable, river flow arrows, marks; **Animate** (water ripples, cloud
-  shadows, rain and snow, on the game's clocks); and **Game object limits**,
+  shadows, rain and snow, on the game's clocks); **Game object limits**,
   which keeps only the first 1,200 trees and 2,000 shrubs, as the game's
-  buffers do (off by default: every one is drawn).
+  buffers do (off by default: every one is drawn); and **Editor markers**,
+  the models WorldBuilder shows and the game never draws, such as the AI's
+  farm sites (off by default, as in the game;
+  [objects](game/renderer/objects.md)).
 - **Top view**, **Reset view** and **Screenshot** (saved to `local/renders/`).
 - **Frame rate**, at the right edge: the measured rate and the cap, for example
   `60 fps / 60`. Click it to change the cap.

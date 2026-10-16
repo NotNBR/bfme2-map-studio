@@ -17,7 +17,7 @@ Keyboard
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
-  8 river flow arrows  M marks
+  8 river flow arrows  9 editor markers  M marks
   G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
   Del        delete the selected mark;  Ctrl+Z  undo a mark change
   Esc        steps back: closes a menu, cancels a drawing, drops the selection,
@@ -40,7 +40,8 @@ Toolbar
              snow, dusk), the weather's own sun or a light rig over it
   View       layers: objects, water, shadows; cloud shadows, normal maps, fog and
              rain/snow; grid, map border, walkable, river flow, marks; animate;
-             the game's object limits
+             the game's object limits; editor markers (9: the WorldBuilder-only
+             models the game never draws, such as the AI's farm sites)
   Buttons    top view, reset view, screenshot
   FPS        the frame rate at the right; click it to cap it (30-144), follow the
              monitor (VSync) or run unlimited. Default 60 (--fps).
@@ -93,7 +94,7 @@ FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')
 DOUBLE_CLICK = 0.3        # s between the clicks of a double-click
 # The View menu: command ids in groups; None separates them.
 VIEW_MENU = ('objects', 'water', 'shadows', None, 'clouds', 'normal_maps', 'fx', None,
-             'grid', 'border', 'walkable', 'flow', 'marks', None, 'animate', 'limits')
+             'grid', 'border', 'walkable', 'flow', 'marks', None, 'animate', 'limits', 'markers')
 
 
 def parse_args(argv=None):
@@ -237,6 +238,8 @@ class Viewer:
             Command('animate', lambda: self.flip_view('animate'), 'Animate', checked=view('animate')),
             Command('limits', self.flip_limits, 'Game object limits (1,200 trees, 2,000 shrubs)',
                     checked=option('vegetation_limits')),
+            Command('markers', self.flip_markers, 'Editor markers (AI farm sites, cinematic proxies)', ('9',),
+                    option('editor_markers')),
             # Toolbar buttons and keys. Build, Test In-Game and Properties need
             # no scene: they work while the first load is still running or after it failed.
             Command('build', lambda: self.build.start(self.session.owner), keys=('Ctrl+B',), needs_scene=False),
@@ -269,6 +272,11 @@ class Viewer:
 
     def flip_limits(self):
         self.session.options['limits'] = not self.session.options['limits']
+        self.session.reload = True
+
+    def flip_markers(self):
+        """Show or hide the WorldBuilder-only models, which the game never draws."""
+        self.session.options['markers'] = not self.session.options['markers']
         self.session.reload = True
 
     def flip_view(self, name):

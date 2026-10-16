@@ -117,11 +117,11 @@ def bleed_alpha(image):
 class MapRenderer:
     def __init__(self, source, assets=None, ctx=None, objects=True, normal_maps=None,
                  clouds=True, macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
-                 progress=None, vegetation_limits=False, sun=None):
+                 progress=None, vegetation_limits=False, sun=None, editor_markers=False):
         """Synchronous entry point for CLI rendering; the viewer uses prepare/upload."""
         import moderngl
         self._prepare(source, assets, objects, normal_maps, clouds, macro, samples, lod,
-                      shadows, shared, weather, progress, vegetation_limits, sun)
+                      shadows, shared, weather, progress, vegetation_limits, sun, editor_markers)
         for _ in self.upload(ctx or moderngl.create_standalone_context(require=430), shared):
             pass
 
@@ -132,7 +132,7 @@ class MapRenderer:
 
     def _prepare(self, source, assets=None, objects=True, normal_maps=None, clouds=True,
                  macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
-                 progress=None, vegetation_limits=False, sun=None):
+                 progress=None, vegetation_limits=False, sun=None, editor_markers=False):
         report = progress or (lambda fraction, step: None)
         report(0.0, 'Indexing game assets' if assets is None else 'Reading map')
         base = assets or GameAssets()
@@ -157,6 +157,7 @@ class MapRenderer:
         self.weather_preset = weather if weather not in (None, '', 'map') else None
         self.sun = sun if sun not in (None, '', 'own') else None
         self.options = dict(objects=objects, clouds=clouds, macro=macro, lod=lod, vegetation_limits=vegetation_limits,
+                            editor_markers=editor_markers,
                             normal_maps=high if normal_maps is None else normal_maps,
                             # GameLOD.ini UseShadowDecals: Low and Medium.
                             decals=lod in ('low', 'medium') and shadows,
@@ -169,7 +170,7 @@ class MapRenderer:
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
                             walkable=False, effects=True, flow=False)
-        self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0)
+        self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0)
         self._progress = report
         self._effects = {}
         self._lighting()
@@ -860,20 +861,29 @@ class MapRenderer:
         """Keep the game's tree and shrub buffer limits (True) or draw every
         tree and shrub (False). Rebuilds only the objects, their tree shadow
         decals and shadow volumes; terrain, water and weather stay."""
+        self._set_object_option('vegetation_limits', value)
+
+    def set_editor_markers(self, value):
+        """Draw the editor markers (True), the WorldBuilder-only models the
+        game does not show (GameAssets.template_model's `editor`), or leave
+        them out as the game does (False). Rebuilds only the objects."""
+        self._set_object_option('editor_markers', value)
+
+    def _set_object_option(self, name, value):
         value = bool(value)
-        changed = value != self.options['vegetation_limits']
-        self.options['vegetation_limits'] = value
+        changed = value != self.options[name]
+        self.options[name] = value
         if not changed or not self.options['objects']:
             return
         for item in getattr(self, '_object_resources', []):
             item.release()
-        for name in ('volume_vao', 'volume_buffer', 'volume_program', 'decal_tex', 'object_program'):
-            item = getattr(self, name, None)
+        for attr in ('volume_vao', 'volume_buffer', 'volume_program', 'decal_tex', 'object_program'):
+            item = getattr(self, attr, None)
             if item is not None:
                 item.release()
-            if hasattr(self, name):
-                delattr(self, name)
-        self.report.update(missing_models=[], objects_drawn=0, objects_skipped=0)
+            if hasattr(self, attr):
+                delattr(self, attr)
+        self.report.update(missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0)
         self.batches = []
         self._objects_gpu()
 
@@ -910,6 +920,9 @@ class MapRenderer:
             if resolved is None:
                 self.report['missing_models'].append(name)
                 continue
+            if resolved['editor'] and not self.options.get('editor_markers', False):
+                self.report['editor_markers'] += 1
+                continue                     # WorldBuilder-only: the game draws nothing
             kinds = resolved['kinds']
             buffer = None
             if resolved['tree']:

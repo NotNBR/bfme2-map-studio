@@ -24,7 +24,7 @@ class Session:
         self.status = status
         self.source = self.requested = source
         # What the next load uses; a failed load puts back the shown scene's.
-        self.options = dict(lod=lod, weather=weather, sun=sun, limits=False, normal_maps=None, clouds=True)
+        self.options = dict(lod=lod, weather=weather, sun=sun, limits=False, markers=False, normal_maps=None, clouds=True)
         self.owners = {}
         self.refresh_owners()
         self.renderer = None
@@ -107,6 +107,7 @@ class Session:
         source = self.requested
         o = self.options
         options = dict(lod=o['lod'], weather=o['weather'], sun=o['sun'], vegetation_limits=o['limits'],
+                       editor_markers=o['markers'],
                        normal_maps=o['normal_maps'], clouds=o['clouds'])
         self.load_signature = self._signature()
         self.load_started = time.perf_counter()
@@ -140,6 +141,8 @@ class Session:
             changed.append('Sun')
         if o['limits'] != r.options['vegetation_limits']:
             changed.append('Object limits')
+        if o['markers'] != r.options['editor_markers']:
+            changed.append('Editor markers')
         return 'Applying ' + ', '.join(changed) if changed else f'Reloading {self.title(source)}'
 
     def toast_shown(self, now=None):
@@ -221,6 +224,7 @@ class Session:
         if active:
             self.options.update(lod=active.options['lod'], weather=active.weather_preset or 'map',
                                 sun=active.sun or 'own', limits=active.options['vegetation_limits'],
+                                markers=active.options['editor_markers'],
                                 normal_maps=active.options['normal_maps'], clouds=active.options['clouds'])
         self.status.set(f'Load failed: {str(error)[:120]}', 15)
         print('Load failed:', error)
