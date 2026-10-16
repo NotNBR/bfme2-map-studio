@@ -76,6 +76,21 @@ def reference():
 
 BASES, REFERENCE_ROUTES = reference()
 
+# Viewer pins locate four overly regular X crossings. The diagonal is the
+# main glacial trough; the two tributary passes meet it at separate stations.
+# Offsets run along the diagonal from the outer corner towards the ice.
+# The pins are retained here independently of the ignored viewer marks.
+CONFLUENCES = [
+    dict(mark=(19530.9, 8928.4), main='diagonal-2',
+         branches={'saddle-east-1': 420., 'saddle-west-2': -460.}),
+    dict(mark=(20317.4, 20107.7), main='diagonal-1',
+         branches={'saddle-east-0': 100., 'saddle-west-1': -300.}),
+    dict(mark=(8993.1, 19297.9), main='diagonal-0',
+         branches={'saddle-west-0': 450., 'saddle-east-3': 50.}),
+    dict(mark=(8409.9, 8250.9), main='diagonal-3',
+         branches={'saddle-east-2': 180., 'saddle-west-3': 500.}),
+]
+
 
 def natural_points(points, spacing=100.):
     """A shared, smooth geographic deformation preserves route junctions.
@@ -158,6 +173,33 @@ def mountain_ridges():
 
 
 RIDGES = mountain_ridges()
-ROUTES = [dict(route, reference_points=route['points'],
-               points=simplify(natural_points(route['points']), tolerance=5).tolist())
-          for route in REFERENCE_ROUTES]
+def valley_routes():
+    """Join tributaries gradually at staggered mouths along each main trough."""
+    routes = [dict(route, reference_points=route['points'],
+                   points=natural_points(route['points']))
+              for route in REFERENCE_ROUTES]
+    named = {route['name']: route for route in routes}
+    for confluence in CONFLUENCES:
+        main = np.asarray(named[confluence['main']]['points'])
+        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(main, axis=0), axis=1))]
+        for name, offset in confluence['branches'].items():
+            route = named[name]
+            p = np.asarray(route['points'])
+            # Work away from the joining endpoint, whichever end it is.
+            reverse = np.linalg.norm(p[-1]-confluence['mark']) < np.linalg.norm(p[0]-confluence['mark'])
+            if reverse:
+                p = p[::-1].copy()
+            k = np.argmin(np.linalg.norm(main-p[0], axis=1))
+            station = np.clip(arc[k]+offset, 0, arc[-1])
+            mouth = np.array([np.interp(station, arc, main[:, i]) for i in range(2)])
+            along = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
+            blend = np.clip(1-along/1700., 0, 1)
+            blend = blend*blend*(3-2*blend)
+            p += blend[:, None]*(mouth-p[0])
+            route['points'] = (p[::-1] if reverse else p).tolist()
+    for route in routes:
+        route['points'] = simplify(route['points'], tolerance=5).tolist()
+    return routes
+
+
+ROUTES = valley_routes()

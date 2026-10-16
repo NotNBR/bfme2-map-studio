@@ -39,6 +39,11 @@ descents reserve 300 units. Blue side ways reserve 180 units in softer white
 snow. Unequal snow-filled recesses widen the actual valley floor between
 mountain feet. Broad bends and smaller scallops vary each bank independently;
 the narrow spurs beside capture approaches retain their topology.
+At the four marked outer diagonal crossings, side valleys meet the main
+trough at staggered mouths rather than a single X. Their bends blend over
+1,700 units into the existing passes, leaving unequal projecting mountain
+shoulders between the openings. `CONFLUENCES` in [design.py](design.py)
+records the pins and the separate joining stations.
 Junctions share a continuous floor. These widths are terrain clearances,
 not verified army-formation capacities. The central ice is walkable terrain;
 liquid meltwater is confined to the bottoms of its two ruptures.
