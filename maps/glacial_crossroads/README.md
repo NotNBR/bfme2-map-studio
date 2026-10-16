@@ -31,9 +31,12 @@ this size.
 Snowy mountain masses rise toward 2,500, with shoulders and inner divides
 between the passes. All pads reserve 1,500 x 1,500 units of level construction
 ground within individually shaped, elongated cirques. Orange main ways in
-the vector layout become 340-unit packed-snow corridors; their inner-base ice descents
-are 300 units wide. Blue side ways become 180-unit passages in softer white
-snow. Junctions share a continuous floor. These widths are terrain clearances,
+the vector layout reserve at least 340 units of passage; their inner-base ice
+descents reserve 300 units. Blue side ways reserve 180 units in softer white
+snow. Unequal snow-filled recesses widen the actual valley floor between
+mountain feet. Broad bends and smaller scallops vary each bank independently;
+the narrow spurs beside capture approaches retain their topology.
+Junctions share a continuous floor. These widths are terrain clearances,
 not verified army-formation capacities. The central ice is walkable terrain;
 liquid meltwater is confined to the bottoms of its two ruptures.
 
@@ -62,13 +65,18 @@ at native resolution throughout; mountain shaping cannot enter those cores.
 Snow gathers in sheltered hollows and on gentler slopes. Wind-polished snow
 marks exposed shoulders, while softer drifts collect in lee hollows. Steep
 exposed faces use cliff-mapped rock; scree and partly covered stone mark the lower talus.
-Main ways have uneven packed centres and drifting edges, while
-side ways retain softer white snow. Their texture edges can vary without
-narrowing the reserved widths. Broad, slowly moving cloud shadows use a
+Main ways carry intermittent patches of compacted snow that wander across
+the floor and disappear beneath broad drifts. The wear follows its own
+uneven course instead of outlining the movement corridor; side ways retain
+softer white snow. Broad, slowly moving cloud shadows use a
 5,200 x 4,700-unit repeat instead of the stock 660-unit pattern, avoiding
 a repeated dark grid across the snow at this landscape's scale.
 The central ice field is about 4,200 units
-across, with branching sheet fractures and a frosted shore. Two offset,
+across, with branching sheet fractures. Its snow cover crosses the basin
+boundary in unequal wind-drifted lobes: bare ice reaches between them onto
+the low approaches, while frost, compacted snow and soft snow form a broad,
+frayed transition. The visible snow line is independent of the movement
+boundary. Two offset,
 jagged ruptures cut the northern and southern parts of the central field.
 Each is roughly 2,200 units long, with a varying opening roughly 200 units
 wide, short branching fissures, steep blue walls, still meltwater and
@@ -80,7 +88,7 @@ are about 100-112 units beneath the sheet and their rims rise above it. The
 ruptures and their steep shoulders are explicitly impassable. A broad middle
 crossing and passages around their tapered ends connect the surrounding ice;
 approaches entering the basin can turn around the hazards. Three tapered snow
-tongues enter from the valley mouths. The ice and its raised rims stay below
+tongues with frayed edges enter from the valley mouths. The ice and its raised rims stay below
 the inner base terraces. The source line colors
 are design semantics, not literal orange or blue paint on the snow.
 
@@ -106,8 +114,9 @@ numbers are recorded in [features.py](features.py).
 Small, irregular rock shelves are tucked into the mountain-spur feet.
 Beacons sit 24 units above their local valley datum; the wider inn shelves
 use a 6-unit rise above the forecourt datum to keep their approaches gentle.
-Narrow snow approaches lead to the flags;
-the terrain rises behind the buildings. Only foundations are level, with
+Unequal, elongated snow hollows give the four towers more room on their
+path-facing sides, kept clear of scattered scenery. Narrow approaches lead
+to the flags; the terrain rises behind the buildings. Only foundations are level, with
 broken snow wear and exposed stone instead of circular cleared areas.
 Four short connecting paths close the gaps between the outer passes and
 inner rear accesses, giving the inns direct approaches from all three

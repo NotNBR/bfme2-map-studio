@@ -101,6 +101,48 @@ def glacier(x, y, shore, ice):
                 snow=snow, frost=frost, rupture=rupture, grain=grain)
 
 
+def paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin):
+    """Interleave wind-drifted snow and exposed ice across the basin margin.
+
+    The geological ice boundary reserves movement ground; it is not a paint
+    outline. Snow sweeps across it in broad lobes and frayed tongues, while
+    bare ice reaches between them onto the low, gently sloping approaches.
+    Rupture walls and their frost lips retain their own surface treatment.
+    """
+    rows, cols = basin['crop']
+    crop = (slice(max(rows.start-65, 0), min(rows.stop+65, x.shape[0])),
+            slice(max(cols.start-65, 0), min(cols.stop+65, x.shape[1])))
+    xx, yy = x[crop]-CENTRE[0], y[crop]-CENTRE[1]
+    broad = fbm(xx, yy, scale=720, octaves=2, seed=5821)
+    # Wind stretches smaller drifts along a common direction. They fray the
+    # broad snow lobes instead of forming a uniform ring or scattered dots.
+    along, across = .86*xx+.51*yy, -.51*xx+.86*yy
+    fringe = fbm(along*.48+180*broad, across, scale=190, octaves=2, seed=5822)
+    snowline = shore[crop]+130+620*broad+180*fringe
+    width = 360+180*smooth(.5+1.5*broad)
+    cover = smooth((snowline+width*.5)/width)
+    inner = (slice(rows.start-crop[0].start, rows.stop-crop[0].start),
+             slice(cols.start-crop[1].start, cols.stop-crop[1].start))
+    tongue = smooth((basin['snow']*(1+.45*fringe[inner])-.04)/.58)
+    cover[inner] = np.maximum(cover[inner], tongue)
+    wisps = fbm(along*.30+100*broad, across+50*fringe,
+                scale=95, octaves=2, seed=5823)
+    # Fine wind-stretched remnants occur only within the transition. Their
+    # broken edges and occasional detached tips soften the large snow lobes.
+    cover = np.clip(cover+.65*wisps*4*cover*(1-cover), 0, 1)
+    margin = (shore[crop] > -850) & (shore[crop] < 650)
+    margin[inner] |= tongue > .02
+    area = (margin
+            & (z[crop] < ICE+55) & (slope[crop] < .30) & (rupture[crop] == 0))
+    surface = materials[crop]
+    # The thin coat is blue-white frost, then compacted snow, then the same
+    # soft snow as the valley. Unequal thresholds break up parallel bands.
+    surface[area & (cover < .12)] = 2
+    surface[area & (cover >= .12)] = 5
+    surface[area & (cover > .34+.10*fringe)] = 1
+    surface[area & (cover > .62+.12*broad)] = 0
+
+
 def upscale(values, cx, cy, x, y):
     """Cubic reconstruction avoids regular creases between geology samples.
 
@@ -281,13 +323,60 @@ def landscape():
     # The virtual bed falls again beyond the outer bases, giving the border
     # ranges ravines and descending backs instead of a level raised frame.
     floor -= 650*smooth((radius-15800)/6200)
+    cx, cy = x[::3, ::3], y[::3, ::3]
+    noise = fbm(cx, cy, scale=2600, octaves=3, seed=5601)
+    crags = fbm(cx+180*noise, cy-120*noise, scale=600, octaves=4, seed=5602)
+    # Two scales of snow-filled recesses move the foot of the mountains,
+    # independently on either bank. The route width is only a minimum.
+    recess = upscale(fbm(cx, cy, scale=1150, octaves=3, seed=5611), cx, cy, x, y)
+    scallop = upscale(fbm(cx, cy, scale=370, octaves=2, seed=5612), cx, cy, x, y)
     main_edge = np.full(x.shape, np.inf)
     route_core = np.zeros(x.shape, bool)
+    valleys = np.zeros(x.shape, bool)
     for route in ROUTES+CAPTURE_LINKS:
-        d, _ = polyline_distance(route['points'], x, y, reach=route['width']/2+150)
-        route_core |= d <= route['width']/2
+        points = np.asarray(route['points'])
+        reach = route['width']/2+500
+        c0, c1 = np.searchsorted(x[0], [points[:, 0].min()-reach, points[:, 0].max()+reach])
+        r0, r1 = np.searchsorted(y[:, 0], [points[:, 1].min()-reach, points[:, 1].max()+reach])
+        crop = (slice(r0, r1), slice(c0, c1))
+        xx, yy = x[crop], y[crop]
+        d, along = polyline_distance(points, xx, yy, reach=reach)
+        route_core[crop] |= d <= route['width']/2
+        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))]
+        tangent = np.gradient(points, arc, axis=0)
+        turning = np.gradient(tangent, arc, axis=0)
+        curvature = tangent[:, 0]*turning[:, 1]-tangent[:, 1]*turning[:, 0]
+        nx = xx-np.interp(along, arc, points[:, 0])
+        ny = yy-np.interp(along, arc, points[:, 1])
+        side = np.sign(ny*np.interp(along, arc, tangent[:, 0])
+                       -nx*np.interp(along, arc, tangent[:, 1]))
+        # The narrow spurs beside capture sites keep their existing approach
+        # topology. Wider recesses belong farther along the valley, while
+        # each beacon gets a separate hollow on its path-facing side below.
+        setback = np.ones(xx.shape)
+        for site in CHECKPOINTS:
+            px, py = site['position']
+            setback = np.minimum(setback, smooth((np.hypot(xx-px, yy-py)-900)/1400))
+        # Widen the outside of bends, retaining the inner mountain toes
+        # that prevent corner-cutting. Taper into shared route junctions.
+        outside_bend = .5-.5*np.tanh(side*np.interp(along, arc, curvature)*12000)
+        ends = smooth(np.minimum(along, arc[-1]-along)/800)
+        extra = (180 if route['main'] else 80)*smooth(.43+1.15*recess[crop]+.5*scallop[crop])
+        extra *= setback*outside_bend*ends
+        # Keep the inner mountain toes between converging glacier mouths.
+        # Even a small recess there can join two routes before their saddle.
+        extra *= smooth((radius[crop]-4500)/1800)
+        if route['name'].startswith(('inner-rear-access', 'saddle-', 'North saddle',
+                                     'East saddle', 'South saddle', 'West saddle')):
+            extra *= 0
+        valleys[crop] |= d <= route['width']/2+extra
         if route['main']:
-            main_edge = np.minimum(main_edge, d-route['width']/2)
+            # Worn snow wanders within the open valley, disappearing under
+            # broad drifts. It must not trace the minimum-clearance boundary.
+            offset = 140*recess[crop]+65*scallop[crop]
+            width = 155*smooth(.22+1.7*recess[crop]-.65*scallop[crop])-15
+            wear_edge = np.abs(np.copysign(d, side)-offset)-width
+            main_edge[crop] = np.minimum(main_edge[crop], wear_edge)
     lower = np.full(x.shape, ICE)
     upper = np.full(x.shape, 2550.)
     pads = np.zeros(x.shape, bool)
@@ -320,14 +409,24 @@ def landscape():
     ice = shore <= 0
     floor = floor*(smooth(shore/650))+ICE*(1-smooth(shore/650))
     checkpoints = np.zeros(x.shape, bool)
+    tower_hollows = np.zeros(x.shape, bool)
     route_clearance = distance_to(route_core)*10
     for site in CHECKPOINTS:
         px, py = site['position']
         jx, jy = site['junction']
-        crop = (slice(round(min(py, jy)/10)+BORDER-45, round(max(py, jy)/10)+BORDER+46),
-                slice(round(min(px, jx)/10)+BORDER-45, round(max(px, jx)/10)+BORDER+46))
+        crop = (slice(round(min(py, jy)/10)+BORDER-80, round(max(py, jy)/10)+BORDER+81),
+                slice(round(min(px, jx)/10)+BORDER-80, round(max(px, jx)/10)+BORDER+81))
         xx, yy = x[crop], y[crop]
         ox, oy = site['outward']
+        if site['template'] == 'SignalFire':
+            # An unequal hollow runs along the pass and folds into the
+            # tower's forecourt; the bedrock still rises behind its shelf.
+            hx, hy = px-190*ox, py-190*oy
+            inward = (xx-hx)*ox+(yy-hy)*oy
+            lateral = -(xx-hx)*oy+(yy-hy)*ox
+            hollow_edge = np.hypot(inward/.70, lateral/1.28)
+            hollow_rim = 350+90*recess[crop]+65*scallop[crop]
+            tower_hollows[crop] |= hollow_edge < hollow_rim
         along, across = (xx-px)*ox+(yy-py)*oy, -(xx-px)*oy+(yy-py)*ox
         along /= 1.15 if site['template'] == 'Inn' else site['shelf_scale']
         across /= site['shelf_scale']
@@ -340,8 +439,7 @@ def landscape():
             outside = np.maximum(outside, ((along-a[0])*dy-(across-a[1])*dx)/np.hypot(dx, dy)*site['shelf_scale'])
         shelf = outside <= 0
         spur, _ = polyline_distance([site['junction'], site['position']], xx, yy, reach=75)
-        # A narrow approach widens only at the flag. No round clearing or
-        # broad flat apron is reserved around the beacon.
+        # Keep the raised foundation compact inside the wider natural hollow.
         checkpoints[crop] |= shelf | (spur < 65)
         foundation = ((1-smooth(np.maximum(outside, 0)/180))
                       * smooth((route_clearance[crop]-20)/70))
@@ -356,18 +454,15 @@ def landscape():
         fx, fy = (px-109*ox, py-109*oy) if site['template'] == 'Inn' else (px, py)
         level = float(floor[round(fy/10)+BORDER, round(fx/10)+BORDER])+(6 if site['template'] == 'Inn' else 24)
         floor[crop] = floor[crop]*(1-foundation)+level*foundation
-    reserved = route_core | basins | ice | checkpoints
+    reserved = valleys | basins | ice | checkpoints | tower_hollows
     edge = distance_to(reserved)*10
-    cx, cy = x[::3, ::3], y[::3, ::3]
-    noise = fbm(cx, cy, scale=2600, octaves=3, seed=5601)
-    crags = fbm(cx+180*noise, cy-120*noise, scale=600, octaves=4, seed=5602)
     small = fbm(cx, cy, scale=260, octaves=2, seed=5603)
     cfloor = floor[::3, ::3]
     # Regional rock supplies broad supporting volume beneath each crest.
     raw = ridge_envelope(cfloor+150+180*noise, summit_chains(), cx, cy, noise, crags)
     raw += 45*crags+12*small
-    # Carve U-shaped passes with changing side slopes. The full path width
-    # is unchanged; natural shoulders emerge beyond that protected core.
+    # Carve U-shaped passes from their uneven valley margins, with changing
+    # side slopes and snow-filled recesses between the buttress feet.
     depth = np.maximum(edge[::3, ::3]-30, 0)
     apron = depth*np.clip(1+.7*noise+.35*crags, .55, 1.5)
     allowance = np.where(apron < 180, .0015*apron*apron,
@@ -414,14 +509,16 @@ def landscape():
     materials[(exposure > 0) & (edge > 230)] = CLIFF
     # Broad wind-polished snow on exposed shoulders, and softer drifts in
     # the lee. These follow landforms instead of speckling every open floor.
-    materials[(materials == 0) & (lee < .20) & (grade > .22)
-              & (edge > 90) & (drift > -.20)] = WIND
+    materials[(materials == 0) & (lee < .20)
+              & (grade > .50+.18*drift+.12*scallop)
+              & (z-floor > 100+100*recess) & (drift > -.20)] = WIND
     materials[(materials == 0) & (hollow > .16) & (edge > 100)] = DRIFT
     materials[debris & (edge > 160) & (edge < 340) & (hollow < .18)] = SCREE
     wear = upscale(fbm(cx, cy, scale=530, octaves=2, seed=5605), cx, cy, x, y)
-    # Packed centres fade in and out under drifting snow. Their irregular
-    # texture boundary never changes the protected movement clearance.
-    packed = main_edge < -65+155*wear+45*drift
+    # Uneven remnants of compacted snow sit inside the wider valley floor.
+    # Most stretches retain the same snow as their banks, avoiding a dark
+    # ribbon that visually reinstates the old fixed-width corridor.
+    packed = (main_edge < 0) & (slope < .35)
     materials[packed] = 1
     materials[basins] = 0
     materials[basins & ~pads & (wear > .18)] = DRIFT
@@ -430,7 +527,6 @@ def landscape():
     materials[ice] = 2
     fracture = np.sin((x+.3*y)/1650+drift)+.45*np.sin((y-.2*x)/975)
     materials[ice & (fracture > 1.05)] = 4
-    materials[ice & (shore > -110-160*wear)] = 5
     # A few branching sheet-scale seams remain legible above the fine
     # cracks already present in the game's tiled ice texture.
     rows, cols = np.nonzero(ice)
@@ -448,9 +544,8 @@ def landscape():
     sheet[(basin['lips'] > 32) & (basin['grain'] > .08)] = 0
     sheet[basin['depth'] > 12] = 4
     sheet[basin['depth'] > 80] = DEPTH
-    sheet[ice[crop] & (basin['snow'] > .12)] = 5
-    sheet[ice[crop] & (basin['snow'] > .26)] = 1
-    sheet[ice[crop] & (basin['snow'] > .38)] = 0
+    paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin)
     return dict(z=z, blocked=~walk, slope=slope, materials=materials,
                 pads=pads, reserved=reserved, ice=ice, rupture=rupture,
-                route_core=route_core, basins=basins, checkpoints=checkpoints)
+                route_core=route_core, basins=basins, checkpoints=checkpoints,
+                tower_hollows=tower_hollows)

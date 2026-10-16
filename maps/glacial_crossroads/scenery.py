@@ -21,7 +21,7 @@ from .terrain import DRIFT, SCREE, WIND
 
 def populate(m, t):
     """Compose clear-margin scenery and its small, terrain-following aprons."""
-    protected = t['pads'] | t['route_core'] | t['ice'] | t['checkpoints']
+    protected = t['pads'] | t['route_core'] | t['ice'] | t['checkpoints'] | t['tower_hollows']
     clearance = distance_to(protected)*10
     open_clearance = distance_to(t['blocked'])*10
     closed_clearance = distance_to(~t['blocked'])*10
