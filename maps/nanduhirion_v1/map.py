@@ -14,7 +14,9 @@ its heights 2.86 times, the geometric mean of the two, so cliffs stay cliffs.
   way; every new cell takes the texture whose field is highest, and
   set_materials blends the boundaries again. The source has no cliff mapping.
 - The impassable and flammability planes are resampled the same way.
-Not copied: the source's objects, lighting and camera settings.
+Not copied: the source's lighting and camera settings. Its objects are
+placed again at their density and by their placement logic, on this map's
+scale: scenery.py.
 
 The layout. Nanduhirion is a stepped bowl, west against east: the battle
 basin in the middle (height 0), a forward terrace on each side (143), an
@@ -55,6 +57,8 @@ from mapworkshop.mapkit.checks.strategy import at, distance_field, walk_grid
 from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.weather import apply_weather, ini_block
 
+from .scenery import Ground, populate
+
 ARCHIVE = '__patch202.big'      # in the ROTWK folder
 SOURCE = 'maps/map mp nanduhirion/map mp nanduhirion.map'
 WIDTH = HEIGHT = 1425           # playable size in cells: 14,250 map units
@@ -94,7 +98,7 @@ STEEP = 10.0                    # a cell whose corners differ more than this is 
 
 def source():
     """Nanduhirion's heights (map units), texture names and labels per cell,
-    impassable and flammability planes and border."""
+    impassable and flammability planes, border and objects."""
     folder = setting('rotwk')
     if not folder:
         raise RuntimeError('The source map is in the ROTWK folder: mw config rotwk DIR')
@@ -104,7 +108,8 @@ def source():
     return dict(heights=t['elevations']*.0390625, border=t['border'],
                 names=[tex['name'] for tex in b['textures']],
                 labels=np.searchsorted(tile_starts, b['arrays']['tiles'], side='right') - 1,
-                impassable=b['arrays']['impassable'], flammability=b['arrays']['flammability'])
+                impassable=b['arrays']['impassable'], flammability=b['arrays']['flammability'],
+                objects=m.objects())
 
 
 def grid(cells, scale, border, size, centre=False):
@@ -270,6 +275,8 @@ def build(b):
     blend['arrays']['flammability'] = flammability.astype('u1')
     sections.write(m, 'BlendTileData', blend)
     starts(m, [SITES[k - 1] for k in STARTS])
+    placed = populate(m, src['objects'], Ground(src['heights'], src['impassable'], src['labels'], names, src['border']),
+                      Ground(z, impassable, labels, palette, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
     apply_weather(m, b.project.weather)
 
     # Every site needs open ground, a way to the centre, and the same walk as its twin.
@@ -278,7 +285,7 @@ def build(b):
     walk, _ = walk_grid(m)
     field = distance_field(walk, CENTRE)
     walks = [at(field, walk, p) for p in SITES]
-    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, sites=[
+    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed, sites=[
         dict(site=k, name=name, x=p[0], y=p[1], open=round(r), walk_to_centre=round(d),
              player=STARTS.index(k) + 1 if k in STARTS else None)
         for k, (name, p, r, d) in enumerate(zip(SITE_NAMES, SITES, opens, walks), 1)])
