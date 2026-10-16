@@ -191,7 +191,9 @@ altitude, slope, ground and distance from the ice: tall dense cores in the
 hollows at the mountain feet, smaller and thinner trees at the edges, and
 stunted spruce and weathered snags where the forest gives out. Stands thin
 out toward routes and pads instead of ending in a row along the clearance
-line. The high corner cirques stand above the treeline and stay nearly bare.
+line. Around the high corner cirques the treeline climbs to about 1,960, so
+their basins at 1,650 are wooded like the lower ones, the stands dwindling
+into stunted trees below the headwalls; the sealed gates' forecourts stay clear.
 Trees take per-object scales (0.52-1.48) and occasional windfall logs; lone
 gnarled dead trees punctuate the open floors. Low thickets gather at forest
 edges and in hollows; talus boulders collect below the faces and, smaller

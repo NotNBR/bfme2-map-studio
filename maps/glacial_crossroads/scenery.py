@@ -197,6 +197,9 @@ def sealed_gates(p, t):
             p.place(template, px, py, layer+' rubble', 33 if k < 3 else 15,
                     max_slope=.6, sink=1, margin=60)
         p.place('Skeleton', gx-150*ux, gy-150*uy, layer+' carts', 12, max_slope=.5, margin=60)
+        # The arch, doors and columns bypass the placement checks; keep the
+        # forest and later scenery off the gate and its forecourt.
+        p.reserve(gx-120*ux, gy-120*uy, 330)
         gates.append(dict(base=gate['base'], position=(gx, gy), facing=facing,
                           wall_rise=round(rise, 1)))
     return gates

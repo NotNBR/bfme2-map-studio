@@ -3,8 +3,10 @@
 Forests fill the sheltered lower slopes and valley margins below a treeline
 that wanders around 1,400 units: dense, tall cores in hollows at the mountain
 feet, thinner and smaller trees at their edges, stunted spruce and dead snags
-where the forest gives out; stands thin out toward the routes. The high
-corner cirques stand above it and stay nearly bare. Lone gnarled dead trees
+where the forest gives out; stands thin out toward the routes. Around the
+high corner cirques the treeline climbs to about 1,960: their sheltered
+basins at 1,650 are wooded like the lower ones, and the stands dwindle into
+stunted trees on the slopes above. Lone gnarled dead trees
 punctuate the open floors; low thickets gather at the forest edges and in
 the hollows. Talus boulders collect below the faces, groups of pinnacles
 stand on the convex crests, and a small frozen tarn lies in the flat ground
@@ -57,6 +59,20 @@ def sample(field, x, y, stride=1):
     return field[np.clip(r, 0, field.shape[0]-1), np.clip(c, 0, field.shape[1]-1)]
 
 
+def treeline(x, y):
+    """The forest's upper limit, and how far each point is in a high cirque.
+
+    The limit wanders around 1,400 by 170. Within about 2,200 units of a
+    high corner base it climbs to about 1,960, so the sheltered cirques at
+    1,650 are wooded like the lower ones, thinning on the slopes above.
+    """
+    line = 1400+170*fbm(x, y, scale=3200, octaves=2, seed=8702)
+    high = np.max([1-smooth((np.hypot(x-b['x'], y-b['y'])-2200)/1500)
+                   for b in BASES if b['height'] == HIGH], axis=0)
+    upper = 1960+90*fbm(x, y, scale=1400, octaves=2, seed=8705)
+    return line*(1-high)+upper*high, high
+
+
 def base_distance(x, y):
     return np.min([np.hypot(x-b['x'], y-b['y']) for b in BASES], axis=0)
 
@@ -101,12 +117,12 @@ def populate_wilds(p, t):
     z, slope = sample(t['z'], x, y), sample(t['slope'], x, y)
     material = sample(t['materials'], x, y)
     shelter = smooth(.5+sample(concavity, x, y, 3)/45)
-    treeline = 1400+170*fbm(x, y, scale=3200, octaves=2, seed=8702)
-    altitude = 1-smooth((z-treeline+300)/300)
+    limit, high = treeline(x, y)
+    altitude = 1-smooth((z-limit+300)/300)
     gentle = 1-smooth((slope-.42)/.43)
     ground = np.where(np.isin(material, (CLIFF, LEDGES)), 0., np.where(material == STONES, .45, 1.))
     stands = smooth((fbm(x, y, scale=1250, octaves=3, seed=8703)+.40*(shelter-.5)+.06)/.20)
-    lowland = .50+.50*(1-smooth((z-260)/950))
+    lowland = np.maximum(.50+.50*(1-smooth((z-260)/950)), .85*high)
     ice_gap = smooth((np.hypot(x-CENTRE[0], y-CENTRE[1])-2900)/1600)
     # Stands thin out toward routes and pads instead of ending in a row
     # along the clearance line.
@@ -162,10 +178,9 @@ def populate_wilds(p, t):
     x, y, u = lattice(90, 8720)
     z, slope = sample(t['z'], x, y), sample(t['slope'], x, y)
     shelter = smooth(.5+sample(concavity, x, y, 3)/45)
-    treeline = 1400+170*fbm(x, y, scale=3200, octaves=2, seed=8702)
     stands = smooth((fbm(x, y, scale=1250, octaves=3, seed=8703)+.40*(shelter-.5)+.06)/.20)
     edge = 4*stands*(1-stands)
-    thicket = (.55*edge+.35*smooth((shelter-.55)/.25))*smooth((treeline+250-z)/200)
+    thicket = (.55*edge+.35*smooth((shelter-.55)/.25))*smooth((treeline(x, y)[0]+250-z)/200)
     thicket *= (1-smooth((slope-.45)/.3))
     for i in np.nonzero(u < .40*thicket)[0]:
         px, py = float(x[i]), float(y[i])
