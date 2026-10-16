@@ -8,3 +8,4 @@ weather = "haze"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
 # Map properties set in the viewer's Properties dialog; the build applies them over the map's own.
 [properties.ini.WaterTransparency]
 ReflectionOn = true
+RiverTransparencyMultiplier = 0.8

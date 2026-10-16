@@ -8,7 +8,8 @@ shared field through three gates. The field is the ruined heart of Hollin:
 the Sirannon winds down it from the north edge to the south, with a ford at
 each team's north and south gates and a stone bridge through the ruins of
 Ost-in-Edhil in the middle. Shallow dale floors open into rolling courts;
-low spurs descend into the field and soften into shelves beside the river.
+low spurs descend into the field, divided by dry drainage hollows opening
+onto uneven river terraces and alternating shallow and cut banks.
 
 The layout is point-symmetric about the map centre: the east team's dales,
 court and gates are the west team's turned through 180 degrees, and so are
@@ -291,6 +292,30 @@ def lowland_relief(x, y, sd, stream):
     return relief*(1-smooth(-220, 40, sd))*smooth(25, 230, stream)
 
 
+def drainage_hollows(land, x, y, sd, stream):
+    """Dry swales descend between the field's spurs into the river terraces.
+
+    Authored grades connect the landforms; their turned counterparts retain
+    equivalent terrain for both teams. Their mouths stay above standing water.
+    """
+    hollows = [([(4500, 4930), (4790, 4850), (5100, 4660), (5520, 4500)], 225, 212),
+               ([(4540, 3420), (4790, 3250), (5030, 3150), (5260, 3090)], 180, 209),
+               ([(4830, 6210), (4960, 5980), (5090, 5820)], 150, 204)]
+    wet_ground = np.zeros(x.shape)
+    for points, width, head in hollows:
+        for route in (points, turned(points)):
+            route = chaikin(route, 2)
+            d, along = polyline_distance(route, x, y)
+            progress = np.clip(along/length(route), 0, 1)
+            grade = head+(WATER+5-head)*progress
+            influence = (1-smooth(width*.2, width, d))
+            influence *= smooth(0, .15, progress)*(1-smooth(-100, 30, sd))
+            influence *= smooth(10, 65, stream)
+            land = land-influence*np.maximum(land-grade, 0)
+            wet_ground = np.maximum(wet_ground, influence)
+    return land, wet_ground
+
+
 def terrain():
     rows, cols = HEIGHT+2*BORDER, WIDTH+2*BORDER
     y, x = (np.mgrid[0:rows, 0:cols]-BORDER)*10.0
@@ -306,13 +331,18 @@ def terrain():
         shoulders = 19*smooth(35, width, d)
         parts.append((smooth_min(d-width, bowl(x, y, bx, by, line, k), 160),
                       COURT_Z+(BASE_Z-COURT_Z)*smooth(0, .8, s)+shoulders))
+    # Long, unequal shoulders interrupt the box outlines, while the authored
+    # gate corridors below retain their full width. The warp turns with the map.
+    contour_x = x+105*np.sin((y-CY)/610)+45*np.sin((y-CY)/260)
+    contour_y = y+70*np.sin((x-CX)/530)
     cx, cy, hx, hy = COURT
     for px, py in ((cx, cy), (SPAN_X-cx, SPAN_Y-cy)):
-        parts.append((rounded_box(x, y, px, py, hx, hy, 320), np.full(x.shape, COURT_Z)))
+        parts.append((rounded_box(contour_x, contour_y, px, py, hx, hy, 380), np.full(x.shape, COURT_Z)))
     for line, width in gate_lines():
         d, along = polyline_distance(line, x, y)
         parts.append((d-width, COURT_Z+(FIELD_Z-COURT_Z)*smooth(.1, .95, along/length(line))))
-    parts.append((rounded_box(x, y, CX, CY, *FIELD, 520), np.full(x.shape, FIELD_Z)))
+    field_width = FIELD[0]+135*np.cos((y-CY)/740)+65*np.cos((y-CY)/310)
+    parts.append((rounded_box(contour_x, y, CX, CY, field_width, FIELD[1], 620), np.full(x.shape, FIELD_Z)))
 
     sd = parts[0][0]
     for d, _ in parts[1:]:
@@ -371,12 +401,19 @@ def terrain():
     mountains = ((wall+faces)*(1-knoll)+knolls*knoll+peaks*(1-knoll))*(.25+.75*ravine)
 
     land = floor+lowland_relief(x, y, sd, stream_sd)+foothills+mountains
-    # Low river shelves ease up into the meadow at a changing distance
-    # from the bank. Keep the land above water; only the channel is wet.
-    shelf_width = 230+70*symmetric(fbm(x, y, scale=650, seed=SEED+82, octaves=2))
-    shelf_floor = WATER+9+2*fbm(x, y, scale=320, seed=SEED+83, octaves=2)
-    valley = (1-smooth(20, shelf_width, stream_sd))*(1-smooth(-80, 160, sd))
+    # Wide depositional shelves alternate with narrow cut banks. Opposite
+    # banks have different profiles rather than one continuous raised lip.
+    stations = np.r_[0., np.cumsum(np.hypot(np.diff(np.array(line)[:, 0]), np.diff(np.array(line)[:, 1])))]
+    river_x = np.interp(stream_along, stations, np.array(line)[:, 0])
+    river_y = np.interp(stream_along, stations, np.array(line)[:, 1])
+    side = np.tanh((x-river_x)/65)
+    deposit = .5-.5*side*np.sin((river_y-CY)/650)
+    shelf_width = 65+340*deposit+30*symmetric(fbm(x, y, scale=650, seed=SEED+82, octaves=2))
+    shelf_floor = WATER+4+7*(1-deposit)+1.5*fbm(x, y, scale=320, seed=SEED+83, octaves=2)
+    valley = (1-smooth(5, shelf_width, stream_sd))*(1-smooth(-80, 160, sd))
     land = land*(1-valley)+shelf_floor*valley
+    land, hollows = drainage_hollows(land, x, y, sd, stream_sd)
+    land = np.maximum(land, WATER+3)
     # Scree and talus: the mountains settle under their own weight, the open ground keeps its shape.
     settled = thermal_erosion(land, iterations=24, spacing=10, talus=.95)
     land = land+(settled-land)*smooth(-30, 120, sd)*(1-.8*knoll)
@@ -399,8 +436,8 @@ def terrain():
     # A little variety along it: the bank's run and steepness, how fast the
     # bed drops and how deep it goes all wander a little.
     vary = fbm(x-600, y, scale=300, seed=SEED+7, octaves=3)
-    bank = np.clip(stream_sd/(30+18*vary+6*fbm(x, y-900, scale=90, seed=SEED+13, octaves=2)), 0, 1)
-    steep = .6+.15*fbm(x+1300, y, scale=350, seed=SEED+14, octaves=2)
+    bank = np.clip(stream_sd/(25+95*deposit+12*vary), 0, 1)
+    steep = .85+1.1*deposit+.1*fbm(x+1300, y, scale=350, seed=SEED+14, octaves=2)
     deep = 12+3*fbm(x, y+700, scale=260, seed=SEED+15, octaves=3)
     drop = 40+14*vary
     z = np.where(stream_sd > 0, WATER+.5+(land-WATER-.5)*bank**steep, WATER-4-.8*vary-deep*smooth(0, drop, -stream_sd))
@@ -422,10 +459,12 @@ def terrain():
 
     # Construction areas: level, at one height, easing into the bowl.
     for px, py in start_positions():
-        blend = (1-smooth(BASE_FLAT, BASE_BLEND, np.hypot(x-px, y-py)))**.8
+        angle = np.arctan2(y-py, x-px)
+        transition = BASE_BLEND+55*np.cos(2*angle)+35*np.sin(4*angle)
+        blend = (1-smooth(BASE_FLAT, transition, np.hypot(x-px, y-py)))**.8
         z = z*(1-blend)+BASE_Z*blend
     return dict(x=x, y=y, z=z, sd=sd, knoll=knoll, climb=climb, trails=trails, stream=stream_sd, ford_d=ford_d, shelf=shelf,
-                line=line, stream_d=stream_d)
+                line=line, stream_d=stream_d, hollows=hollows, deposit=deposit)
 
 
 def wander(points, seed, amount=70, step=200):
@@ -530,19 +569,21 @@ def materials(t):
     mid = fbm(x+2000, y, scale=320, seed=SEED+21, octaves=3)
     fine = fbm(x, y+2000, scale=90, seed=SEED+22, octaves=2)
     v = .65*broad+.35*mid+.1*fine
-    # Autumn grass: ochre, with drier, redder and rust-brown drifts, and
-    # golden patches in the open.
-    labels = np.full(z.shape, OCHRE, dtype='u2')
-    labels[v < -.1] = MIXED
-    labels[v > .15] = DRY
-    labels[(mid > .25) & (fine > -.1)] = RED
-    labels[(v < -.3) & (fine > -.2)] = RUST
-    labels[(mid < -.3) & (broad > 0) & (fine > -.05)] = GOLD
-    # Green by the water: the stream keeps its banks lush.
+    # Quiet meadow is continuous; autumn colour gathers in broad drifts and
+    # under groves. Damp hollows and dry shoulders explain the transitions.
+    labels = np.full(z.shape, MIXED, dtype='u2')
+    labels[(v > .04) & (z > WATER+16) & (t['hollows'] < .25)] = DRY
+    labels[(broad > .08) & (mid > -.12) & (t['hollows'] < .3)] = OCHRE
+    labels[(t['woods'] > .35) & (mid > .18)] = RED
+    labels[(t['woods'] > .5) & (broad < -.12)] = RUST
+    labels[(broad > .18) & (mid < -.25) & (z > WATER+18)] = GOLD
+    # Damp, gently sloping deposits grow grass in patches. Steep cut banks
+    # and exposed shores interrupt it, rather than outlining the whole river.
     edge = fbm(x, y, scale=70, seed=SEED+23, octaves=2)
     stream = t['stream']
-    labels[(stream < 55+45*mid+20*fine) & (fine > -.2)] = GREEN
-    labels[(stream > 30) & (stream < 140+60*mid) & (fine > .25) & (mid > 0)] = GREEN
+    damp = ((stream < 30+170*t['deposit']) & (z < WATER+12)) | (t['hollows'] > .45)
+    labels[damp & (slope < .24) & (mid+.35*broad > -.03)] = GREEN
+    labels[(stream > 0) & (stream < 25+55*t['deposit']) & (z < WATER+4) & (labels != GREEN)] = SILT
     labels[(stream < 9+5*edge) & (stream > -3) & (z > WATER-.3)] = MUD      # a thin wet rim
     labels[z < WATER-.3] = SILT
     labels[(t['shelf'] > .3+.25*fine) & (z < WATER+.4+.6*edge)] = TRODDEN      # the fords' gravel, under water
@@ -689,9 +730,9 @@ def woods_field(t):
     x, y, sd = t['x'], t['y'], t['sd']
     groves = fbm(x+700, y-2300, scale=520, seed=SEED+30, octaves=4)
     foot = smooth(-420, -120, sd)*(1-smooth(30, 120, sd))
-    banks = 1-smooth(60, 380, t['stream'])
+    banks = (1-smooth(60, 380, t['stream']))*(.25+.75*t['deposit'])
     openness = smooth(500*S, 900*S, np.abs(x-CX))*.25+.75
-    w = smooth(.05, .45, groves+.45*foot+.25*banks-.1)*openness
+    w = smooth(.05, .45, groves+.45*foot+.2*banks+.18*t['hollows']-.1)*openness
     w *= smooth(40, 120, t['ways'])
     # Round each base the trees keep to the bowl's rim, clear of the building ground.
     for px, py in start_positions():
@@ -851,7 +892,8 @@ def riverside(s, t, rng):
     REEDS = ['GladdenFieldsShrub01', 'GladdenFieldsShrub01', 'GladdenFieldsShrub02', 'OptGrass02']
     # Reed beds: along the edge where the bank is low, each a long clump
     # lying along the water, thick in the middle and thinning out.
-    for cx, cy in seeds(away & (river > -12) & (river < 4) & (patch > 0), SEED+71, 60, 120):
+    reed_banks = away & (river > -12) & (river < 4) & (patch > 0) & (t['deposit'] > .45)
+    for cx, cy in seeds(reed_banks, SEED+71, 45, 150):
         a = flow(cx, cy); ax, ay = math.cos(a), math.sin(a)
         size = rng.uniform(.7, 1.5)
         for _ in range(int(rng.uniform(12, 24)*size)):
@@ -862,7 +904,8 @@ def riverside(s, t, rng):
                       scale=rng.uniform(.8, 1.25))
     # Rocks where the bank is steep or the current strong: a boulder or two,
     # stones round them, a few out in the shallows.
-    for cx, cy in seeds(away & (river > -25) & (river < 30) & (patch < -.15), SEED+72, 26, 260):
+    rocky_banks = away & (river > -25) & (river < 30) & (patch < -.15) & (t['deposit'] < .6)
+    for cx, cy in seeds(rocky_banks, SEED+72, 26, 260):
         for _ in range(rng.randint(1, 2)):
             px, py = cx+rng.gauss(0, 18), cy+rng.gauss(0, 18)
             under = river[cell(px, py)] < 0
@@ -1256,7 +1299,7 @@ def build(b):
     labels[cliffs] = CLIFF
     set_materials(m, PALETTE, labels, blocked, cell_sizes=terrain_cell_sizes(PALETTE), corner_blends=True, cliffs=cliffs,
                   cliff_scale=1.6)
-    water_plane(m, 'Sirannon', WATER)
+    water_plane(m, 'Sirannon', WATER, shader='wtr_Moat.W3D')
     # The river's flowing surface over the standing water, out onto both banks.
     rows, cols = t['z'].shape
     def height_at(px, py):
