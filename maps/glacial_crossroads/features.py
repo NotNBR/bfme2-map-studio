@@ -26,7 +26,8 @@ ROCKS = [('SnowyRock01', 55.), ('SnowyRock05', 85.),
          ('SnowyRock15', 105.), ('SnowyRock17', 45.),
          ('SnowyRock09', 45.), ('SnowyRock10', 40.),
          ('SnowyRock11', 30.), ('SnowyRock12', 28.)]
-TREES = [('TreeSnowySpruce01', 30.), ('TreeSnowySpruce03', 30.)]
+# Measured top outlines fit within 28 units of their native origins.
+TREES = [('TreeSnowySpruce01', 28.), ('TreeSnowySpruce03', 28.)]
 
 # Eight circles in 1000073095.jpg replace the old diagonal/saddle sites.
 # The four inner marks follow diagonal passes; the outer four sit at the

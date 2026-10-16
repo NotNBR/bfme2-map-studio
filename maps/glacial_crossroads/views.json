@@ -116,19 +116,19 @@
       "heading": 205
     },
     "north-spruce": {
-      "target": [13131, 18842, 220],
+      "target": [15120, 19060, 220],
       "distance": 1500,
       "elevation": 42,
       "heading": 315
     },
     "glacier-waystation": {
-      "target": [15182, 18489, 220],
+      "target": [15142, 18529, 220],
       "distance": 1100,
       "elevation": 42,
       "heading": 60
     },
     "high-lookout": {
-      "target": [23569, 24932, 1650],
+      "target": [23409, 25022, 1650],
       "distance": 1300,
       "elevation": 40,
       "heading": 90

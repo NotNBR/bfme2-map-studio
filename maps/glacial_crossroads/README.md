@@ -30,7 +30,10 @@ this size.
 
 Snowy mountain masses rise toward 2,500, with shoulders and inner divides
 between the passes. All pads reserve 1,500 x 1,500 units of level construction
-ground within individually shaped, elongated cirques. Orange main ways in
+ground within individually shaped, elongated cirques. Sixteen authored
+profiles vary the glacial axes, breadths, off-centre headwalls and curved
+shoulders. Their height influence fades into the established saddle grading;
+the four inner rear entrances remain open. Orange main ways in
 the vector layout reserve at least 340 units of passage; their inner-base ice
 descents reserve 300 units. Blue side ways reserve 180 units in softer white
 snow. Unequal snow-filled recesses widen the actual valley floor between
@@ -53,6 +56,11 @@ forms continuous summit chains, unequal cols and descending buttresses.
 Their overlapping height envelopes form continuous saddles; four backing
 ranges carry the landscape out to the map boundary. Different flank slopes
 and variable valley cross-sections give the massifs irregular footprints.
+Snow-loaded mountain feet have shallower profiles than their opposing faces;
+unequal scree fans replace a fixed band along the foot of every pass.
+Rounded crests soften the knife edges where opposite carved slopes meet.
+The wider snow-loaded shoulders vary around each cirque; capture approaches
+retain their existing grading and clearance.
 The inner spurs taper down into the ice basin below the larger crowns.
 
 Long grooves start on the flanks. A deterministic downhill contributing-area
@@ -65,12 +73,17 @@ at native resolution throughout; mountain shaping cannot enter those cores.
 Snow gathers in sheltered hollows and on gentler slopes. Wind-polished snow
 marks exposed shoulders, while softer drifts collect in lee hollows. Steep
 exposed faces use cliff-mapped rock; scree and partly covered stone mark the lower talus.
-Main ways carry intermittent patches of compacted snow that wander across
-the floor and disappear beneath broad drifts. The wear follows its own
-uneven course instead of outlining the movement corridor; side ways retain
-softer white snow. Broad, slowly moving cloud shadows use a
+Large native snow tiles provide the quiet base surface; grainier snow marks
+wind-loaded drifts and compacted travel. Their close tones avoid painted
+stripes. The snow fields cross construction pads and basin edges freely,
+so the level building squares have no corresponding material outline.
+Main ways carry faint traces that wander across the floor and disappear
+beneath broad drifts; side ways retain softer white snow.
+Broad, slowly moving cloud shadows use a
 5,200 x 4,700-unit repeat instead of the stock 660-unit pattern, avoiding
 a repeated dark grid across the snow at this landscape's scale.
+The stretched `TSNoiseUrb` macro supplies broad mottled tint. The default
+relief-like macro was visible as fingerprint ripples even on perfectly flat ice.
 The central ice field is about 4,200 units
 across, with branching sheet fractures. Its snow cover crosses the basin
 boundary in unequal wind-drifted lobes: bare ice reaches between them onto
@@ -82,6 +95,8 @@ Each is roughly 2,200 units long, with a varying opening roughly 200 units
 wide, short branching fissures, steep blue walls, still meltwater and
 uneven frost lips. Two separate pond-shader water areas sit at height 35,
 85 units below the solid sheet, with the dry banks defining their shorelines.
+Broad bays and smaller chips vary the rupture widths; intermittent cornices
+break the raised rims into unequal sections.
 Each build verifies that every submerged sample remains inside its rupture.
 Their beds
 are about 100-112 units beneath the sheet and their rims rise above it. The
@@ -93,11 +108,18 @@ the inner base terraces. The source line colors
 are design semantics, not literal orange or blue paint on the snow.
 
 Small Dwarven waystations overlook the inner glacier approaches and selected
-high cirques. Broken arches, fallen beams and wall fragments share weathered
-stone aprons. Their open faces look into the adjoining clearings. Snowy
+high cirques. Watchwalls, broken shelters, fallen walls and low waymarkers
+have different surviving structures, grouped fragments and small collapse
+fans. Exposed stone follows the masonry instead of a large oval apron.
+Their open faces look into the adjoining clearings. Snowy
 spruce groves and low twig scrub gather on the lower cirque margins below the high corner sites;
 their irregular wings leave the construction pads open. Boulders collect in
 broken trains along the main passes and in small groups around cirque edges.
+Each lower basin has two unequal woodland sites: a larger sheltered stand
+and a smaller wind-torn edge. Sampling concentrates trees into irregular
+cores with sparse outliers, leaving other flanks bare. Native crowns may
+overlap slightly within a stand, while stems remain separated and their full
+measured outlines still clear all protected ground.
 Scenery footprints retain at least 70 units beyond the protected pads, route
 cores and ice field, and never straddle a terrain movement boundary. Trees
 are capped at 1,080, below the native 1,200-tree limit. Cold wind, creaking
@@ -132,6 +154,12 @@ spread relative to the mean must stay within 6% for each inn's three bases
 and 7% for each beacon's four bases. No other base may be closer than those
 intended neighbours. Distances and spreads are saved under `capture_access`
 in the build report; these are local estimates, not measured unit travel times.
+The report also records all sixteen starts' distances and their nearest inn
+and beacon, and requires every start to reach every flag. Corner-start parity
+is not implied by the neighbouring-group checks. Each capture site has its own
+small arrangement of standing wall, broken markers or rockfall behind the
+building; decoration
+must clear the building footprint and a 70-unit radius around the flag.
 
 The existing fortress reference, start markers and sky object retain their
 positions, angles and properties. All objects use the game's normal scale.

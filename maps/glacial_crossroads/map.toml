@@ -5,6 +5,12 @@ players = 16
 description = "Sixteen-site alpine landscape with twin glacier ruptures, narrow snowy passes, spruce groves, moraine boulders and ruined Dwarven waystations."
 weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
 
+[properties.environment]
+# The default macro contains relief-like ripples even over level ice.
+# Broad mottled tint leaves landform shading to the actual terrain.
+macro_texture = "TSNoiseUrb.tga"
+macro_texture_stretched = true
+
 [properties.ini.Weather]
 # The stock 660-unit cloud repeat looks like a grid across this large sheet.
 # Broad moving cloud shade lets the snow and blue fracture textures read.

@@ -16,7 +16,40 @@ from mapworkshop.mapkit.sites import neutral_site
 from mapworkshop.mapkit.variety import spot_random
 from .design import BASES, BORDER, CENTRE, EXTENT, ROUTES
 from .features import CAPTURE_LINKS, CHECKPOINTS, ROCKS, TREES
-from .terrain import DRIFT, SCREE, WIND
+from .terrain import DRIFT, SCREE
+
+# Two unequal stands per lower basin, selected along different sheltered
+# flanks. The first is a substantial wood, the second a smaller wind-torn edge.
+WOODLANDS = {
+    2: (-1.05, 2.55), 3: (1.10, -2.40), 5: (-.85, 2.65),
+    6: (1.30, -2.65), 8: (-1.10, 2.40), 9: (1.00, -2.50),
+    11: (-1.00, 2.60), 12: (1.10, -2.50), 13: (1.15, 2.60),
+    14: (-1.10, -2.40), 15: (1.00, 2.50), 16: (-1.00, -2.50),
+}
+
+# Main surviving structure and nearby collapse fragments in its local frame.
+# The fragments form one ruin, rather than detached props around an apron.
+STATIONS = {
+    'watchwall': ('DwarvishRuinSnow01', 48, math.pi, [
+        (-65, -40, 'DwarvishRuinSnow05', 12, .1),
+        (92, 25, 'DwarvishRuinSnow02', 33, .3),
+        (-45, 65, 'DwarvishRuinSnow07', 25, -.2)]),
+    'shelter': ('DwarvishRuinSnow03', 55, math.pi/2, [
+        (-120, 10, 'DwarvishRuinSnow04', 52, math.pi/2),
+        (72, 65, 'DwarvishRuinSnow02', 33, .25),
+        (10, 82, 'DwarvishRuinSnow06', 15, .1)]),
+    'fallenwall': ('DwarvishRuinSnow04', 52, math.pi, [
+        (75, -55, 'DwarvishRuinSnow02', 33, .1),
+        (-70, 45, 'DwarvishRuinSnow07', 25, .2),
+        (-12, -78, 'DwarvishRuinSnow05', 12, -.2)]),
+    'waymarkers': ('DwarvishRuinSnow05', 12, 0, [
+        (40, 14, 'DwarvishRuinSnow06', 15, -.15),
+        (-55, -5, 'DwarvishRuinSnow02', 33, .2),
+        (18, 55, 'DwarvishRuinSnow05', 12, .1)]),
+}
+STATION_TYPES = {1: 'watchwall', 4: 'fallenwall', 7: 'shelter', 10: 'waymarkers',
+                 2: 'shelter', 5: 'fallenwall', 8: 'watchwall', 12: 'shelter',
+                 13: 'watchwall', 14: 'shelter', 15: 'fallenwall', 16: 'waymarkers'}
 
 
 def populate(m, t):
@@ -33,7 +66,7 @@ def populate(m, t):
     def at(x, y):
         return round(y/10)+BORDER, round(x/10)+BORDER
 
-    def free(x, y, radius, max_slope=.25, max_rise=None):
+    def free(x, y, radius, max_slope=.25, max_rise=None, spacing=None):
         if not (300 < x < EXTENT-300 and 300 < y < EXTENT-300):
             return False
         r, c = at(x, y)
@@ -49,30 +82,33 @@ def populate(m, t):
             if np.ptp(ground) > max_rise:
                 return False
         key = (int(x//250), int(y//250))
+        separation = radius if spacing is None else spacing
         for ky in range(key[1]-1, key[1]+2):
             for kx in range(key[0]-1, key[0]+2):
-                if any((x-a)**2+(y-b)**2 < (radius+size+5)**2
+                if any((x-a)**2+(y-b)**2 < (separation+size+5)**2
                        for a, b, size in occupied[kx, ky]):
                     return False
         return True
 
-    def paint(x, y, radius, material, stretch=1.):
+    def paint(x, y, radius, material, stretch=1., angle=0.):
         r, c = at(x, y)
         n = math.ceil(radius*max(1, stretch)/10)+2
         sy, sx = slice(r-n, r+n+1), slice(c-n, c+n+1)
         yy, xx = np.mgrid[-n:n+1, -n:n+1]*10.
-        contour = radius*(1+.12*np.sin(xx/65+yy/110)+.07*np.cos(yy/43))
-        mask = (np.hypot(xx/stretch, yy) < contour) & ~protected[sy, sx]
+        along = xx*math.cos(angle)+yy*math.sin(angle)
+        across = -xx*math.sin(angle)+yy*math.cos(angle)
+        contour = radius*(1+.22*np.sin((xx+x)/65+(yy+y)/110)+.13*np.cos((yy+y)/43))
+        mask = (np.hypot(along/stretch, across) < contour) & ~protected[sy, sx]
         t['materials'][sy, sx][mask] = material
 
-    def place(template, x, y, layer, radius, angle=None, max_slope=.25, max_rise=None, sink=0.):
+    def place(template, x, y, layer, radius, angle=None, max_slope=.25, max_rise=None, sink=0., spacing=None):
         nonlocal minimum_margin
-        if not free(x, y, radius, max_slope, max_rise):
+        if not free(x, y, radius, max_slope, max_rise, spacing):
             return False
         rng = spot_random(8612, template, x, y)
         add_object(m, template, x, y, z=-sink,
                    angle=rng.random()*math.tau if angle is None else angle, layer=layer)
-        occupied[int(x//250), int(y//250)].append((x, y, radius))
+        occupied[int(x//250), int(y//250)].append((x, y, radius if spacing is None else spacing))
         counts[template] += 1
         layers[layer] += 1
         r, c = at(x, y)
@@ -81,8 +117,9 @@ def populate(m, t):
 
     def find_site(px, py, radius, reach=650, max_height=2100):
         candidates = []
-        for dy in range(-reach, reach+1, 40):
-            for dx in range(-reach, reach+1, 40):
+        offsets = sorted(set(range(-reach, reach+1, 40)) | {0})
+        for dy in offsets:
+            for dx in offsets:
                 if dx*dx+dy*dy > reach*reach:
                     continue
                 x, y = px+dx, py+dy
@@ -100,69 +137,86 @@ def populate(m, t):
         bearing = math.atan2(CENTRE[1]-base['y'], CENTRE[0]-base['x'])
         flank = bearing+(.88 if number % 2 else -1.02)
         target = (base['x']+1430*math.cos(flank), base['y']+1430*math.sin(flank))
-        site = find_site(*target, 55)
+        style = STATION_TYPES[number]
+        main, footprint, front, pieces = STATIONS[style]
+        site = find_site(*target, footprint)
         if site is None:
             continue
         x, y = site
-        # Four inspected views: 03's open arch faces local -y; 04's
-        # carved broken face is local -x. Both look into the base clearing.
-        angle = math.atan2(base['y']-y, base['x']-x)+math.pi/2
+        # Four inspected views: 03's arch faces local -y; 01's stair/wall
+        # face and 04's carved broken face are local -x. 05 is a plain pillar.
+        angle = math.atan2(base['y']-y, base['x']-x)+front
         layer = f'Waystation {number:02}'
-        if not place('DwarvishRuinSnow03', x, y, layer, 55, angle, .12, 9):
+        if not place(main, x, y, layer, footprint, angle, .12, 9):
             continue
-        paint(x, y, 140, WIND, 1.3)
-        paint(x, y, 45, SCREE)
-        stations.append(dict(base=number, x=x, y=y, facing=angle))
-        pieces = [(-130, 30, 'DwarvishRuinSnow04', 52, math.pi/2),
-                  (115, 20, 'DwarvishRuinSnow02', 33, .23),
-                  (75, 120, 'DwarvishRuinSnow07', 25, -.4),
-                  (-80, 125, 'DwarvishRuinSnow06', 15, .6),
-                  (20, 145, 'DwarvishRuinSnow06', 15, 1.4)]
+        paint(x, y, footprint*.8, SCREE, 1.3, angle)
+        stations.append(dict(base=number, x=x, y=y, facing=angle, style=style))
+        rng = spot_random(8640, layer, x, y)
         for dx, dy, template, radius, turn in pieces:
+            dx += rng.uniform(-8, 8)
+            dy += rng.uniform(-8, 8)
+            turn += rng.uniform(-.15, .15)
             px = x+dx*math.cos(angle)-dy*math.sin(angle)
             py = y+dx*math.sin(angle)+dy*math.cos(angle)
-            ground = find_site(px, py, radius, reach=170)
+            ground = find_site(px, py, radius, reach=60)
             if ground and place(template, *ground, layer, radius, angle+turn, .12, 9):
-                paint(*ground, radius*.7, SCREE)
+                paint(*ground, radius*.8, SCREE, 1.15, angle+turn)
+        # Small rubble joins the masonry into a collapse fan. No large,
+        # smooth oval of different snow marks the station's footprint.
+        for _ in range(30):
+            dx, dy = rng.gauss(0, 70), rng.gauss(35, 55)
+            px = x+dx*math.cos(angle)-dy*math.sin(angle)
+            py = y+dx*math.sin(angle)+dy*math.cos(angle)
+            if place('SnowyRock19', px, py, layer+' collapse', 15,
+                     max_slope=.20, max_rise=5, sink=.5):
+                paint(px, py, 12, SCREE)
 
     groves = []
-    # Unequal sheltered wings per lower cirque. The high corner
-    # lookouts remain above the tree line. Cores are dense, their edges thin.
+    # Overlapping, unequal lobes follow sheltered cirque margins. Continuous
+    # candidate sampling avoids the rows of a jittered planting grid.
     for base in BASES:
         if base['height'] > 1200:
             continue
         bearing = math.atan2(CENTRE[1]-base['y'], CENTRE[0]-base['x'])
-        for wing, turn in enumerate((-.95, 1.15, 2.6, -2.6)):
-            angle = bearing+turn
-            target = (base['x']+1510*math.cos(angle), base['y']+1510*math.sin(angle))
+        for wing, turn in enumerate(WOODLANDS[base['number']]):
+            rng = spot_random(8614, 'grove shape', base['number'], wing)
+            angle = bearing+turn+rng.uniform(-.20, .20)
+            reach = rng.uniform(1430, 1680)
+            target = (base['x']+reach*math.cos(angle), base['y']+reach*math.sin(angle))
             site = find_site(*target, 40, reach=570, max_height=1400)
             if site is None:
                 continue
             x, y = site
             layer = f'Cirque {base["number"]:02} spruce'
             before = trees
-            for gy in range(-450, 451, 60):
-                for gx in range(-285, 286, 60):
-                    rng = spot_random(8614, layer, x+gx, y+gy)
-                    dx, dy = gx+rng.uniform(-20, 20), gy+rng.uniform(-20, 20)
-                    q = (dx/285)**2+(dy/460)**2
-                    if q > 1 or rng.random() > 1-.38*q or trees >= 1080:
-                        continue
-                    px = x+dx*math.cos(angle)-dy*math.sin(angle)
-                    py = y+dx*math.sin(angle)+dy*math.cos(angle)
-                    r, c = at(px, py)
-                    if t['z'][r, c] > 1400:
-                        continue
-                    template, radius = TREES[(wing+int(rng.random()*5)) % 2]
-                    if place(template, px, py, layer, radius, max_slope=.30):
-                        trees += 1
-                        if rng.random() < .32:
-                            paint(px, py, 40+rng.random()*20, DRIFT)
+            quota = (48+7*(base['number'] % 3)) if wing == 0 else (18+7*(base['number'] % 3))
+            spread = 1. if wing == 0 else .72
+            lobes = [(-35, -100, 85, 155), (35, 150, 65, 105), (95, 340, 90, 110)]
+            for _ in range(1800):
+                if trees-before >= quota or trees >= 1080:
+                    break
+                pick = rng.random()
+                lx, ly, sx, sy = lobes[0 if pick < .70 else 1 if pick < .94 else 2]
+                dx = (lx+np.clip(rng.gauss(0, 1), -2.2, 2.2)*sx)*spread
+                dy = (ly+np.clip(rng.gauss(0, 1), -2.2, 2.2)*sy)*spread
+                px = x+dx*math.cos(angle)-dy*math.sin(angle)
+                py = y+dx*math.sin(angle)+dy*math.cos(angle)
+                r, c = at(px, py)
+                if t['z'][r, c] > 1400:
+                    continue
+                template, radius = TREES[int(rng.random()*2)]
+                # Native crowns can overlap slightly in the wood's core;
+                # stems remain separated, and the full measured crown still
+                # clears construction pads and all movement reservations.
+                if place(template, px, py, layer, radius, max_slope=.30, spacing=18):
+                    trees += 1
+                    if rng.random() < .32:
+                        paint(px, py, 40+rng.random()*20, DRIFT)
             if trees > before:
                 groves.append((x, y))
             # Low twig scrub at the grove's ragged edge supplies a second
             # vegetation scale without filling the base or its main routes.
-            for i in range(22):
+            for i in range(16):
                 rng = spot_random(8620, layer, x+i, y)
                 a = rng.random()*math.tau
                 px, py = x+math.cos(a)*rng.uniform(170, 340), y+math.sin(a)*rng.uniform(270, 500)
@@ -266,24 +320,68 @@ def checkpoint_sites(m, t):
                      extra=[('objectName', 3, site['name'].replace(' ', '_')+'_'+template)])
         # The flag approach stays open. A few low remnants hug the spur,
         # with at least 70 units of clearance beyond each existing route.
-        pieces = [('DwarvishRuinSnow02', 65, 75, 33, -.3),
-                  ('DwarvishRuinSnow07', 100, -35, 25, .5),
-                  ('DwarvishRuinSnow06', 10, -90, 15, -.6)]
-        if template == 'Inn':
-            pieces = [('DwarvishRuinSnow06', 130, 70, 15, -.4),
-                      ('DwarvishRuinSnow07', 130, -85, 25, .3)]
+        # The same functional beacon/inn is identifiable in different local
+        # scenes: a fallen lintel, a wall remnant, or a snow-buried rockfall.
+        # All details sit behind the model; the entire flag forecourt is open.
+        scenes = {
+            'Northwest inner': [('DwarvishRuinSnow01', 95, 60, 48, .2),
+                                ('DwarvishRuinSnow02', 90, -75, 33, -.3),
+                                ('DwarvishRuinSnow06', 35, -95, 15, .1)],
+            'Northeast inner': [('DwarvishRuinSnow07', 90, -55, 25, .8),
+                                ('DwarvishRuinSnow05', 65, 75, 12, -.5),
+                                ('DwarvishRuinSnow05', 105, 55, 12, -.3)],
+            'Southwest inner': [('SnowyRock12', 95, 40, 28, 1.2),
+                                ('SnowyRock11', 70, -65, 30, .8),
+                                ('SnowyRock19', 120, -25, 15, 0)],
+            'Southeast inner': [('DwarvishRuinSnow02', 95, -48, 33, .4),
+                                ('DwarvishRuinSnow06', 75, 70, 15, .2),
+                                ('SnowyRock19', 115, 35, 15, .1)],
+            'North saddle': [('DwarvishRuinSnow05', 125, 80, 12, -.4),
+                             ('DwarvishRuinSnow05', 140, -70, 12, .1),
+                             ('DwarvishRuinSnow02', 170, 15, 33, .6)],
+            'East saddle': [('SnowyRock12', 130, -100, 28, .9),
+                            ('SnowyRock19', 165, -50, 15, .3),
+                            ('SnowyRock19', 145, 75, 15, .8)],
+            'South saddle': [('DwarvishRuinSnow07', 140, 70, 25, -.7),
+                             ('DwarvishRuinSnow06', 135, -75, 15, -.2)],
+            'West saddle': [('DwarvishRuinSnow01', 165, -60, 48, -.2),
+                            ('DwarvishRuinSnow02', 140, 95, 33, .4),
+                            ('DwarvishRuinSnow05', 125, -80, 12, .1)],
+        }
+        pieces = scenes[site['name']]
         placed = 0
+        details = []
+        occupied = [(p, radius), (flag, 70.)]
         for ruin_template, along, side, radius, turn in pieces:
-            q = p+along*outward+side*across
-            r, c = round(q[1]/10)+BORDER, round(q[0]/10)+BORDER
             n = math.ceil(radius/10)
-            if (route_margin(q) < radius+70 or
-                    t['blocked'][r-n:r+n+1, c-n:c+n+1].any() or
-                    np.ptp(t['z'][r-n:r+n+1, c-n:c+n+1]) > 6):
+            yy, xx = np.mgrid[-n:n+1, -n:n+1]*10.
+            disk = xx*xx+yy*yy <= radius*radius
+            candidates = []
+            # Settle the ruin on a nearby natural ledge, without reshaping
+            # terrain or letting it migrate into the flag's forecourt.
+            for da in range(-60, 61, 20):
+                for ds in range(-60, 61, 20):
+                    if along+da < (90 if template == 'Inn' else 35):
+                        continue
+                    q = p+(along+da)*outward+(side+ds)*across
+                    r, c = round(q[1]/10)+BORDER, round(q[0]/10)+BORDER
+                    crop = (slice(r-n, r+n+1), slice(c-n, c+n+1))
+                    blocked = t['blocked'][crop][disk]
+                    if (any(np.linalg.norm(q-centre) < radius+size+5 for centre, size in occupied)
+                            or route_margin(q) < radius+70
+                            or (blocked.any() and not blocked.all())
+                            or np.ptp(t['z'][crop][disk]) > 6):
+                        continue
+                    candidates.append((da*da+ds*ds, along+da, side+ds))
+            if not candidates:
                 continue
+            _, settled_along, settled_side = min(candidates)
+            q = p+settled_along*outward+settled_side*across
             # Turn the broken remnants inward toward the open forecourt.
             turn_angle = math.atan2(-outward[1], -outward[0])+math.pi+turn
             add_object(m, ruin_template, *q, angle=turn_angle, layer=layer)
+            occupied.append((q, radius))
+            details.append(dict(template=ruin_template, position=q.tolist()))
             placed += 1
         # A small exposed-stone patch beneath the beacon,
         # surrounded by packed snow; irregular edges keep the court worn.
@@ -297,6 +395,7 @@ def checkpoint_sites(m, t):
         t['materials'][r-n:r+n+1, c-n:c+n+1][stone] = SCREE
         results.append(dict(name=site['name'], template=template, position=p.tolist(),
                             junction=site['junction'], flag=flag.tolist(), ruins=placed,
+                            scenery=details,
                             surrounding_bases=site['players'],
                             route_margin=round(float(route_margin(p)-(105 if template == 'Inn' else 55)), 1),
                             neutral_owner=True))

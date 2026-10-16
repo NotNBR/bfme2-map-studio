@@ -268,6 +268,8 @@ def capture_access(m, assets, sites):
     for site in sites:
         field = distance_field(walk, site['flag'])
         all_distances = {base['number']: at(field, walk, (base['x'], base['y'])) for base in BASES}
+        if not np.isfinite(list(all_distances.values())).all():
+            raise ValueError(f'{site["name"]}: a starting site cannot reach the flag')
         distances = [all_distances[i] for i in site['surrounding_bases']]
         if not np.isfinite(distances).all():
             raise ValueError(f'{site["name"]}: a surrounding base cannot reach the flag')
@@ -280,9 +282,19 @@ def capture_access(m, assets, sites):
             raise ValueError(f'{site["name"]}: another base is closer than its intended neighbours')
         results.append(dict(name=site['name'], template=site['template'],
                             walking_distances={i: round(all_distances[i]) for i in site['surrounding_bases']},
+                            all_start_distances={i: round(d) for i, d in all_distances.items()},
                             spread_percent=round(spread*100, 2)))
         print(f'{site["name"]}: {results[-1]["walking_distances"]}, spread {spread:.1%}', flush=True)
     if failures:
         raise ValueError('; '.join(failures))
+    nearest = {}
+    for base in BASES:
+        choices = {}
+        for template in ('Inn', 'SignalFire'):
+            candidates = [s for s in results if s['template'] == template]
+            best = min(candidates, key=lambda s: s['all_start_distances'][base['number']])
+            choices[template] = dict(site=best['name'], distance=best['all_start_distances'][base['number']])
+        nearest[base['number']] = choices
     return dict(method='local object-aware shortest paths, 20-unit grid',
-                native_verified=False, sites=results)
+                native_verified=False, sites=results, nearest_objectives_by_start=nearest,
+                balance_scope='Authored neighbouring groups only; corner-start parity is not established.')

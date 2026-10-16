@@ -15,9 +15,9 @@ from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, ICE, PAD_HALF,
                      RIDGES, ROUTES, SCALE, WIDTH, floor_height)
 from .features import CAPTURE_LINKS, CHECKPOINTS, CHECKPOINT_SHELF, CREVASSES
 
-PALETTE = ['SnowType5', 'SnowCaradhras06', 'SnowCaradhras07', 'SnowCaradhras05',
-           'SnowCaradhras08', 'SnowCaradhras09', 'SnowCaradhras18',
-           'SnowCaradhras20', 'StoneCaradhras03', 'CliffCaradhras02',
+PALETTE = ['SnowLargeType1', 'SnowType6', 'SnowCaradhras07', 'SnowCaradhras05',
+           'SnowCaradhras08', 'SnowCaradhras09', 'SnowType4',
+           'SnowCaradhras21', 'StoneCaradhras03', 'CliffCaradhras02',
            'SnowCaradhras04', 'CliffCaradhras03']
 DRIFT, WIND, SCREE, DEPTH = 6, 7, 8, 9
 TALUS = len(PALETTE)-2
@@ -37,6 +37,29 @@ SNOW_TONGUES = [
     ([(2400, 900), (1530, 700), (980, 470)], 350.),
     ([(-600, -2070), (-360, -1550), (-580, -1080)], 330.),
 ]
+
+# Each basin has its own glacial axis, proportions and off-centre headwall.
+# Values: turn from the inward bearing, length, breadth, along/across offset.
+# These shape the surrounding land; the 1,500-unit construction squares and
+# all route cores remain separately reserved, including the four rear entries.
+CIRQUES = {
+    1: (-.38, 1.55, 1.02, 220, -110),
+    2: (.47, 1.30, 1.18, -110, 170),
+    3: (-.28, 1.62, 1.01, 240, -120),
+    4: (.30, 1.20, 1.22, -100, 120),
+    5: (-.45, 1.48, 1.08, 200, 100),
+    6: (.32, 1.22, 1.17, -130, -140),
+    7: (-.24, 1.60, 1.02, 180, 120),
+    8: (.42, 1.36, 1.10, 120, -180),
+    9: (-.36, 1.30, 1.03, 80, 100),
+    10: (.46, 1.28, 1.20, -80, -170),
+    11: (-.30, 1.27, 1.18, -120, 130),
+    12: (.28, 1.25, 1.08, 70, -100),
+    13: (-.30, 1.56, 1.03, 210, -70),
+    14: (-.25, 1.20, .97, 70, -120),
+    15: (.22, 1.45, 1.06, 180, -100),
+    16: (-.38, 1.27, 1.05, 60, -70),
+}
 
 
 def glacier(x, y, shore, ice):
@@ -72,7 +95,9 @@ def glacier(x, y, shore, ice):
             if branch == 0:
                 ends *= smooth(along/230)
             width = (feature['half_width'] if branch == 0 else 48.)*(.12+.88*ends)
-            width *= 1+.21*np.sin(along/83)+.10*np.sin(along/37+.8)
+            # Broad broken bays and short chips interrupt the excavated,
+            # constant-width appearance without encroaching on the crossing.
+            width *= 1+.28*np.sin(along/237+index)+.13*np.sin(along/73+.8)+.25*grain
             cavity = (1-smooth((d-width+30)/47))*ends
             depth = (ICE-feature['floor'])*(1-.10*(.5+.5*np.sin(along/145)))*cavity
             # One wind-scoured bank and one broken cornice, with unequal
@@ -81,7 +106,8 @@ def glacier(x, y, shore, ice):
             near_y = np.interp(along, arc, points[:, 1])
             side = np.tanh(((yy-near_y)-.35*(xx-near_x))/35)
             crest = (38+13*np.sin(along/160+.7)+7*np.sin(along/61))*(.78+.22*side)
-            lip = crest*np.exp(-((d-width-24)/64)**2)*ends*(1+.17*grain)
+            cornice = .42+.58*smooth(.48+.70*np.sin(along/290+index)+grain)
+            lip = crest*cornice*np.exp(-((d-width-24)/(54+22*cornice))**2)*ends*(1+.17*grain)
             cut_depth = np.maximum(cut_depth, depth)
             lips = np.maximum(lips, lip)
             frost = np.maximum(frost, (1-smooth((d-width-50)/115))*ends)
@@ -374,28 +400,47 @@ def landscape():
             # Worn snow wanders within the open valley, disappearing under
             # broad drifts. It must not trace the minimum-clearance boundary.
             offset = 140*recess[crop]+65*scallop[crop]
-            width = 155*smooth(.22+1.7*recess[crop]-.65*scallop[crop])-15
+            width = 55+100*smooth(.22+1.7*recess[crop]-.65*scallop[crop])
             wear_edge = np.abs(np.copysign(d, side)-offset)-width
             main_edge[crop] = np.minimum(main_edge[crop], wear_edge)
     lower = np.full(x.shape, ICE)
     upper = np.full(x.shape, 2550.)
     pads = np.zeros(x.shape, bool)
     basins = np.zeros(x.shape, bool)
+    cirque_shoulders = np.zeros(x.shape)
     for base in BASES:
         dx, dy = x-base['x'], y-base['y']
         angle = np.arctan2(dy, dx)
         # Preserve the level construction square inside an irregular cirque.
         toward_ice = np.arctan2(CENTRE[1]-base['y'], CENTRE[0]-base['x'])
-        axis = toward_ice+.28*np.sin(base['number']*1.7)
-        length = (1.23 if base['number'] >= 13 else 1.10)+.06*np.sin(base['number']*2.3)
-        along = dx*np.cos(axis)+dy*np.sin(axis)
-        across = -dx*np.sin(axis)+dy*np.cos(axis)
-        radial = np.hypot(along/length, across)
-        rim = 1140+150*np.cos(angle-toward_ice)+90*np.sin(3*angle+base['number']*.8)+65*np.cos(5*angle-.7)
+        turn, length, breadth, advance, offset = CIRQUES[base['number']]
+        axis = toward_ice+turn
+        along = dx*np.cos(axis)+dy*np.sin(axis)-advance
+        across = -dx*np.sin(axis)+dy*np.cos(axis)-offset
+        # One curved, elongated side opens onto a snow shoulder; the other
+        # retains an uneven rock headwall. This is more than a noisy circle.
+        bent = across-160*np.sin(along/1100+base['number'])*smooth(np.abs(along)/700)
+        radial = np.hypot(along/length, bent/breadth)
+        rim = 1080+110*np.cos(angle-axis)+100*np.sin(2*angle+base['number']*.8)+55*np.cos(5*angle-.7)
         box = np.hypot(np.maximum(np.abs(dx)-PAD_HALF, 0),
                        np.maximum(np.abs(dy)-PAD_HALF, 0))
-        d = np.maximum(0, np.minimum(box, radial-rim))
-        allowance = np.where(d < 850, .00018*d*d, 130.05+.30*(d-850))
+        # Convert the elliptical radius back to world distance before
+        # grading height. Otherwise a long basin flattens distant bases.
+        metric = np.hypot(along, bent)/np.maximum(radial, 1)
+        d = np.maximum(0, np.minimum(box, (radial-rim)*metric))
+        lee_shoulder = .30+.70*smooth(.5+.6*np.sin(angle-axis+base['number']*.9))
+        cirque_shoulders = np.maximum(cirque_shoulders, (1-smooth(d/1000))*lee_shoulder)
+        # Local cirque shaping must not regrade distant saddle approaches.
+        # Retain their established broad height envelope outside this basin.
+        grade_axis = toward_ice+.28*np.sin(base['number']*1.7)
+        grade_length = (1.23 if base['number'] >= 13 else 1.10)+.06*np.sin(base['number']*2.3)
+        grade_radius = np.hypot((dx*np.cos(grade_axis)+dy*np.sin(grade_axis))/grade_length,
+                                -dx*np.sin(grade_axis)+dy*np.cos(grade_axis))
+        grade_rim = 1140+150*np.cos(angle-toward_ice)+90*np.sin(3*angle+base['number']*.8)+65*np.cos(5*angle-.7)
+        far = np.maximum(0, np.minimum(box, grade_radius-grade_rim))
+        blend = smooth((np.hypot(dx, dy)-2000)/1000)
+        graded = d*(1-blend)+far*blend
+        allowance = np.where(graded < 850, .00018*graded*graded, 130.05+.30*(graded-850))
         lower = np.maximum(lower, base['height']-allowance)
         upper = np.minimum(upper, base['height']+allowance)
         pads |= (np.abs(dx) <= PAD_HALF) & (np.abs(dy) <= PAD_HALF)
@@ -464,13 +509,25 @@ def landscape():
     # Carve U-shaped passes from their uneven valley margins, with changing
     # side slopes and snow-filled recesses between the buttress feet.
     depth = np.maximum(edge[::3, ::3]-30, 0)
-    apron = depth*np.clip(1+.7*noise+.35*crags, .55, 1.5)
+    # A shallow snow-loaded flank and a steeper opposing face give each
+    # divide a direction, rather than the same U-shaped cut on both sides.
+    ey, ex = np.gradient(blur(edge[::3, ::3], 4), 30)
+    aspect = (ex-.65*ey)/np.maximum(np.hypot(ex, ey), .1)
+    apron = depth*np.clip(1+.7*noise+.35*crags+.24*aspect, .50, 1.65)
     allowance = np.where(apron < 180, .0015*apron*apron,
                          48.6+.55*(apron-180)+.00025*(apron-180)**2)
+    allowance *= 1-.48*cirque_shoulders[::3, ::3]
     # Inner divides descend into the glacial basin as low noses, while
     # their broad upper crowns keep their full prominence behind the bases.
     allowance *= .4+.6*smooth((radius[::3, ::3]-2400)/3300)
     raw = np.minimum(np.maximum(raw, cfloor), cfloor+allowance)
+    # Round the medial crest where opposing carved slopes meet. A raw
+    # distance envelope otherwise produces a thin triangular knife edge.
+    crown = .75-.35*smooth((radius[::3, ::3]-8000)/7000)
+    for site in CHECKPOINTS:
+        px, py = site['position']
+        crown *= smooth((np.hypot(cx-px, cy-py)-800)/1100)
+    raw = raw*(1-crown)+blur(raw, 5)*crown
     raw = drainage_incision(raw, 30, 1-smooth(depth/300))
     mountains = upscale(raw, cx, cy, x, y)
     z = floor+np.maximum(mountains-floor, 0)*smooth((edge-25)/110)
@@ -513,15 +570,25 @@ def landscape():
               & (grade > .50+.18*drift+.12*scallop)
               & (z-floor > 100+100*recess) & (drift > -.20)] = WIND
     materials[(materials == 0) & (hollow > .16) & (edge > 100)] = DRIFT
-    materials[debris & (edge > 160) & (edge < 340) & (hollow < .18)] = SCREE
+    # Scree collects below exposed faces in unequal fans; a fixed distance
+    # band would trace every pass and leave angular, painted cutouts.
+    fan = (edge > 170+100*recess) & (edge < 300+170*scallop+90*recess)
+    materials[debris & fan & (hollow < .18) & (recess+.5*scallop > -.04)] = SCREE
     wear = upscale(fbm(cx, cy, scale=530, octaves=2, seed=5605), cx, cy, x, y)
-    # Uneven remnants of compacted snow sit inside the wider valley floor.
-    # Most stretches retain the same snow as their banks, avoiding a dark
-    # ribbon that visually reinstates the old fixed-width corridor.
+    # Snowfall ignores the construction reservation. Broad wind-stretched
+    # drifts cross pads, basin margins and paths without exposing squares.
+    snow = upscale(fbm(.82*cx+.57*cy+220*noise, -.57*cx+.82*cy,
+                       scale=1100, octaves=3, seed=5630), cx, cy, x, y)
+    filaments = upscale(fbm((.82*cx+.57*cy)*.28, -.57*cx+.82*cy,
+                            scale=160, octaves=2, seed=5631), cx, cy, x, y)
+    soft = (grade < .40) & (z-floor < 70) & ~ice
+    materials[soft] = 0
+    materials[soft & (snow+.40*filaments > .18)] = DRIFT
+    # A quiet, low-contrast compacted trace links broad junctions. Its width
+    # and axis wander; windblown cover interrupts it in the same field as
+    # the surrounding floor instead of ending it at a pad boundary.
     packed = (main_edge < 0) & (slope < .35)
-    materials[packed] = 1
-    materials[basins] = 0
-    materials[basins & ~pads & (wear > .18)] = DRIFT
+    materials[packed & (snow+.40*filaments < .25)] = 1
     # Broken snow wear, not an evenly painted perimeter around each shelf.
     materials[checkpoints & (wear+drift*.35 > .05)] = 1
     materials[ice] = 2
