@@ -3,9 +3,12 @@ BFME2 renders them, HUD included.
 
 capture() starts a skirmish on the map; like every game native.runtime
 starts, it loads ingame.dll (native/ingame/ingame.cpp), which places the
-tactical camera and copies the D3D9 render target on request. By default the game runs headless: on a hidden
-desktop, rendering through DXVK (native.runtime). The launcher reveals the
-map, then for each shot
+tactical camera and copies the D3D9 render target on request, in BFME2 1.06
+and ROTWK 2.01 alike. By default the game runs headless: on a hidden
+desktop, rendering through DXVK (native.runtime). In BFME2 the launcher
+reveals the map (runtime.reveal_map); ROTWK keeps its shroud unless the map's
+own scripts reveal it (MAP_REVEAL_ALL_PERM), its reveal call not being
+ported. Then for each shot
 (name, x, y, height) points the camera at the ground below x, y from that
 height, waits `settle` rendered frames for the view to stream in, and saves
 the frame. A shot (name, x, y, height, frame) waits until the game's logic
@@ -32,8 +35,6 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     (the default) runs the game unseen, through DXVK (native.runtime); False
     shows its window and uses native Direct3D 9."""
     from mapworkshop.config import PROFILE
-    if PROFILE == 'rotwk':
-        raise RuntimeError('Native screenshot capture currently supports BFME2 1.06 only')
     from PIL import Image, ImageStat
     from mapworkshop.native import debugger, runtime
     out = Path(out)
@@ -55,7 +56,8 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
         photo, cap = module['mwPhoto'], module['mwCapture']
         frames = game.u32(cap + 24)
         if state['step'] == 'load':
-            game.arm(GAME_ENGINE_UPDATE, runtime.reveal_map)
+            if PROFILE != 'rotwk':
+                game.arm(GAME_ENGINE_UPDATE, runtime.reveal_map)
             state['step'] = 'move'
         if state['step'] == 'move':
             s = shots[state['shot']]
@@ -103,8 +105,7 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
                   run=result)
     (out/'capture.json').write_text(json.dumps(report, indent=2, default=str) + '\n', encoding='utf-8')
     if len(state['done']) != len(shots) and not game.ingame:
-        raise RuntimeError('BFME2 could not load ingame.dll' + (f' ({result["ingame"]}; not BFME2 1.06?)'
-                                                                 if 'ingame' in result else ''))
+        raise RuntimeError('The game could not load ingame.dll' + (f' ({result["ingame"]})' if 'ingame' in result else ''))
     if len(state['done']) != len(shots):
         raise RuntimeError(f'The game ended after {len(state["done"])} of {len(shots)} shots: '
                            + debugger.describe(result))

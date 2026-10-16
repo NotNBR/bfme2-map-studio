@@ -29,6 +29,7 @@ USAGE = """
   mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself, headless (--graphics High, --show)
   mw patch [install|remove]  faster map loading in your normal game (status without an action)
   mw rivers [MAP] [--json]   which way each river strip flows
+  mw sites [MAP] [--teams 1-4/5-8]   walking distances from the bases to the neutral sites and lairs
   mw where MAP NAME...       where objects stand (--section Z, --footprint, --bones: their outlines there)
   mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
                              (--textures, --roads, --sounds, --effects: those instead)
@@ -73,7 +74,7 @@ def parser():
     s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
                    help='Detail level of the test game (default Medium)')
     s.add_argument('--fog', action='store_true',
-                   help='Keep the shroud and fog of war (by default the map is revealed)')
+                   help='Keep the shroud and fog of war (by default BFME2 and OpenBFME test games reveal the map)')
     s.add_argument('--godot', '--openbfme', dest='godot', action='store_true',
                    help='Start OpenBFME (RotWK rebuilt in Godot) instead, with the map in its Skirmish list; '
                         'the first time builds the engine (with --check: a headless scripted skirmish)')
@@ -116,6 +117,13 @@ def parser():
     s = sub.add_parser('rivers', help='Which way each river strip flows')
     s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
     s.add_argument('--json', action='store_true', help='Print each strip with the middle of every cross-section')
+    s = sub.add_parser('sites', help='Walking distances from the bases to the neutral sites and lairs')
+    s.add_argument('map', nargs='?', help='Project, stock map or .map file (default: the last map)')
+    s.add_argument('--teams', help='Teams of base numbers: 1-4/5-8 or 1,2,3/4,5,6 (default: each base for itself)')
+    s.add_argument('--bases', nargs='+', metavar='X,Y',
+                   help='Measure from these points instead of the starts (a map laid out for more players than it seats)')
+    s.add_argument('--image', type=Path, help="Also draw the bases' territories and the sites as a PNG")
+    s.add_argument('--json', action='store_true', help='Print the full report as JSON')
     s = sub.add_parser('where', help='Where objects stand on a map, and their outlines there')
     s.add_argument('map', help='Project, stock map or .map file')
     s.add_argument('patterns', nargs='*',
@@ -320,8 +328,10 @@ def cmd_play(args, extra):
             say(f'OpenBFME played {p.title}: loaded in {report.get("load_ms", 0)/1000:.1f} s, logic frame {report["frame"]} '
                 f'with {report["objects"]} objects. Report: {openbfme.LOGS/f"check-{p.id}.json"}')
             return 0
-        openbfme.play(p, progress=say, download=args.download)
-        say(f'OpenBFME is starting: pick "{p.title}" under Skirmish. Its logs: {openbfme.APPDATA}')
+        openbfme.play(p, progress=say, download=args.download, fog=args.fog)
+        seats = openbfme.net_slots(p).count(';')
+        say(f'OpenBFME is starting a skirmish on {p.title}: you and {seats} computer player'
+            f'{"s" if seats > 1 else ""}. Its logs: {openbfme.APPDATA}')
         return 0
     if args.check:
         from mapworkshop import native
@@ -557,6 +567,39 @@ def cmd_rivers(args):
     return 0
 
 
+def cmd_sites(args):
+    """Walking distances from the bases to each other and to the neutral sites and lairs."""
+    import json
+    from mapworkshop import project
+    from mapworkshop.formats.map import Map
+    from mapworkshop.mapkit.checks import strategy
+    path = project.map_path(args.map)
+    try:
+        bases = [tuple(float(v) for v in b.split(',')) for b in args.bases] if args.bases else None
+        teams = strategy.parse_teams(args.teams) if args.teams else None
+    except ValueError:
+        raise LookupError('--bases takes X,Y points, --teams base numbers: 1-4/5-8') from None
+    if bases and any(len(b) != 2 for b in bases):
+        raise LookupError('--bases takes X,Y points')
+    result = strategy.analyse(Map(path.read_bytes()), teams, bases)
+    report = result[0]
+    count = report['starts']
+    if teams and any(not 1 <= b <= count for t in teams for b in t):
+        raise LookupError(f'--teams names bases 1 to {count}')
+    if args.image:
+        args.image.parent.mkdir(parents=True, exist_ok=True)
+        strategy.draw(*result, args.image)
+    if args.json:
+        say(json.dumps(report, indent=1, default=str))
+        return 0
+    for line in strategy.lines(report, path.stem):
+        say(line)
+    if args.image:
+        say()
+        say(f'Drawn: {args.image}')
+    return 0
+
+
 def cmd_config(args):
     from mapworkshop import game
     from mapworkshop.config import CONFIG, save_setting, settings
@@ -666,7 +709,7 @@ def main(argv=None):
     if extra and extra[0] == '--':
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
-                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, where=cmd_where, capture=cmd_capture,
+                    config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, sites=cmd_sites, where=cmd_where, capture=cmd_capture,
                     patch=cmd_patch)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:

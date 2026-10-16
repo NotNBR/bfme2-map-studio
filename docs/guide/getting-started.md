@@ -59,8 +59,9 @@ The shared quickload DLL accelerates its terrain textures automatically.
 `mw patch install` also applies it to your configured ROTWK installation.
 `mw play MAP --check` runs a short hidden gameplay test and closes it afterward.
 ROTWK test games have the same free-camera zoom, tilt, scrolling and reset
-controls as BFME2. ROTWK keeps its normal fog; automatic fog reveal, the
-native screenshot command and native pathfinding capture remain BFME2 1.06 features.
+controls as BFME2. `mw capture` works in ROTWK too, but ROTWK keeps its
+normal fog unless the map's scripts reveal it; automatic fog reveal and native
+pathfinding capture remain BFME2 1.06 features.
 Model rendering and local walkability estimates work in either profile.
 
 ## Open a map
@@ -96,7 +97,7 @@ Greywater Marches. Without a map, commands use the one you worked on last.
 | Commands | Guide |
 |---|---|
 | `mw setup`, `mw doctor`, `mw config`, `mw test` | here, and [projects and builds](projects-and-builds.md#where-things-live) |
-| `mw maps`, `mw new`, `mw dev`, `mw build`, `mw history`, `mw diff`, `mw walkable`, `mw rivers` | [projects and builds](projects-and-builds.md) |
+| `mw maps`, `mw new`, `mw dev`, `mw build`, `mw history`, `mw diff`, `mw walkable`, `mw rivers`, `mw sites` | [projects and builds](projects-and-builds.md) |
 | `mw find`, `mw item`, `mw items` | [finding assets](finding-assets.md) |
 | `mw render` | [rendering](rendering.md) |
 | `mw graphics` | [map graphics](map-graphics.md) |

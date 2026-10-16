@@ -114,14 +114,10 @@ def skirmish_setup(game, tid, ctx):
         game.stop('missing-skirmish-info')
         return False
     game.write(game.base + GAME_INFO, struct.pack('<I', info))
-    slots = [game.u32(info + 0x18 + 4*i) for i in range(2)]
-    if not all(slots):
+    from mapworkshop.native import runtime
+    if not runtime.seat(game, info):                 # the GameSlot layout is BFME2's
         game.stop('missing-skirmish-slots')
         return False
-    for slot in slots:
-        game.write(slot + 0x18, struct.pack('<i', -1))  # random faction
-    game.write(slots[1] + 4, struct.pack('<I', 2))     # easy AI
-    game.write(slots[1] + 8, b'\x01\x01')           # accepted, has map
     game.res['skirmish_setup'] = True
     return False
 

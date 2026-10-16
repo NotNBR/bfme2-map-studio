@@ -1,0 +1,32 @@
+diff --git a/godot/scripts/game.gd b/godot/scripts/game.gd
+index 9ba6f43..d090d42 100644
+--- a/godot/scripts/game.gd
++++ b/godot/scripts/game.gd
+@@ -302,6 +302,9 @@ var _mouse_override := ""
+ var _move_hints: Node3D
+ ## lane PLAY-1: the free camera (the owner's presentation option, not retail): --free-camera or Options.ini "OpenBFMEFreeCamera = yes"
+ var _free_camera_flag := false
++## mapworkshop (openbfme-no-shroud.patch): --no-shroud draws the live game without its shroud and fog, as the viewers' debug view does
++## (GameWorld.set_shroud_drawn(false)); the logic keeps its shroud, so the players, the AI among them, see what they would
++var _no_shroud := false
+ ## lane ZOOM-1: --zoom-out=<f> (0 = Options.ini's OpenBFMEMaxZoomOut)
+ var _zoom_out_flag := 0.0
+ var _zoom_out_error := "" # lane ZOOM-1 r2: a --zoom-out value the option does not take
+@@ -605,6 +608,8 @@ func _ready() -> void:
+ 			_mouse_override = "classic"
+ 		elif arg == "--free-camera":
+ 			_free_camera_flag = true
++		elif arg == "--no-shroud":
++			_no_shroud = true
+ 		elif arg.begins_with("--zoom-out="):
+ 			# lane ZOOM-1 r2: one of the option's values (OpenBFMEMaxZoomOut's choices), anything else is refused below (no silent 1x)
+ 			var z := arg.substr(11)
+@@ -1628,6 +1633,8 @@ func _enter_game(rep: Dictionary) -> void:
+ 		for o in rep.start.starting_objects:
+ 			print("GAME starting object: ", JSON.stringify(_world.get_object(o.id)))
+ 	_install_hud(rep)
++	if _no_shroud:
++		_world.set_shroud_drawn(false)
+ 	# lane END-1: GuiFX.apt (the end screen's movie) is loaded with the game, so ShowEndGame finds it
+ 	var gfx: Dictionary = _shell.end_game_screen({"kind": "preload"})
+ 	print("GAME GuiFX for the end screen: level %d %s" % [gfx.get("level", -1), str(gfx.get("error", ""))])

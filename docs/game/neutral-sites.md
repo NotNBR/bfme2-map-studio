@@ -4,6 +4,22 @@ What the stock skirmish maps place beyond starts and scenery, measured in the
 13 multiplayer and 38 War of the Ring maps (`local/game/maps`).
 `mapworkshop.mapkit.sites` and `mapworkshop.mapkit.ambient` place the same.
 
+## What each site gives
+
+From the game's INI (`object/neutral/*.ini`, `gamedata.ini`,
+`commandset.ini`), BFME2's and the RotWK profile's alike except where the
+table says; not measured in play:
+
+| Site | Gives its owner |
+|---|---|
+| `Outpost` | 25 command points (`OUTPOST_COMMAND_POINT_BONUS`) and 60 resources every 10 seconds (`AutoDepositUpdate`), no bonus on capture |
+| `SignalFire` | faster power recharge (`SpellRechargeModifierUpgrade`; RotWK lists -25% and -50%, BFME2 also -35%) |
+| `Inn` | one unit to recruit, chosen by the owner's faction (`CommandSetInn...Faction`; RotWK: Dunedain rangers for Men, hobbit shirriffs for Elves; BFME2: elven warriors for Men, Rohan peasants for Elves) |
+| Creep lairs | guards that come back after they die: `CaveTrollLair` one cave troll and `FireDrakeLair` one fire drake (every 120 s), `MoriarGoblinLair` eight goblins (every 60 s) |
+
+`mw sites <map>` measures how far each base walks to them
+([projects and builds](../guide/projects-and-builds.md#neutral-sites-and-walking-distances)).
+
 ## Capture flags
 
 Outposts, inns, signal fires and shipwrights are `LINKED_TO_FLAG`. Each stands

@@ -39,7 +39,7 @@ searches both ([finding assets](finding-assets.md)).
 | Module | For |
 |---|---|
 | [pathing](../../src/mapworkshop/mapkit/pathing.py), [walkable](../../src/mapworkshop/mapkit/walkable.py) | local walkability estimates from terrain, water, object footprints and walking meshes, without starting the game (`mw walkable`, the viewer's key **7**, `mw render --walkable`) |
-| [checks.strategy](../../src/mapworkshop/mapkit/checks/strategy.py) | walking distances and fairness between players; the maps call it to refuse an unfair build |
+| [checks.strategy](../../src/mapworkshop/mapkit/checks/strategy.py) | walking distances and fairness between players, and from the bases to the neutral sites and lairs (`mw sites`); the maps call it to refuse an unfair build |
 | [checks.analyze](../../src/mapworkshop/mapkit/checks/analyze.py) | every record of a `.map`, decoded and checked: `python -m mapworkshop.mapkit.checks.analyze FILE.map --out FILE.json` |
 | [checks.coverage](../../src/mapworkshop/mapkit/checks/coverage.py), [checks.terrain_audit](../../src/mapworkshop/mapkit/checks/terrain_audit.py) | surveys of a whole archive (`Maps.big`): which sections and terrain records it holds ([format tools](../format/tools.md)) |
 | [checks.lighting_check](../../src/mapworkshop/mapkit/checks/lighting_check.py) | reads the lighting arrays from the running game's memory; written for bfme-workshop's host, nothing here calls it yet |

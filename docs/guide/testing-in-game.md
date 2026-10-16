@@ -9,13 +9,15 @@ describes how they work. `mw play --godot` opens the map in OpenBFME, the
 Godot rebuild of ROTWK, instead ([below](#openbfme-mw-play---godot)).
 
 With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
-directly in a player-versus-easy-AI skirmish. The isolated runtime uses BFME2
+directly in a player-versus-easy-AI skirmish, or the project's
+[line-up](#line-ups). The isolated runtime uses BFME2
 assets plus retail ROTWK and official 2.01 patches, excluding community mods.
 It needs the [verified ROTWK executable](../game/runtime.md#rotwk-201); other
 hashes are rejected before hooks run. The [free camera](#camera) works in
-ROTWK test games too. ROTWK keeps its normal fog; automatic fog reveal
-(`--fog` controls BFME2 only), `mw capture` and `mw walkable --native` remain
-BFME2 1.06 features. The shared
+ROTWK test games too. `mw capture` works in ROTWK as well. ROTWK keeps its
+normal fog, also in captures, unless the map's own scripts reveal it;
+automatic fog reveal (`--fog` controls BFME2 and OpenBFME) and `mw walkable --native`
+remain BFME2 1.06 features. The shared
 loading fix accelerates ROTWK test games automatically; `mw patch install`
 also supports the verified ROTWK engine in your configured game folder.
 
@@ -33,7 +35,8 @@ are untouched. The remaining sections describe BFME2's additional features.
 
 `mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a
 skirmish on the current build, without going through the menus: the game opens
-in a 1600 x 1200 window, you against an easy AI, at Medium detail
+in a 1600 x 1200 window, you against an easy AI (or the project's
+[line-up](#line-ups)), at Medium detail
 (`--graphics Low|Medium|High|UltraHigh` for another). `--rebuild` builds the
 map first.
 
@@ -54,6 +57,32 @@ goes into the game's user maps folder
 (`%APPDATA%\My Battle for Middle-earth(tm) II Files\Maps`) and BFME2 starts at
 its menu; pick the map under Skirmish. `mw build --install` copies it there
 too.
+
+### Line-ups
+
+A project's `map.toml` can seat the test game's slots instead, in both
+profiles; `mw play` and `mw play --check` use it:
+
+```toml
+[play]
+slots = [                               # slot k takes start k (Player_k_Start)
+    {faction = "Men", team = 1},        # the first slot is you
+    {faction = "Elves", team = 1, ai = "hard"},
+    {faction = "Mordor", team = 2, ai = "brutal"},
+    {faction = "Wild", team = 2, ai = "medium"},
+]
+```
+
+- `ai`: easy, medium, hard or brutal, for every slot but the first.
+- `faction`: a playable faction's name in `playertemplate.ini` without
+  `Faction` (Men, Elves, Dwarves, Isengard, Mordor, Wild for the goblins, and
+  Angmar in ROTWK); random without one.
+- `team`: 1 to 4; no team without one.
+
+The launcher writes them into the game's slots as the skirmish menu would
+([runtime.py](../../src/mapworkshop/native/runtime.py) `seat()`; the slot
+layout is Open-BFME-2's `GameSlot`, which ROTWK shares). A map seats at most
+its `players`, and at most 8; an observer would take a slot too.
 
 ### Camera
 
@@ -78,8 +107,14 @@ the terrain, and the map's edge shows as black.
 
 `mw play <map> --godot` opens the map in
 [OpenBFME](https://github.com/Open-BFME/openbfme-godot), a rebuild of ROTWK
-2.01 in Godot, instead of the original game. OpenBFME opens at its main menu;
-pick the map under Skirmish. In the viewer, choose **OpenBFME (Godot)** in the
+2.01 in Godot, instead of the original game. It starts straight in a
+skirmish on the map, as `mw play` does: you against an easy AI, or the
+project's [line-up](#line-ups). OpenBFME's LAN host (`--net-host`,
+`--net-slots`) seats the slots without the lobby screens and, with every other
+slot a computer, starts at once. The game is drawn without its shroud and fog
+of war, as BFME2's test games reveal the map: `openbfme-no-shroud.patch` gives
+OpenBFME a `--no-shroud` option (its viewers' debug view: only the drawing
+changes, the players and the AI keep their shroud); `--fog` keeps them. In the viewer, choose **OpenBFME (Godot)** in the
 dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
 skirmish instead: OpenBFME clicks through its menus, starts the map against an
 AI, plays five seconds of game time and closes. The report goes to
@@ -137,7 +172,9 @@ saves screenshots rendered by the game, HUD included, into
 `local/renders/game/<map>/` (or `--out`), about 10 seconds for a few shots. It
 runs headless: the game starts on a hidden desktop of its own, so no window
 appears and your focus stays where it is, and it ends as soon as it has the
-shots. `--show` runs it in a visible window instead.
+shots. `--show` runs it in a visible window instead. In BFME2 the map is
+revealed; in ROTWK the shroud stays unless the map's scripts lift it. The
+skirmish is seated as `mw play`'s ([line-ups](#line-ups)).
 
 - `--shot NAME X Y HEIGHT`: the camera looks at the ground at X, Y from
   HEIGHT (the game's own camera; 300 is its usual zoom).

@@ -46,8 +46,11 @@ Direct ROTWK test games also load the shared camera DLL, which selects its
 own verified ROTWK hook layout. Zoom, tilt, scroll scaling, terrain clearance,
 reset and scripted-camera protection use the same behavior as BFME2. The
 normal-game menu still uses only the standalone loading DLL: the two DLLs
-would otherwise compete for its view-update hook. ROTWK keeps normal fog;
-the native screenshot command and pathfinding capture are still rejected.
+would otherwise compete for its view-update hook. `mw capture` uses the same
+DLL's ROTWK hooks for its camera and frame copy. ROTWK keeps normal fog: the
+reveal call BFME2's launcher makes is not ported (OpenBFME's ShroudManager.h
+lists ROTWK's revealMapForPlayerPermanently at RW 0xB4F5D0; not tried);
+pathfinding capture is still rejected.
 
 [Validation record](../history/rotwk-integration.md) records the asset and
 gameplay checks. The rest of this page describes the BFME2 runtime.

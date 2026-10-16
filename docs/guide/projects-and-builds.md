@@ -52,7 +52,9 @@ weather = "clear"                       # clear, haze, rain, snow, dusk (mapwork
 These settings live only here: `map.py` reads them from `b.project` and passes
 them on, e.g. `create(..., title=b.project.title, description=b.project.description,
 player_count=b.project.players)`, instead of repeating them. Other keys are free
-for the build to read, as Eight Kingdoms does for its size and seed.
+for the build to read, as Eight Kingdoms does for its size and seed. A
+`[play]` table seats `mw play`'s slots
+([line-ups](testing-in-game.md#line-ups)).
 
 ### Map properties
 
@@ -175,6 +177,7 @@ map comes out byte for byte the same either way; the build says how many it reus
 | `mw render --map MAP --view ...` | a picture from any camera ([rendering](rendering.md)) |
 | `mw walkable [MAP]` | a local walkability estimate: areas cut off from every start (`--image` writes it as a PNG, `--json` lists them) |
 | `mw rivers [MAP]` | which way each river strip flows, as compass runs (`--json`: every cross-section) |
+| `mw sites [MAP]` | walking distances from the bases to the neutral sites and lairs (below) |
 | `mw graphics --map FILE` | diagnostic plans: placement atlas, heights, slope, passability ([map graphics](map-graphics.md)) |
 | `mw play MAP`, `mw capture MAP` | the game itself ([testing in-game](testing-in-game.md)) |
 
@@ -198,6 +201,42 @@ seconds, [testing in the game](testing-in-game.md)) and reports it;
 launching anything. Native captures are tied to the map file's hash, so a
 changed build needs a new one. Without `--native`, the command and the viewer
 always use the local estimate.
+
+### Neutral sites and walking distances
+
+`mw sites <map>` measures how far each base walks to the others and to every
+outpost, inn, signal fire, shipwright and creep lair
+([mapkit/checks/strategy.py](../../src/mapworkshop/mapkit/checks/strategy.py)).
+It prints three tables:
+
+- **Sites:** each site with its nearest base, and how much nearer that base
+  is than the next one.
+- **Bases:** each base with its nearest enemy and its nearest site of each kind.
+- **Per kind:** the least, median and most any base walks to its nearest site
+  of that kind.
+
+```
+mw sites nanduhirion --teams 1-4/5-8                  # per team: whose each site is, and by how much
+mw sites nanduhirion-v1 --teams 1-8/9-16 --bases 1150,8300 1200,5650 ...
+mw sites nanduhirion --image local/renders/sites/nanduhirion.png
+```
+
+- `--teams` groups the bases. Each site then lists the nearest base of each
+  team and the margin between the teams.
+- `--bases X,Y ...` measures from those points instead of the starts, for a
+  map laid out for more players than it seats.
+- `--image` draws the ground nearest each base, with the sites and their
+  margins.
+- `--json` prints the full report.
+
+To compare a stretched copy with its original, set each walk against the
+same map's walk to the nearest enemy. Unit speeds stay the same, so the
+absolute walks are what set a match's pace.
+
+The distances come from the stored impassable plane on 20-unit cells,
+with bridge decks added; they are not `mw walkable`'s estimate.
+[What each site gives](../game/neutral-sites.md#what-each-site-gives) says
+what the walks are for.
 
 ## Where things live
 

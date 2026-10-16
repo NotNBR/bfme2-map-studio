@@ -1,17 +1,25 @@
 """Strategic layout analysis for skirmish maps: walking distances and fairness.
 
+    mw sites MAP [--teams 1-4/5-8] [--bases X,Y ...] [--image FILE] [--json]
     python -m mapworkshop.mapkit.checks.strategy --map <file.map> --out DIR [--teams 1,2,3/4,5,6]
 
 Builds a walkability grid from the map's stored impassable plane plus the
 decks of bridge objects, then measures walking distances (8-connected, 20-unit
-cells) from every start and neutral site. Reports, per player:
+cells) from every base (the starts, or `bases`) to the others and to every
+neutral site: the capturable buildings (outposts, inns, signal fires,
+shipwrights) and the creep lairs. Reports, per player:
 
 - distances to every other start; nearest enemy (free-for-all and per team);
-- the nearest and owned (closest-to-this-player) outposts and lairs, and how
+- the nearest and owned (closest-to-this-player) sites of each kind, and how
   much closer they are to their owner than to anyone else (safety margin);
 - the share of walkable land closest to each player (territory);
 - for teams, the front: distances across the team boundary and which bridges
   carry the shortest routes.
+
+lines() puts the report as text: each site with the nearest base of each team
+(or the nearest two bases) and the margin, each base with its nearest enemy
+and its nearest site of each kind, and per kind how far the bases walk to
+their nearest one.
 
 Distances are terrain geometry only; unit speed, AI and pathfinder quirks are
 not modelled. Writes strategy.json and strategy.png (territory overlay).
@@ -28,9 +36,10 @@ from PIL import Image, ImageDraw
 
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.memo import pure
+from mapworkshop.mapkit.sites import LAIRS, LINKED
 
 STEP = 20.0                       # world units per analysis cell
-SITE_TEMPLATES = {'outpost': 'Outpost', 'warglair': 'WargLair', 'inn': 'Inn', 'signalfire': 'SignalFire'}
+SITE_TEMPLATES = (*LINKED, *LAIRS)   # the capturable buildings and the creep lairs
 BRIDGE_HALF = (60.0, 285.0)       # deck half extents (across, along) of GondorIthilienBridge2
 
 
@@ -125,17 +134,35 @@ def path_cells(field, walk, target):
     return cells
 
 
-def analyse(m, teams=None):
+def parse_teams(text):
+    """Teams written 1-4/5-8 or 1,2,3/4,5,6: lists of base numbers."""
+    teams = []
+    for part in text.split('/'):
+        members = []
+        for item in part.split(','):
+            first, _, last = item.partition('-')
+            members += range(int(first), int(last or first) + 1)
+        teams.append(members)
+    return teams
+
+
+def analyse(m, teams=None, bases=None):
+    """The report (see the module docstring) and what draw() needs. `bases`:
+    points to measure from instead of the starts, for a map laid out for more
+    players than it seats; `teams`: lists of base numbers."""
     walk, bridges = walk_grid(m)
     objects = m.objects()
-    starts = sorted(((next(v for k, _, v in o['properties'] if k == 'waypointName'), (o['x'], o['y']))
-                     for o in objects if o['template'] == '*Waypoints/Waypoint'
-                     and any(k == 'waypointName' and str(v).startswith('Player_') for k, _, v in o['properties'])),
-                    key=lambda s: s[0])
+    if bases:
+        starts = [(f'Base {i}', tuple(p)) for i, p in enumerate(bases, 1)]
+    else:
+        starts = sorted(((next(v for k, _, v in o['properties'] if k == 'waypointName'), (o['x'], o['y']))
+                         for o in objects if o['template'] == '*Waypoints/Waypoint'
+                         and any(k == 'waypointName' and str(v).startswith('Player_') for k, _, v in o['properties'])),
+                        key=lambda s: s[0])
     names = [s[0] for s in starts]
     starts = [s[1] for s in starts]
     sites = [dict(kind=o['template'], position=(o['x'], o['y'])) for o in objects
-             if o['template'].lower() in SITE_TEMPLATES]
+             if o['template'] in SITE_TEMPLATES]
     fields = [distance_field(walk, p) for p in starts]
     n = len(starts)
     matrix = [[at(fields[i], walk, starts[j]) for j in range(n)] for i in range(n)]
@@ -161,10 +188,13 @@ def analyse(m, teams=None):
                                owned_distances=[s['distances'][i] for s in own],
                                owned_margins=[s['margin'] for s in own])
         players.append(entry)
-    report = dict(step=STEP, starts=n, base_distances=[[round(v) for v in row] for row in matrix],
-                  players=players, sites=sites, bridges=[b['name'] for b in bridges])
+    report = dict(step=STEP, starts=n, bases='given' if bases else 'starts',
+                  base_distances=[[round(v) for v in row] for row in matrix], players=players, sites=sites, bridges=[b['name'] for b in bridges])
     if teams:
         team_of = {p: t for t, members in enumerate(teams) for p in members}
+        for s in sites:                  # the nearest team, and how much nearer than the next
+            near = sorted((min(s['distances'][p-1] for p in members), t+1) for t, members in enumerate(teams))
+            s['team'], s['team_margin'] = near[0][1], (near[1][0] - near[0][0] if len(near) > 1 else None)
         report['teams'] = []
         for t, members in enumerate(teams):
             enemies = [p for p in range(1, n+1) if team_of.get(p) != t]
@@ -186,12 +216,73 @@ def analyse(m, teams=None):
     return report, walk, owner, reach, starts, sites, bridges
 
 
+def lines(report, title):
+    """The report as text: sites, bases and a summary per kind of site."""
+    n, sites, teams = report['starts'], report['sites'], report.get('teams')
+    matrix = report['base_distances']
+    who = 'the given points' if report.get('bases') == 'given' else 'the starts'
+    split = ' / '.join(_span(t['members']) for t in teams) if teams else 'every base for itself'
+    out = [f'{title}: {n} bases ({who}); teams {split}. Walking distances in map units, over '
+           f'{report["step"]:g}-unit cells of the stored impassable plane and bridge decks.', '']
+    kinds = sorted({s['kind'] for s in sites}, key=lambda k: (k not in LINKED, k))
+    if sites:
+        out.append('Sites: the nearest base of each team, and how much nearer the nearer team is.' if teams else
+                   'Sites: the nearest base, the next nearest, and how much nearer the first is.')
+        for s in sorted(sites, key=lambda s: (kinds.index(s['kind']), -s['position'][1], s['position'][0])):
+            d = s['distances']
+            if teams:
+                near = sorted(min((d[p-1], p) for p in t['members']) + (t['team'],) for t in teams)
+                parts = [f'team {team}: #{p} {v:,.0f}' for v, p, team in near]
+                lead = f'team {near[0][2]} by {near[1][0] - near[0][0]:,.0f}' if len(near) > 1 else ''
+            else:
+                near = sorted((v, i + 1) for i, v in enumerate(d))[:2]
+                parts = [f'#{p} {v:,.0f}' for v, p in near]
+                lead = f'by {near[1][0] - near[0][0]:,.0f}' if len(near) > 1 else ''
+            x, y = s['position']
+            out.append(f'  {s["kind"]:<17} ({x:6.0f}, {y:6.0f})  ' + '   '.join(parts) + f'   {lead}')
+        out.append('')
+    out.append('Bases: the nearest enemy' + (' (on another team)' if teams else '')
+               + ', and the nearest site of each kind.')
+    team_of = {p: t['team'] for t in teams for p in t['members']} if teams else {}
+    widths = [max(len(k), 7) for k in kinds]
+    out.append(f'  {"base":<20} {"enemy":>7}  ' + '  '.join(f'{k:>{w}}' for k, w in zip(kinds, widths)))
+    for i, p in enumerate(report['players']):
+        enemies = [matrix[i][j] for j in range(n)
+                   if j != i and (not teams or team_of.get(j + 1) != team_of.get(i + 1))]
+        x, y = p['position']
+        cells = [f'{p[k]["nearest"]:>{w},}' if p[k]['nearest'] is not None else f'{"-":>{w}}'
+                 for k, w in zip(kinds, widths)]
+        out.append(f'  {f"#{i+1} ({x:.0f}, {y:.0f})":<20} {min(enemies, default=0):>7,}  ' + '  '.join(cells))
+    if sites:
+        out += ['', 'Per kind: how far the bases walk to their nearest one (least, median, most).']
+        for k in kinds:
+            walks = sorted(p[k]['nearest'] for p in report['players'] if p[k]['nearest'] is not None)
+            count = sum(s['kind'] == k for s in sites)
+            if walks:
+                sites_ = 'sites' if count != 1 else 'site '
+                out.append(f'  {k:<17} {count:>3} {sites_}   {walks[0]:,} / {walks[len(walks)//2]:,} / {walks[-1]:,}')
+    return out
+
+
+def _span(members):
+    """1-4 for 1,2,3,4; else the numbers."""
+    if len(members) > 2 and members == list(range(members[0], members[-1] + 1)):
+        return f'{members[0]}-{members[-1]}'
+    return ','.join(map(str, members))
+
+
 def draw(report, walk, owner, reach, starts, sites, bridges, path):
+    """Each base's territory (the ground nearest it), coloured by team when
+    the report has teams, every other base a shade darker; the sites with
+    their margins (over the next team, with teams); the bases."""
     colors = np.array([(227, 85, 72), (67, 143, 229), (85, 189, 86), (227, 203, 81), (181, 107, 234), (66, 198, 195),
                        (230, 140, 60), (200, 200, 200)], np.uint8)
+    team_of = {p - 1: t['team'] - 1 for t in report.get('teams', ()) for p in t['members']}
+    tint = np.array([team_of.get(i, i) for i in range(len(starts))])
+    shade = np.array([1. - .25*(i % 2) if team_of else 1. for i in range(len(starts))])
     rgb = np.full(walk.shape+(3,), 30, np.uint8)
     rgb[walk] = 70
-    rgb[reach] = (colors[owner[reach] % len(colors)] * .45 + 40).astype(np.uint8)
+    rgb[reach] = (colors[tint[owner[reach]] % len(colors)] * .45 * shade[owner[reach], None] + 40).astype(np.uint8)
     im = Image.fromarray(np.flipud(rgb)).resize((walk.shape[1]*2, walk.shape[0]*2), Image.NEAREST)
     d = ImageDraw.Draw(im)
     H = walk.shape[0]*2
@@ -200,16 +291,17 @@ def draw(report, walk, owner, reach, starts, sites, bridges, path):
         x, y = px(b['position']); d.rectangle((x-5, y-5, x+5, y+5), outline='white')
     for s in sites:
         x, y = px(s['position'])
-        c = tuple(int(v) for v in colors[(s['owner']-1) % len(colors)])
-        if s['kind'] == 'Outpost':
+        c = tuple(int(v) for v in colors[tint[s['owner']-1] % len(colors)])
+        if s['kind'] in LINKED:
             d.ellipse((x-7, y-7, x+7, y+7), fill=c, outline='white', width=2)
         else:
             d.polygon([(x, y-8), (x+7, y+6), (x-7, y+6)], fill=(20, 20, 20), outline=c, width=2)
-        d.text((x+9, y-6), str(s['margin']), fill='white')
+        name = s['kind'].replace('Lair', '').replace('Moriar', '').replace('Cave', '')
+        d.text((x+9, y-6), f"{name} {s.get('team_margin', s['margin'])}", fill='white')
     for i, p in enumerate(starts):
-        x, y = px(p); c = tuple(int(v) for v in colors[i % len(colors)])
+        x, y = px(p); c = tuple(int(v) for v in colors[tint[i] % len(colors)])
         d.rectangle((x-10, y-10, x+10, y+10), fill=c, outline='white', width=2)
-        d.text((x-3, y-6), str(i+1), fill='black')
+        d.text((x-3 - 3*(i >= 9), y-6), str(i+1), fill='black')
     im.save(path)
 
 
@@ -219,7 +311,7 @@ def main(argv=None):
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--teams', help='Player teams, e.g. 1,2,3/4,5,6')
     args = parser.parse_args(argv)
-    teams = [[int(v) for v in t.split(',')] for t in args.teams.split('/')] if args.teams else None
+    teams = parse_teams(args.teams) if args.teams else None
     m = Map(args.map.read_bytes())
     report, walk, owner, reach, starts, sites, bridges = analyse(m, teams)
     args.out.mkdir(parents=True, exist_ok=True)

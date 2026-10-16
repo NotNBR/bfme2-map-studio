@@ -140,7 +140,7 @@ class ProfileTests(unittest.TestCase):
 class SkirmishTests(unittest.TestCase):
     def test_rotwk_slots_use_random_factions_and_easy_ai(self):
         from mapworkshop.native import rotwk
-        engine = Mock(base=0x400000, res={})
+        engine = Mock(base=0x400000, res={}, lineup=None)
         engine.u32.side_effect = [0x10000, 0x20000, 0x30000]
         self.assertFalse(rotwk.skirmish_setup(engine, 1, None))
         self.assertEqual(engine.write.call_args_list[0].args,
@@ -154,12 +154,40 @@ class SkirmishTests(unittest.TestCase):
 
     def test_rotwk_missing_slots_stops_before_slot_writes(self):
         from mapworkshop.native import rotwk
-        engine = Mock(base=0x400000, res={})
+        engine = Mock(base=0x400000, res={}, lineup=None)
         engine.u32.side_effect = [0x10000, 0x20000, 0]
         rotwk.skirmish_setup(engine, 1, None)
         engine.stop.assert_called_once_with('missing-skirmish-slots')
         self.assertEqual(engine.write.call_count, 1)
         self.assertNotIn('skirmish_setup', engine.res)
+
+    def test_lineup_seats_factions_starts_teams_and_ai(self):
+        from mapworkshop.native import rotwk
+        lineup = [dict(state=None, template=3, start=0, team=0), dict(state=4, template=8, start=1, team=1)]
+        engine = Mock(base=0x400000, res={}, lineup=lineup)
+        engine.u32.side_effect = [0x10000, 0x20000, 0x30000]
+        rotwk.skirmish_setup(engine, 1, None)
+        for call in [(0x20018, struct.pack('<i', 3)), (0x20010, struct.pack('<i', 0)), (0x2001C, struct.pack('<i', 0)),
+                     (0x30004, struct.pack('<I', 4)), (0x30008, b''), (0x30018, struct.pack('<i', 8)),
+                     (0x30010, struct.pack('<i', 1)), (0x3001C, struct.pack('<i', 1))]:
+            engine.write.assert_any_call(*call)
+        self.assertNotIn(0x20004, [c.args[0] for c in engine.write.call_args_list])   # slot 0 stays you
+
+    def test_lineup_reads_map_toml_play_slots(self):
+        from mapworkshop.native import runtime
+        project = Mock(folder=Path('maps/x'), players=8, config=dict(play=dict(slots=[
+            dict(faction='Men', team=1), dict(faction='Mordor', team=2, ai='hard'), dict(ai='easy')])))
+        with patch.object(runtime, 'faction_templates', return_value=dict(Men=3, Mordor=8)):
+            self.assertEqual(runtime.lineup(project), [
+                dict(state=None, start=0, team=0, template=3, faction='Men'),
+                dict(state=4, start=1, team=1, template=8, faction='Mordor'),
+                dict(state=2, start=2, team=-1, template=-1, faction=None)])
+            for slots, error in [([dict(ai='hard'), dict(ai='easy')], 'is you'), ([dict(), dict()], 'needs an ai level'),
+                                 ([dict(), dict(ai='easy', faction='Gondor')], 'unknown faction'),
+                                 ([dict(), dict(ai='easy', team=5)], 'team 5')]:
+                project.config = dict(play=dict(slots=slots))
+                with self.assertRaisesRegex(ValueError, error):
+                    runtime.lineup(project)
 
 
 if __name__ == '__main__':

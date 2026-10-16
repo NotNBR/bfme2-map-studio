@@ -125,7 +125,10 @@ Place the starts, expansion space, neutral sites (`mapkit.sites`: outposts,
 inns, signal fires with their capture flags, creep lairs) and the places
 where armies gather. Fairness is more than equal straight-line distances:
 compare walking distance, exposure on the approach, usable building space and
-retreat. Measure it in the build and refuse an unfair result: Brightwater
+retreat. `mw sites <map> --teams 1-4/5-8` lists each site's walking distance
+from each team and the bases' walks to their nearest site of each kind
+([neutral sites](projects-and-builds.md#neutral-sites-and-walking-distances)).
+Measure it in the build and refuse an unfair result: Brightwater
 Fold, Bramble Hollow and the Hollin Dales check walking distances with
 `mapkit.checks.strategy` and fail the build when they differ too much; the
 Greywater Marches allows 400.

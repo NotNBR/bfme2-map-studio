@@ -1,11 +1,16 @@
 """OpenBFME: The Rise of the Witch-king 2.01 rebuilt in Godot
 (https://github.com/Open-BFME/openbfme-godot), started on a project's build
-by `mw play --godot`.
+by `mw play --godot`: straight in a skirmish, through its LAN host, seated
+by the project's line-up (play()).
 
 The engine's source is the submodule native/openbfme-godot (`update = none`
 in .gitmodules: it is checked out on first use, not by every `mw setup`).
 openbfme.patch, applied to it before building, adds one thing upstream
 lacks: OPENBFME_EXTRA_ARCHIVES, .big files mounted over the retail archives.
+openbfme-no-shroud.patch adds game.gd's --no-shroud: the live game drawn
+without its shroud and fog (GameWorld.set_shroud_drawn(false), a view setting;
+the logic keeps its shroud), as mw play reveals the map in BFME2; a script
+change, so it needs no rebuild.
 OpenBFME reads maps only from verified archives and ignores loose map files,
 so each installed map goes into a .big of its own, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
@@ -37,6 +42,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -47,7 +53,8 @@ from pathlib import Path
 from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
 
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
-PATCH = Path(__file__).resolve().parent/'openbfme.patch'
+PATCH = Path(__file__).resolve().parent/'openbfme.patch'                  # the engine's: the build depends on it
+PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch')   # each applied on its own
 HOME = LOCAL/'openbfme'
 TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
@@ -85,20 +92,21 @@ def _git(*args, cwd=ROOT):
 
 
 def source(progress=print):
-    """The submodule checked out (with its godot-cpp) and openbfme.patch applied."""
+    """The submodule checked out (with its godot-cpp) and PATCHES applied."""
     if not (SOURCE/'engine'/'CMakeLists.txt').exists():
         progress('Fetching the OpenBFME submodule (about 90 MB, once)...')
         _git('submodule', 'update', '--init', '--checkout', '--', SOURCE.relative_to(ROOT).as_posix())
     if not (SOURCE/'engine/thirdparty/godot-cpp/CMakeLists.txt').exists():
         _git('submodule', 'update', '--init', cwd=SOURCE)
-    try:
-        _git('apply', '--reverse', '--check', str(PATCH), cwd=SOURCE)       # already applied
-    except RuntimeError:
+    for patch in PATCHES:
         try:
-            _git('apply', str(PATCH), cwd=SOURCE)
-        except RuntimeError as error:
-            raise RuntimeError(f'openbfme.patch does not apply to OpenBFME {_git("rev-parse", "--short", "HEAD", cwd=SOURCE)}; '
-                               f'update {PATCH.name} for it ({error})') from None
+            _git('apply', '--reverse', '--check', str(patch), cwd=SOURCE)   # already applied
+        except RuntimeError:
+            try:
+                _git('apply', str(patch), cwd=SOURCE)
+            except RuntimeError as error:
+                raise RuntimeError(f'{patch.name} does not apply to OpenBFME {_git("rev-parse", "--short", "HEAD", cwd=SOURCE)}; '
+                                   f'update it for it ({error})') from None
     return SOURCE
 
 
@@ -379,12 +387,33 @@ def prepare(project, progress=print, download=False):
     return gui, console, _environment(install(project, progress)), f'maps/{project.native_name}/{project.native_name}.map'
 
 
-def play(project, progress=print, download=False):
-    """Open OpenBFME at its main menu with the project's map in the Skirmish
-    list (None: the game's maps and those packed before); returns the process."""
-    gui, _, env, _ = prepare(project, progress, download)
-    return subprocess.Popen([str(gui), '--path', str(SOURCE/'godot'), '--', '--no-intro', '--no-update-check', '--free-camera'],
-                            env=env, cwd=HOME, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def net_slots(project):
+    """OpenBFME's --net-slots for the project's line-up (runtime.lineup):
+    kind:faction:start:team per slot, the first you; without one, you against
+    an easy AI, factions and starts random."""
+    from mapworkshop.native import runtime
+    seats = runtime.lineup(project) or [dict(state=None, faction=None, start=-1, team=-1),
+                                        dict(state=runtime.EASY_AI, faction=None, start=-1, team=-1)]
+    kinds = {v: k for k, v in runtime.AI_LEVELS.items()}
+    return ';'.join(f'{kinds.get(s["state"], "human")}:{"Faction" + s["faction"] if s["faction"] else ""}:'
+                    f'{s["start"]}:{s["team"]}' for s in seats)
+
+
+def play(project, progress=print, download=False, fog=False):
+    """Start OpenBFME straight in a skirmish on the project's map, as mw play
+    starts the game: its line-up (net_slots()). OpenBFME's LAN host
+    (--net-host) seats the slots without the lobby screens and, every slot
+    but yours a computer, starts at once. The game is drawn without its
+    shroud and fog (--no-shroud) unless `fog`. With no project: its main
+    menu, with the maps packed before. Returns the process."""
+    gui, _, env, key = prepare(project, progress, download)
+    args = [str(gui), '--path', str(SOURCE/'godot'), '--', '--no-intro', '--no-update-check', '--free-camera']
+    if project is not None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:   # a free port for the host
+            s.bind(('127.0.0.1', 0))
+            port = s.getsockname()[1]
+        args += [f'--net-host={port}', f'--map={key}', f'--net-slots={net_slots(project)}'] + ([] if fog else ['--no-shroud'])
+    return subprocess.Popen(args, env=env, cwd=HOME, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def check(project, progress=print, download=False, seconds=5, timeout=600):

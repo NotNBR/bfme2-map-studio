@@ -73,7 +73,15 @@ FILE_SLOTS_SET = 0x2300DC       # GameEngine::init's -file branch, just after se
 NEW_GAME_DONE = 0x248767
 THE_GAME_INFO, THE_SKIRMISH_GAME_INFO = 0xA02EEC, 0xA02EF0
 SLOTS_OFF, SLOT_STATE, SLOT_TEMPLATE = 0x18, 4, 0x18
+# GameSlot (Open-BFME-2 Common/GameSlotRva004479B1.cpp; ROTWK's
+# saveOffOriginalInfo at 0x800994 copies colour +0xC, start +0x10 and
+# template +0x18 as BFME2's does): +0x8 accepted, +0x9 has the map, +0xC
+# colour, +0x10 start position (0-based, -1 random), +0x18 player template
+# (index in playertemplate.ini, -1 random), +0x1C team (0-based, -1 none).
+SLOT_ACCEPTED, SLOT_START, SLOT_TEAM = 8, 0x10, 0x1C
+MAX_SLOTS = 8
 TEMPLATE_RANDOM, EASY_AI = -1, 2
+AI_LEVELS = dict(easy=2, medium=3, hard=4, brutal=5)   # slot states; 6 is a human
 # PartitionManager::revealMapForPlayerPermanently(player index), thiscall
 # (Open-BFME-2 ScriptActionsRva003BB9C6.cpp: the script action that reveals
 # the map permanently calls it, undoing it at 0x7397B0).
@@ -303,22 +311,73 @@ def install(project):
     return f'maps\\{project.native_name}.map'
 
 
+def faction_templates():
+    """The selected game's playable factions by name (FactionMen as 'Men'):
+    their index among playertemplate.ini's templates, which a slot holds."""
+    text = (GAME_DATA/'data/ini/playertemplate.ini').read_text(encoding='cp1252', errors='replace')
+    blocks = re.split(r'(?m)^PlayerTemplate\s+', text)[1:]
+    return {block.split(None, 1)[0].removeprefix('Faction'): index for index, block in enumerate(blocks)
+            if re.search(r'(?im)^\s*PlayableSide\s*=\s*Yes', block)}
+
+
+def lineup(project):
+    """The project's line-up, map.toml's [play] slots, or None. The first
+    slot is you, the others AI (`ai`: easy, medium, hard or brutal); each
+    takes the start of its own number, its `faction` (a playable faction's
+    name; random without) and its `team` (1 to 4; none without). Returns
+    per slot what seat() writes, and the faction's name (None: random)."""
+    slots = project.config.get('play', {}).get('slots')
+    if not slots:
+        return None
+    where = f'{project.folder.name}/map.toml [play] slots'
+    if not 2 <= len(slots) <= min(MAX_SLOTS, project.players or MAX_SLOTS):
+        raise ValueError(f'{where}: {len(slots)} slots for a map of {project.players} players')
+    factions = faction_templates()
+    out = []
+    for i, slot in enumerate(slots):
+        ai, faction, team = slot.get('ai'), slot.get('faction'), slot.get('team')
+        if (ai is not None) != (i > 0) or (i and ai not in AI_LEVELS):
+            raise ValueError(f'{where}: slot {i + 1} ' + ('is you and takes no ai level' if not i else
+                             f'needs an ai level: {", ".join(AI_LEVELS)}'))
+        if faction is not None and faction not in factions:
+            raise ValueError(f'{where}: slot {i + 1}: unknown faction {faction!r}; use one of {", ".join(factions)}')
+        if team is not None and team not in (1, 2, 3, 4):
+            raise ValueError(f'{where}: slot {i + 1}: team {team!r}; use 1 to 4')
+        out.append(dict(state=AI_LEVELS[ai] if i else None, start=i, team=team - 1 if team else -1,
+                        template=factions[faction] if faction else TEMPLATE_RANDOM, faction=faction))
+    return out
+
+
+def seat(game, info):
+    """Fill the skirmish's slots as the menu would: game.lineup (lineup()),
+    or you and an easy AI with random factions and starts. Slot 0 is already
+    you ("Test"). False when the game lacks a slot."""
+    seats = game.lineup or [dict(state=None, template=TEMPLATE_RANDOM), dict(state=EASY_AI, template=TEMPLATE_RANDOM)]
+    slots = [game.u32(info + SLOTS_OFF + 4*i) for i in range(len(seats))]
+    if not all(slots):
+        return False
+    for slot, s in zip(slots, seats):
+        game.write(slot + SLOT_TEMPLATE, struct.pack('<i', s['template']))
+        if s['state'] is not None:
+            game.write(slot + SLOT_STATE, struct.pack('<I', s['state']))
+            game.write(slot + SLOT_ACCEPTED, b'\x01\x01')            # accepted, has the map
+        if 'start' in s:
+            game.write(slot + SLOT_START, struct.pack('<i', s['start']))
+            game.write(slot + SLOT_TEAM, struct.pack('<i', s['team']))
+    return True
+
+
 def skirmish_setup(game, tid, ctx):
     """At GameEngine::init's -file branch, after slot 0 became "Test", finish
     what the skirmish menu would do: TheGameInfo = TheSkirmishGameInfo
-    (retail's -file path leaves it null and faults at 0x24578B), slot 0 (you)
-    and slot 1 get random factions, and slot 1 becomes an easy AI."""
+    (retail's -file path leaves it null and faults at 0x24578B), and the
+    slots (seat())."""
     info = game.u32(game.base + THE_SKIRMISH_GAME_INFO)
     if not info:
         return False
     game.write(game.base + THE_GAME_INFO, struct.pack('<I', info))
-    slots = [game.u32(info + SLOTS_OFF + 4*i) for i in range(2)]
-    for slot in slots:
-        if slot:
-            game.write(slot + SLOT_TEMPLATE, struct.pack('<i', TEMPLATE_RANDOM))
-    if slots[1]:
-        game.write(slots[1] + SLOT_STATE, struct.pack('<I', EASY_AI))
-        game.write(slots[1] + 8, b'\x01\x01')          # accepted, has the map
+    if not seat(game, info):
+        game.stop('missing-skirmish-slots')
     return False
 
 
@@ -400,6 +459,7 @@ def start(project, graphics='Medium', headless=False, progress=print, fast=True)
     os.environ['DXVK_LOG_LEVEL'] = 'none'             # DXVK would write logs into the game folder
     game = debugger.Game(folder, args, APPDATA)
     game.headless = headless
+    game.lineup = lineup(project)
     if PROFILE == 'rotwk':
         from mapworkshop.native import rotwk
         rotwk.configure(game)
