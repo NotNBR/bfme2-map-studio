@@ -21,7 +21,7 @@ docstring at the top of its `map.py`.
 | [Ithilien Frontier](ithilien_frontier/README.md) | `ithilien-frontier` | 2 | `build.py` | the stock Ithilien enlarged threefold, with new relief and scenery |
 | [Nanduhirion](nanduhirion/map.py) | `nanduhirion` | 8 | `map.py` | the community 2.02 patch's Nanduhirion, unchanged, beside its enlarged copy |
 | [Nanduhirion Enlarged](nanduhirion_enlarged/map.py) | `nanduhirion-enlarged` | 8 | `map.py` | the terrain of the 2.02 patch's Nanduhirion stretched to 14,250 x 14,250; terrain and player starts only |
-| [Nanduhirion v1](nanduhirion_v1/map.py) | `nanduhirion-v1` | 8 (16 sites) | `map.py`, `scenery.py` | Nanduhirion Enlarged laid out for 8 vs 8: sixteen base sites, eight with starts while the game seats eight, wider ramps into the basins, the original's objects at its density and doubled neutral sites |
+| [Nanduhirion v1](nanduhirion_v1/map.py) | `nanduhirion-v1` | 8 (16 sites) | `map.py`, `scenery.py`, `blends.py` | Nanduhirion Enlarged laid out for 8 vs 8: sixteen base sites, eight with starts while the game seats eight, wider ramps into the basins, the original's objects at its density and doubled neutral sites, soft texture changes through in-between textures chosen per pair |
 
 The `build.py` projects are older: their `main()` reads output folders from
 globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
@@ -45,6 +45,7 @@ answer; the findings are in [how BFME2 behaves](../docs/game/README.md).
 | [Cliff Lab](cliff_lab/map.py) | `cliff-lab` | how does the game draw cliff-mapped terrain? ([cliff mapping](../docs/game/terrain-textures.md#cliff-mapping)) |
 | [Reflection Lab](reflection_lab/map.py) | `reflection-lab` | what do water reflections show at High, in the game and in the renderer? ([water](../docs/game/renderer/water.md)) |
 | [Specular Lab](specular_lab/map.py) | `specular-lab` | how does High terrain shine on textures without a normal map? ([terrain](../docs/game/renderer/terrain.md)) |
+| [Blend Lab](blend_lab/map.py) | `blend-lab` | how can a change of terrain texture be wider and softer than the game's one-cell blend? Sixteen approaches side by side, among them bands of in-between textures of varying number and width ([blends](../docs/game/terrain-textures.md#blends)) |
 
 ## Adding a map
 

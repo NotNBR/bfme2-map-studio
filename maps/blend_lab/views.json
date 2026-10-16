@@ -1,0 +1,260 @@
+{
+ "views": {
+  "1-baseline-top": {
+   "region": [
+    250,
+    4750,
+    1550,
+    6050
+   ]
+  },
+  "1-baseline": {
+   "target": [
+    900,
+    5150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "2-ragged-top": {
+   "region": [
+    1750,
+    4750,
+    3050,
+    6050
+   ]
+  },
+  "2-ragged": {
+   "target": [
+    2400,
+    5150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "3-v1-top": {
+   "region": [
+    3250,
+    4750,
+    4550,
+    6050
+   ]
+  },
+  "3-v1": {
+   "target": [
+    3900,
+    5150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "4-wide-dither-top": {
+   "region": [
+    4750,
+    4750,
+    6050,
+    6050
+   ]
+  },
+  "4-wide-dither": {
+   "target": [
+    5400,
+    5150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "5-clumped-dither-top": {
+   "region": [
+    250,
+    3250,
+    1550,
+    4550
+   ]
+  },
+  "5-clumped-dither": {
+   "target": [
+    900,
+    3650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "6-one-between-top": {
+   "region": [
+    1750,
+    3250,
+    3050,
+    4550
+   ]
+  },
+  "6-one-between": {
+   "target": [
+    2400,
+    3650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "7-two-between-top": {
+   "region": [
+    3250,
+    3250,
+    4550,
+    4550
+   ]
+  },
+  "7-two-between": {
+   "target": [
+    3900,
+    3650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "8-graded-dither-top": {
+   "region": [
+    4750,
+    3250,
+    6050,
+    4550
+   ]
+  },
+  "8-graded-dither": {
+   "target": [
+    5400,
+    3650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "9-one-band-60-top": {
+   "region": [
+    250,
+    1750,
+    1550,
+    3050
+   ]
+  },
+  "9-one-band-60": {
+   "target": [
+    900,
+    2150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "10-one-band-200-top": {
+   "region": [
+    1750,
+    1750,
+    3050,
+    3050
+   ]
+  },
+  "10-one-band-200": {
+   "target": [
+    2400,
+    2150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "11-two-bands-50-top": {
+   "region": [
+    3250,
+    1750,
+    4550,
+    3050
+   ]
+  },
+  "11-two-bands-50": {
+   "target": [
+    3900,
+    2150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "12-two-bands-150-top": {
+   "region": [
+    4750,
+    1750,
+    6050,
+    3050
+   ]
+  },
+  "12-two-bands-150": {
+   "target": [
+    5400,
+    2150
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "13-three-bands-40-top": {
+   "region": [
+    250,
+    250,
+    1550,
+    1550
+   ]
+  },
+  "13-three-bands-40": {
+   "target": [
+    900,
+    650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "14-three-bands-120-top": {
+   "region": [
+    1750,
+    250,
+    3050,
+    1550
+   ]
+  },
+  "14-three-bands-120": {
+   "target": [
+    2400,
+    650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "15-four-bands-30-top": {
+   "region": [
+    3250,
+    250,
+    4550,
+    1550
+   ]
+  },
+  "15-four-bands-30": {
+   "target": [
+    3900,
+    650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  },
+  "16-four-bands-90-top": {
+   "region": [
+    4750,
+    250,
+    6050,
+    1550
+   ]
+  },
+  "16-four-bands-90": {
+   "target": [
+    5400,
+    650
+   ],
+   "distance": 1100,
+   "elevation": 40
+  }
+ }
+}

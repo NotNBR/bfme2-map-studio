@@ -53,6 +53,14 @@ The writer puts the highest neighbouring texture in the three-way layer and
 the next one in the primary layer, never writes the flip bit, and writes
 opposite corners of one texture as a single-corner blend in each layer.
 
+A blend spans one cell, so a wider transition has to be built from whole
+cells. The [Blend Lab](../../maps/blend_lab/map.py) compares sixteen ways in
+the renderer: mixing the two textures leaves an outline or speckle, while
+bands of textures of intermediate tone, best dithered, make the change
+gradual. Two or three bands of 40 to 50 units give the smoothest compact
+change; an in-between texture has to match the pair in pattern as well as
+in colour.
+
 WorldBuilder's cliff correction also has neighbouring-cell seam matching and
 tiling logic. Do not directly transplant its legacy height/texture scaling into
 BFME2's 16-bit terrain; `mapkit.cliffs` (below) measures its own.

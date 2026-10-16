@@ -1,0 +1,6 @@
+id = "blend-lab"
+title = "Blend Lab"
+native_name = "map mp blend lab"
+players = 2
+description = "Test map: eight ways to make a change of terrain texture wider and softer than the game's one-cell blend, side by side on flat ground."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)

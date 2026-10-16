@@ -11,8 +11,13 @@ its heights 2.86 times, the geometric mean of the two, so cliffs stay cliffs.
 - Heights are resampled along Catmull-Rom curves, held within the four source
   samples around each point.
 - Textures: each source texture's cells as a 0/1 field, resampled the same
-  way; every new cell takes the texture whose field is highest, and
-  set_materials blends the boundaries again. The source has no cliff mapping.
+  way; every new cell takes the texture whose field is highest. The game
+  blends a change of texture inside one cell, which looks hard on patches
+  three times the original's size, so where two ground textures of
+  different colour meet, the darker side turns into bands of in-between
+  textures the game has, chosen for each pair by colour and pattern
+  (blends.py, after the Blend Lab: maps/blend_lab/map.py). The source has
+  no cliff mapping.
 - The impassable and flammability planes are resampled the same way.
 - Its look is copied (LOOK): the lighting (overbright, warm sun, green
   fill), the environment's macro and cloud textures, the colour grade (a
@@ -65,6 +70,7 @@ from mapworkshop.mapkit.blank import create, set_heights, set_materials, starts,
 from mapworkshop.mapkit.checks.strategy import at, distance_field, walk_grid
 from mapworkshop.mapkit.relief import distance_to
 
+from .blends import ladders, soften
 from .scenery import Ground, populate
 
 ARCHIVE = '__patch202.big'      # in the ROTWK folder
@@ -277,6 +283,9 @@ def build(b):
     is_cliff = np.array([name.startswith('Cliff') for name in names])
     for top, bottom in RAMPS:
         widen_ramp(z, labels, impassable, top, bottom, names.index(RAMP_GROUND), names.index(RAMP_CLIFF), is_cliff)
+    painted = labels                     # the original's painting, which the scenery follows
+    names, chosen = ladders(painted, names)
+    labels = soften(painted, chosen)
 
     used = np.unique(labels)
     palette = [names[k] for k in used]
@@ -292,7 +301,7 @@ def build(b):
     sections.write(m, 'BlendTileData', blend)
     starts(m, [SITES[k - 1] for k in STARTS])
     placed = populate(m, src['objects'], Ground(src['heights'], src['impassable'], src['labels'], names, src['border']),
-                      Ground(z, impassable, labels, palette, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
+                      Ground(z, impassable, painted, names, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
     look = dict(src['look'])
     look['EnvironmentData'] = dict(look['EnvironmentData'], macro_texture_stretched=1)
     for name, value in look.items():
@@ -304,7 +313,9 @@ def build(b):
     walk, _ = walk_grid(m)
     field = distance_field(walk, CENTRE)
     walks = [at(field, walk, p) for p in SITES]
-    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed, sites=[
+    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed,
+                    blends={f'{names[a]} > {names[b]}': [names[k] for k in steps] for (a, b), steps in chosen.items()},
+                    sites=[
         dict(site=k, name=name, x=p[0], y=p[1], open=round(r), walk_to_centre=round(d),
              player=STARTS.index(k) + 1 if k in STARTS else None)
         for k, (name, p, r, d) in enumerate(zip(SITE_NAMES, SITES, opens, walks), 1)])
