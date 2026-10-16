@@ -56,14 +56,18 @@ forms continuous summit chains, unequal cols and descending buttresses.
 Their overlapping height envelopes form continuous saddles; four backing
 ranges carry the landscape out to the map boundary. Different flank slopes
 and variable valley cross-sections give the massifs irregular footprints.
-Snow-loaded mountain feet have shallower profiles than their opposing faces;
-unequal scree fans replace a fixed band along the foot of every pass.
-Rounded crests soften the knife edges where opposite carved slopes meet.
-The wider snow-loaded shoulders vary around each cirque; capture approaches
-retain their existing grading and clearance.
-The inner spurs taper down into the ice basin below the larger crowns.
+Short snow aprons lead into steep mountain faces; unequal scree fans replace
+a fixed band along the foot of every pass. Inner divides retain pronounced
+rock spines into the glacier approaches, below the larger crowns, with less
+crest rounding than the backing ranges. Cirque shoulders vary around each
+base. Two compact buttresses on the southeast and south-saddle approach
+bends preserve their detours as the gentle margins reopen. The protected
+route floors retain their grading and clearance.
 
-Long grooves start on the flanks. A deterministic downhill contributing-area
+Long grooves start on the flanks and survive the valley cross-section cut,
+leaving projecting ribs and recessed gullies instead of continuous planar
+walls. Smaller rock shelves vary the faces in depth, while the larger ranges
+retain their broader snow shoulders. A deterministic downhill contributing-area
 operator joins tributaries and incises gullies, followed by talus relaxation.
 This is an authored landform process, not a hydraulic simulation. Geological
 fields are calculated at 30-unit spacing and reconstructed cubically onto
@@ -136,8 +140,14 @@ numbers are recorded in [features.py](features.py).
 Small, irregular rock shelves are tucked into the mountain-spur feet.
 Beacons sit 24 units above their local valley datum; the wider inn shelves
 use a 6-unit rise above the forecourt datum to keep their approaches gentle.
-Unequal, elongated snow hollows give the four towers more room on their
-path-facing sides, kept clear of scattered scenery. Narrow approaches lead
+Four marked diagonal passes broaden into elongated fighting hollows around
+the towers. Their authored centres are saved in `BATTLE_HOLLOWS` in
+[features.py](features.py); the viewer circles locate them without defining
+their outlines. Bent axes, unequal banks and tapering ends follow each valley,
+with roughly 2,900-3,100 units of length and 920-1,000 units of central
+reserved breadth before the snow aprons. The existing graded floors and
+shallow snow rolls continue through them; scattered scenery stays outside
+the fighting ground. Narrow approaches lead
 to the flags; the terrain rises behind the buildings. Only foundations are level, with
 broken snow wear and exposed stone instead of circular cleared areas.
 Four short connecting paths close the gaps between the outer passes and
@@ -186,7 +196,18 @@ reach the centre with 70 units of edge clearance. Inside the field, the old
 conceptual rays to the centre yield to the two obstacles and open space around
 them. Per-route measured slopes, clear widths, rupture depths and scenery
 counts are saved in the build report.
+Navigation flags follow the steep faces and raised mountain interiors.
+Connected gentle snow aprons outside the reserved routes can also be walked;
+the route reservations no longer define the entire playable footprint.
+Connectivity accounts for the engine's one-cell expansion of blocked terrain,
+so tiny necks do not leave isolated pockets along the new walking margins.
 Closed mountain ground is explicitly impassable, not inferred from height.
+Builds measure cross-sections through the three reviewed mountain marks,
+whose coordinates are saved in `MOUNTAIN_MARKS` in [map.py](map.py). They also
+check a strip across each of the eight inner spurs: both flanking passages
+must be open, with a steep barrier between them and no direct crossing inside
+the sampled strip. These local checks complement the full approach and
+capture-distance checks; they do not establish native unit behaviour.
 The saved cameras include an overview, all four regional directions, the
 inner ice terrace, both ruptures, a spruce grove, two ruined waystations,
 a close view along a pass and the existing fortress scale reference.

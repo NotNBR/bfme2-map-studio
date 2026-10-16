@@ -13,7 +13,8 @@ from mapworkshop.mapkit.relief import distance_to, smooth
 from mapworkshop.mapkit.walkable import flood
 from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, ICE, PAD_HALF,
                      RIDGES, ROUTES, SCALE, WIDTH, floor_height)
-from .features import CAPTURE_LINKS, CHECKPOINTS, CHECKPOINT_SHELF, CREVASSES
+from .features import (BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS,
+                       CHECKPOINT_SHELF, CREVASSES)
 
 PALETTE = ['SnowLargeType1', 'SnowType6', 'SnowCaradhras07', 'SnowCaradhras05',
            'SnowCaradhras08', 'SnowCaradhras09', 'SnowType4',
@@ -60,6 +61,16 @@ CIRQUES = {
     15: (.22, 1.45, 1.06, 180, -100),
     16: (-.38, 1.27, 1.05, 60, -70),
 }
+
+# Rock feet on the inside of two capture-approach bends. These shape the
+# terrain cross-section itself: reopening the former broad blocked aprons
+# otherwise lets base 8 cut the southeast bend and base 9 cut the south
+# saddle approach. Protected route floors still have zero mountain depth.
+# Centre, elliptical reach, increase in cross-section steepness.
+PASS_BUTTRESSES = [
+    ((18880., 8620.), (900., 850.), 1.30),
+    ((12900., 4600.), (1500., 600.), .45),
+]
 
 
 def glacier(x, y, shore, ice):
@@ -267,6 +278,7 @@ def ridge_envelope(bed, chains, x, y, noise, crags):
     forms a continuous saddle and lets the higher summit support its flanks.
     """
     rock = bed.copy()
+    incision = np.zeros(bed.shape)
     for index, (name, points, grade) in enumerate(chains):
         reach = (float(points[:, 2].max())-ICE+400)/(grade*.60)
         arc = 0.
@@ -287,15 +299,19 @@ def ridge_envelope(bed, chains, x, y, noise, crags):
             shoulder = d*grade*(.92+.16*noise[crop])*asymmetry
             face = crest-shoulder+130*smooth((d-200)/1300)
             face -= (40+30*smooth(d/700))*np.maximum(crags[crop], 0)
-            if not name.endswith(' spur'):
-                # Longitudinal fluting: narrow across a mountain face,
-                # extended downhill, then joined by the drainage operator.
-                grooves = fbm(arc+projection+120*crags[crop], d*.24+80*noise[crop],
-                              scale=650, octaves=3, seed=5606+index*19)
-                face -= 220*np.maximum(grooves+.12, 0)*smooth(d/350)
+            # Flute both the main crest and its buttresses. Omitting spurs
+            # leaves their winning envelopes as large unbroken wall faces.
+            # Narrow across the face, extended downhill, with warped axes.
+            grooves = fbm(arc+projection+120*crags[crop], d*.22+80*noise[crop],
+                          scale=330, octaves=3, seed=5606+index*19)
+            channels = 240*np.clip(.35+2.2*grooves, 0, 1)*smooth(d/120)
+            face -= channels
+            # Preserve downhill channels when the valley profile cuts below
+            # this envelope; otherwise it exposes a smooth, ruled cliff.
+            incision[crop] = np.where(face > rock[crop], channels, incision[crop])
             rock[crop] = np.maximum(rock[crop], face)
             arc += length
-    return rock
+    return rock, blur(incision, 2)
 
 
 def drainage_incision(z, spacing, protected):
@@ -455,6 +471,25 @@ def landscape():
     floor = floor*(smooth(shore/650))+ICE*(1-smooth(shore/650))
     checkpoints = np.zeros(x.shape, bool)
     tower_hollows = np.zeros(x.shape, bool)
+    for hollow in BATTLE_HOLLOWS:
+        px, py = hollow['center']
+        reach = hollow['length']+250
+        c0, c1 = np.searchsorted(x[0], [px-reach, px+reach])
+        r0, r1 = np.searchsorted(y[:, 0], [py-reach, py+reach])
+        crop = (slice(r0, r1), slice(c0, c1))
+        dx, dy = x[crop]-px, y[crop]-py
+        angle = np.radians(hollow['bearing'])
+        along = dx*np.cos(angle)+dy*np.sin(angle)
+        across = -dx*np.sin(angle)+dy*np.cos(angle)
+        station = along/hollow['length']
+        # A curved glacier tongue, broadest off-centre, tapers into the
+        # existing pass. Independent banks leave uneven rock promontories.
+        across -= hollow['bend']*np.sin(station*2.4+.4)
+        taper = np.sqrt(np.maximum(1-station**2, 0))
+        breadth = hollow['breadth']*(1+.13*np.sin(station*3.2+hollow['mark']))
+        breadth *= 1+hollow['bias']*np.tanh(across/180)
+        breadth += 100*recess[crop]+45*scallop[crop]
+        tower_hollows[crop] |= (np.abs(station) < 1) & (np.abs(across) < breadth*taper)
     route_clearance = distance_to(route_core)*10
     for site in CHECKPOINTS:
         px, py = site['position']
@@ -463,15 +498,6 @@ def landscape():
                 slice(round(min(px, jx)/10)+BORDER-80, round(max(px, jx)/10)+BORDER+81))
         xx, yy = x[crop], y[crop]
         ox, oy = site['outward']
-        if site['template'] == 'SignalFire':
-            # An unequal hollow runs along the pass and folds into the
-            # tower's forecourt; the bedrock still rises behind its shelf.
-            hx, hy = px-190*ox, py-190*oy
-            inward = (xx-hx)*ox+(yy-hy)*oy
-            lateral = -(xx-hx)*oy+(yy-hy)*ox
-            hollow_edge = np.hypot(inward/.70, lateral/1.28)
-            hollow_rim = 350+90*recess[crop]+65*scallop[crop]
-            tower_hollows[crop] |= hollow_edge < hollow_rim
         along, across = (xx-px)*ox+(yy-py)*oy, -(xx-px)*oy+(yy-py)*ox
         along /= 1.15 if site['template'] == 'Inn' else site['shelf_scale']
         across /= site['shelf_scale']
@@ -504,7 +530,7 @@ def landscape():
     small = fbm(cx, cy, scale=260, octaves=2, seed=5603)
     cfloor = floor[::3, ::3]
     # Regional rock supplies broad supporting volume beneath each crest.
-    raw = ridge_envelope(cfloor+150+180*noise, summit_chains(), cx, cy, noise, crags)
+    raw, channels = ridge_envelope(cfloor+150+180*noise, summit_chains(), cx, cy, noise, crags)
     raw += 45*crags+12*small
     # Carve U-shaped passes from their uneven valley margins, with changing
     # side slopes and snow-filled recesses between the buttress feet.
@@ -514,16 +540,30 @@ def landscape():
     ey, ex = np.gradient(blur(edge[::3, ::3], 4), 30)
     aspect = (ex-.65*ey)/np.maximum(np.hypot(ex, ey), .1)
     apron = depth*np.clip(1+.7*noise+.35*crags+.24*aspect, .50, 1.65)
-    allowance = np.where(apron < 180, .0015*apron*apron,
-                         48.6+.55*(apron-180)+.00025*(apron-180)**2)
-    allowance *= 1-.48*cirque_shoulders[::3, ::3]
-    # Inner divides descend into the glacial basin as low noses, while
-    # their broad upper crowns keep their full prominence behind the bases.
-    allowance *= .4+.6*smooth((radius[::3, ::3]-2400)/3300)
-    raw = np.minimum(np.maximum(raw, cfloor), cfloor+allowance)
+    for (px, py), (rx, ry), strength in PASS_BUTTRESSES:
+        apron *= 1+strength*np.exp(-((cx-px)/rx)**2-((cy-py)/ry)**2)
+    inner = 1-smooth((radius[::3, ::3]-6500)/4000)
+    # Keep a short snow apron, then rise into a real rock face. The former
+    # basin-wide height reduction erased the narrow divides in all four
+    # sectors, leaving low snow rolls inside broad navigation barriers.
+    rock_face = (.0012*np.minimum(apron, 80)**2
+                 +(1.35+.40*inner)*np.maximum(apron-80, 0))
+    snow_flank = np.where(apron < 180, .0015*apron*apron,
+                          48.6+.55*(apron-180)+.00025*(apron-180)**2)
+    # Strong inner barriers, but retain most of the older, uneven shoulders
+    # on the larger ranges instead of turning every massif into a tall wall.
+    face_weight = inner+(1-inner)*(.25+.75*(1-smooth((apron-180)/500)))
+    allowance = snow_flank*(1-face_weight)+rock_face*face_weight
+    allowance *= 1-(.48-.33*inner)*cirque_shoulders[::3, ::3]
+    # Ridge-oriented gullies leave projecting ribs between them. Broken rock
+    # shelves vary the face depth; both fade into the protected snow floor.
+    face_detail = (np.minimum(.42*allowance, 320)*np.clip(channels/130, 0, 1.5)
+                   +130*crags+55*small)*smooth((allowance-120)/280)
+    carved_face = cfloor+np.maximum(allowance-face_detail, 0)
+    raw = np.minimum(np.maximum(raw, cfloor), carved_face)
     # Round the medial crest where opposing carved slopes meet. A raw
     # distance envelope otherwise produces a thin triangular knife edge.
-    crown = .75-.35*smooth((radius[::3, ::3]-8000)/7000)
+    crown = .75-.35*smooth((radius[::3, ::3]-8000)/7000)-.40*inner
     for site in CHECKPOINTS:
         px, py = site['position']
         crown *= smooth((np.hypot(cx-px, cy-py)-800)/1100)
@@ -544,9 +584,31 @@ def landscape():
     rupture = np.zeros(x.shape, np.uint8)
     rupture[basin['crop']] = basin['rupture']
     inside = (x >= 0) & (y >= 0) & (x < EXTENT) & (y < EXTENT)
-    candidate = (reserved | (edge < 60)) & (slope < .60) & inside & (rupture == 0)
+    # Navigation follows the shaped foot, not the complement of the route
+    # reservations. Low, gentle snow aprons can open wherever they connect
+    # to a start; steep faces and the raised mountain interiors stay closed.
+    # Height alone does not stop units in the engine, so retain explicit
+    # flags on that physical mountain body, including its gentler crest.
+    mountain_body = (z-floor > 55) | (slope >= .60)
+    candidate = ~mountain_body & inside & (rupture == 0)
     origin = (round(CENTRE[1]/10)+BORDER, round(CENTRE[0]/10)+BORDER)
-    walk = flood(candidate, [origin])
+    # Classify connectivity with the engine's eight-neighbour expansion of
+    # blocked terrain, then restore one cell around the reachable ground.
+    h, w = candidate.shape
+    padded = np.pad(candidate, 1, constant_values=False)
+    clear = candidate.copy()
+    for row in range(3):
+        for col in range(3):
+            clear &= padded[row:row+h, col:col+w]
+    reached = flood(clear, [origin])
+    padded = np.pad(reached, 1)
+    walk = reached.copy()
+    for row in range(3):
+        for col in range(3):
+            walk |= padded[row:row+h, col:col+w]
+    # Keep the sheet open up to the authored rupture outline, including
+    # pointed tips smaller than the engine's own one-cell cliff margin.
+    walk = candidate & (walk | ice)
     drift = upscale(noise, cx, cy, x, y)
     # Snow settles in gullies and across talus, while convex buttresses
     # expose stone. Broad terrain normals avoid per-cell rock freckles.

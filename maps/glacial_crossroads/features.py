@@ -71,3 +71,17 @@ CAPTURE_LINKS = [
 # plaza. Local coordinates are outward into the spur, then across it.
 CHECKPOINT_SHELF = [(-135., -65.), (-90., -110.), (75., -100.),
                     (130., -45.), (100., 95.), (-65., 115.), (-130., 50.)]
+
+# Four viewer circles locate fighting hollows, not their boundaries. Each
+# follows its diagonal valley, with a bent axis, unequal banks and long ends.
+# World centre copied from the mark; bearing is counterclockwise from east.
+BATTLE_HOLLOWS = [
+    dict(mark=1, name='Northwest inner', center=(10303.9, 18057.4),
+         bearing=-48., length=1500., breadth=460., bend=105., bias=.12),
+    dict(mark=2, name='Northeast inner', center=(18340.1, 18539.8),
+         bearing=43., length=1550., breadth=500., bend=-120., bias=-.10),
+    dict(mark=3, name='Southeast inner', center=(18141.8, 10401.8),
+         bearing=-47., length=1450., breadth=470., bend=-100., bias=.14),
+    dict(mark=4, name='Southwest inner', center=(9830.2, 10102.5),
+         bearing=47., length=1500., breadth=480., bend=125., bias=-.13),
+]

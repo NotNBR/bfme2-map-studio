@@ -34,6 +34,74 @@ from .features import CAPTURE_LINKS, CHECKPOINTS, CREVASSES
 from .scenery import checkpoint_sites, populate
 
 
+# Viewer review lines, copied into source so later builds do not depend on
+# ignored marker files. Endpoints and an intermediate point retain each
+# marked shoulder's location and bearing; measurements cut across its middle.
+MOUNTAIN_MARKS = {
+    1: [(12817.7, 20480.4), (12869.9, 19546.9), (12981.5, 18558.5)],
+    2: [(13285.6, 17716.6), (13497.8, 17223.2), (13631.3, 16695.5)],
+    3: [(15694.7, 18092.1), (15266.3, 17252.4), (14869.8, 16400.1)],
+}
+
+
+def mountain_checks(t):
+    """Measure the marks and reject direct shortcuts across all inner toes.
+
+    A local strip straddles each divide's exposed lower spine. Both pass sides
+    must stay open, but must not connect through the strip: a valid detour goes
+    around its end at the glacier mouth or through the authored base junction.
+    This tests absent connections as well as the existing route tests.
+    """
+    def section(center, tangent, across=800, along=0):
+        tangent = tangent/np.linalg.norm(tangent)
+        normal = np.array([-tangent[1], tangent[0]])
+        u, v = np.meshgrid(np.arange(-across, across+1, 10),
+                           np.arange(-along, along+1, 10))
+        xy = center+u[..., None]*normal+v[..., None]*tangent
+        indices = np.rint(xy/10).astype(int)+BORDER
+        r, c = indices[..., 1], indices[..., 0]
+        return t['z'][r, c], t['slope'][r, c], ~t['blocked'][r, c]
+
+    marks = []
+    for number, points in MOUNTAIN_MARKS.items():
+        p = np.asarray(points)
+        z, slope, walk = section(p[1], p[-1]-p[0], across=400)
+        if np.ptp(z) < {1: 100, 2: 250, 3: 300}[number] or slope.max() < .9:
+            raise ValueError(f'Mountain mark {number}: the reviewed face has lost its relief')
+        marks.append(dict(mark=number, points=points, cross_section_width=800,
+                          relief=round(float(np.ptp(z)), 1),
+                          maximum_grade=round(float(slope.max()), 3),
+                          blocked_samples=int((~walk).sum())))
+    divides = []
+    for ridge in RIDGES:
+        if 'inner-toe' not in ridge['name']:
+            continue
+        p = np.asarray(ridge['points'])
+        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
+        # The upper half can lie inside the base's open cirque; examine the
+        # exposed lower spine beyond that intended junction.
+        station = arc[-1]*.70
+        k = min(np.searchsorted(arc, station)-1, len(p)-2)
+        center = np.array([np.interp(station, arc, p[:, i]) for i in range(2)])
+        z, slope, walk = section(center, p[k+1]-p[k], across=1000, along=100)
+        # The passages bend, so seed their side bands rather than requiring
+        # a road to coincide with the outermost column of the sample window.
+        side = 55  # offsets -1000..-460 and +460..+1000
+        seeds = [tuple(map(int, rc)) for rc in np.argwhere(walk[:, :side])]
+        if not seeds or not walk[:, -side:].any():
+            raise ValueError(f'{ridge["name"]}: a flank passage is missing at its review section')
+        if flood(walk, seeds)[:, -side:].any():
+            raise ValueError(f'{ridge["name"]}: a direct shortcut crosses the mountain divide')
+        relief = float(np.ptp(z[z.shape[0]//2]))
+        if relief < 150 or slope.max() < .9:
+            raise ValueError(f'{ridge["name"]}: the barrier lacks a pronounced steep face')
+        divides.append(dict(name=ridge['name'], center=center.tolist(),
+                            section_size=[2000, 200], relief=round(relief, 1),
+                            maximum_grade=round(float(slope.max()), 3),
+                            direct_crossing_blocked=True, both_flanks_open=True))
+    return dict(mark_sections=marks, inner_divides=divides, native_verified=False)
+
+
 def validate(t):
     """Measure final terrain rather than merely connectivity of drawn axes."""
     if not np.isfinite(t['z']).all() or t['z'].max() > 65535*.0390625:
@@ -112,6 +180,7 @@ def validate(t):
         ruptures.append(dict(**feature, measured_floor=bed, measured_rim=rim,
                              depth_below_sheet=ICE-bed, rim_to_floor=rim-bed))
     return dict(stage='alpine landscape with twin ruptures and scenery', bases=sites,
+                mountain_barriers=mountain_checks(t),
                 horizontal_scale=SCALE, extent=[EXTENT, EXTENT],
                 reference_routes=len(ROUTES), all_sites_connected=True,
                 capture_approach_links=len(CAPTURE_LINKS),
