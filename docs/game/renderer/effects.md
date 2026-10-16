@@ -84,9 +84,12 @@ lantern `TownLamp5`) has only these, and they work in the prop buffer too.
   are drawn. `FIREGLOW` multiplies its glow spot by itself (SCALE), which
   darkens the spot's grey surround to almost black.
 - **Textures used as stored.** Materials that neither alpha blend nor alpha
-  test skip `bleed_alpha`. Additive glows draw the colour under zero alpha,
-  which the bleed would replace with neighbouring atlas art; `FIREGLOW`
-  then showed as a patterned red square.
+  test skip `bleed_alpha`, in the fixed-function path, `normalmapped.fx` and
+  `simple.fx` alike. Additive glows draw the colour under zero alpha, which
+  the bleed would replace with neighbouring atlas art; `FIREGLOW` then showed
+  as a patterned red square. An opaque texture's alpha need not mean
+  coverage at all: `GBAmonHen1`'s atlas is 95% transparent, and the bleed
+  turned the Amon Hen rocks that use it pale white.
 
 ## Approximations
 

@@ -1326,7 +1326,8 @@ class MapRenderer:
                 entry['approximated'] = f'{name} drawn with the Default_M port'
             opacity = one('OpacityOverride', 1.0)
             normal = fx.get('NormalMap')
-            return dict(texture=self._object_texture(fx.get('DiffuseTexture') or part['texture']),
+            return dict(texture=self._object_texture(fx.get('DiffuseTexture') or part['texture'],
+                                                     raw=not fx.get('AlphaTestEnable') and opacity >= 1),
                         normal=self._object_texture(normal) if isinstance(normal, str) else None,
                         technique=4 if name == 'Default_L' else 3, cull=True, depth_mask=True,
                         alpha_ref=96/255 if fx.get('AlphaTestEnable') else None,
@@ -1345,7 +1346,7 @@ class MapRenderer:
             emissive = tuple(float(v) for v in (tuple(fx.get('ColorEmissive') or ()) + (1.0, 1.0, 1.0))[:3])
             transform = tuple(fx.get('TexCoordTransform_0') or (1.0, 1.0, 0.0, 0.0))
             blend = fx.get('AlphaBlendingEnable')
-            return dict(texture=self._object_texture(fx.get('Texture_0') or part['texture']), normal=None,
+            return dict(texture=self._object_texture(fx.get('Texture_0') or part['texture'], raw=not blend), normal=None,
                         technique=5, cull=True, depth_mask=bool(fx.get('DepthWriteEnable', True)),
                         alpha_ref=None, blend=('src_alpha', 'one_minus_src_alpha') if blend else None,
                         mode='blend' if blend else 'opaque',
@@ -1362,7 +1363,7 @@ class MapRenderer:
         detail = state.get('detail', 0) if part.get('detail_texture') and state['texturing'] else 0
         # Without alpha blending or testing the texture's alpha is unused, and
         # additive glows keep their colour under zero alpha: draw it as stored.
-        raw = state['blend'] is not None and state['blend'][0] != 'src_alpha' and state['alpha_ref'] is None
+        raw = state['alpha_ref'] is None and (state['blend'] is None or state['blend'][0] != 'src_alpha')
         return dict(texture=self._object_texture(texture, raw) if state['texturing'] and texture else None,
                     detail=self._object_texture(part['detail_texture'], raw) if detail else None,
                     normal=None, technique=0, cull=not part['two_sided'], depth_mask=state['depth_mask'],
