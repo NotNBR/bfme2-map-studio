@@ -49,6 +49,17 @@ so every site and ramp in the west has a twin in the east.
   the basins. They are rebuilt RAMP_WIDTH wide: a plane from the terrace
   down to the basin, cut into the cliffs on either side with steep, ragged,
   blocked walls (height alone never blocks: docs/game/navigation.md).
+- Every ramp is cleaned (clean_ramps()): the original's ramps are flat
+  slabs meeting the levels in dead-straight creases, painted in two or three
+  dirts, which the stretch turns into long hard edges and blocks. The creases
+  are rounded over about 200 units; each ramp of ordinary size becomes a
+  worn track: one of its own ground textures, the one most common round it,
+  over a ragged outline that hides the slab's straight sides, with the
+  grass round it along the cliff walls (MARGIN); the soft bands
+  (blends.py) blend it into the rest. The
+  cliffs along the ramps end in straight walls, which read as ruled lines at
+  this scale: ragged notches are cut into them (NOTCH), floored at the
+  ramp's height and walled again.
 
 The build refuses a layout in which a site has less than MIN_OPEN units of
 flat, open ground around it, cannot be walked to from the centre, or walks
@@ -68,6 +79,7 @@ from mapworkshop.formats.big import BigArchive
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.blank import create, set_heights, set_materials, starts, terrain_cell_sizes
 from mapworkshop.mapkit.checks.strategy import at, distance_field, walk_grid
+from mapworkshop.mapkit.earth import fbm
 from mapworkshop.mapkit.relief import distance_to
 
 from .blends import ladders, soften
@@ -110,9 +122,19 @@ MIN_OPEN = 650                  # flat open ground every site needs around it, m
 WEST_RAMPS = [((4696, 10857), (5197, 11275)), ((4647, 3018), (5085, 2658))]
 RAMPS = WEST_RAMPS + [(twin(top), twin(bottom)) for top, bottom in WEST_RAMPS]
 RAMP_WIDTH = 750
-RAMP_GROUND, RAMP_CLIFF = 'DirtMordor14', 'CliffRhun01'   # the narrow ramps' own textures
+RAMP_CLIFF = 'CliffRhun01'      # the texture of a widened ramp's side walls
 WALL = 40.0                     # how far a widened ramp's side walls reach into the cliff
 STEEP = 10.0                    # a cell whose corners differ more than this is a wall: blocked
+UNPAINTED = -1                  # a widened ramp's new ground, until clean_ramps() paints it
+RAMP_SLOPE = .12                # walkable ground steeper than this (rise over run) can be ramp
+RAMP_RISE = 80.0                # a ramp joins two levels: its slope rises at least this
+RAMP_CELLS = 9000               # larger slopes (the broad ones up to the centre strip) keep their painting
+CLEAN = 10                      # cells either side over which a ramp's heights are smoothed, twice
+OUTLINE = 6                     # cells over which a ramp's painted outline is rounded
+RAGGED = .2                     # how far noise moves that outline (share of its rounding)
+RAMP_SHARE = .2                 # a texture covering this share of a ramp can paint it
+NOTCH = (25.0, 20.0)            # notches cut into the cliffs along a ramp: mean depth, spread (map units)
+MARGIN = (110.0, 45.0)          # a ramp's margin along its cliff walls: mean width, spread (map units)
 
 
 def source():
@@ -193,12 +215,12 @@ def steepness(z):
     return out
 
 
-def widen_ramp(z, labels, impassable, top, bottom, ground, cliff, is_cliff):
+def widen_ramp(z, labels, impassable, top, bottom, cliff, is_cliff):
     """Rebuild the ramp from map point `top` down to `bottom` RAMP_WIDTH wide:
     a plane between the terrain just beyond its two ends, its sides cut into
     the cliffs as walls WALL deep. Ramp cells become walkable, and those that
-    had a cliff texture take `ground`; steep wall cells are blocked and take
-    `cliff`."""
+    had a cliff texture are left UNPAINTED; steep wall cells are blocked and
+    take `cliff`."""
     top, bottom = np.asarray(top, float), np.asarray(bottom, float)
     length = math.dist(top, bottom)
     u = (bottom - top)/length
@@ -226,7 +248,127 @@ def widen_ramp(z, labels, impassable, top, bottom, ground, cliff, is_cliff):
     impassable[ramp] = False
     impassable[wall] = True
     labels[wall] = cliff
-    labels[ramp & is_cliff[labels]] = ground
+    labels[ramp & is_cliff[labels]] = UNPAINTED
+
+
+def smooth(a, r):
+    """`a` averaged over the (2r+1) x (2r+1) cells around each (edges repeated)."""
+    n = 2*r + 1
+    c = np.pad(np.cumsum(np.cumsum(np.pad(a, r, mode='edge'), 0), 1), ((1, 0), (1, 0)))
+    return (c[n:, n:] - c[:-n, n:] - c[n:, :-n] + c[:-n, :-n])/(n*n)
+
+
+def regions(mask):
+    """The connected regions of `mask` (four-neighbour), as arrays of flat
+    cell indices."""
+    h, w = mask.shape
+    flat = mask.ravel()
+    seen = np.zeros(flat.size, bool)
+    out = []
+    for start in np.flatnonzero(flat):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, cells = [start], []
+        while stack:
+            i = stack.pop()
+            cells.append(i)
+            y, x = divmod(i, w)
+            for j, ok in ((i - w, y > 0), (i + w, y < h - 1), (i - 1, x > 0), (i + 1, x < w - 1)):
+                if ok and flat[j] and not seen[j]:
+                    seen[j] = True
+                    stack.append(j)
+        out.append(np.array(cells))
+    return out
+
+
+def clean_ramps(z, labels, impassable, names):
+    """Round the ramps and paint each in one texture, in place; returns how
+    many ramps were found. A ramp is a connected region of walkable ground
+    steeper than RAMP_SLOPE rising at least RAMP_RISE. Its heights, with
+    2*CLEAN cells round it, are smoothed twice over CLEAN cells, averaging
+    walkable ground only, so the creases at its top and foot round off and
+    the cliffs beside it neither move nor pull bumps into it. A ramp of up to
+    RAMP_CELLS cells then takes, of the ground textures covering RAMP_SHARE of
+    it, the one most common within 2*CLEAN cells round it, over its outline
+    rounded by OUTLINE cells and made ragged by RAGGED of noise; within
+    MARGIN (a mean width and a spread of noise) of blocked ground it takes
+    instead the grass most common round it, if any, so the ramp is a track
+    worn through the grass it joins. UNPAINTED cells left
+    over take the texture round them.
+
+    First the blocked ground along each ramp is notched: within 2*CLEAN
+    cells of it, blocked cells less than NOTCH (a mean depth and a spread of
+    noise) from walkable ground become ramp, at the height of the ramp beside
+    them (the ramp's own cells within 8) and UNPAINTED; those left steeper
+    than STEEP are blocked again, as
+    the notches' walls. The noise is the same at a point and its twin."""
+    walk = ~impassable
+    gy, gx = np.gradient(z, 10.)
+    found = [cells for cells in regions(walk & (np.hypot(gx, gy) > RAMP_SLOPE))
+             if np.ptp(z.ravel()[cells]) >= RAMP_RISE]
+    ramp = np.zeros(z.shape, bool)
+    for cells in found:
+        ramp.ravel()[cells] = True
+    y, x = (np.mgrid[0:z.shape[0], 0:z.shape[1]] - BORDER)*10.0
+    wobble = fbm(x, y, scale=70, seed=440, octaves=3) + fbm(2*CENTRE[0] - x, 2*CENTRE[1] - y, scale=70, seed=440, octaves=3)
+    depth = np.maximum(NOTCH[0] + NOTCH[1]*wobble/wobble.std(), 0)
+    notch = impassable & (smooth(ramp.astype(float), 2*CLEAN) > 0) & (distance_to(walk)*10 < depth)
+    weight = (ramp & walk).astype(float)          # the ramp's own ground, not a level beyond the cliff
+    beside = smooth(z*weight, 8)/np.maximum(smooth(weight, 8), 1e-9)
+    notch &= smooth(weight, 8) > 0
+    z[notch] = beside[notch]
+    impassable[notch], labels[notch] = False, UNPAINTED
+    wall = notch & (steepness(z) > STEEP)
+    impassable[wall], labels[wall] = True, names.index(RAMP_CLIFF)
+    walk = ~impassable
+    zone = walk & (smooth(ramp.astype(float), 2*CLEAN) > 0)
+    weight = walk.astype(float)
+    smoothed = z.copy()
+    for _ in range(2):
+        smoothed = np.where(walk, smooth(smoothed*weight, CLEAN)/np.maximum(smooth(weight, CLEAN), 1e-9), z)
+    z += (smoothed - z)*smooth(zone.astype(float), CLEAN)*walk
+    np.maximum(z, 0, out=z)              # the running sums leave -1e-9 on the basin floor
+    ground = np.array([not name.startswith(('Cliff', 'Rock')) for name in names])
+    wall = zone & (steepness(z) > STEEP)
+    impassable[wall], labels[wall] = True, names.index(RAMP_CLIFF)
+    walk = ~impassable
+    paintable = walk & (steepness(z) <= STEEP)
+    noise = fbm(x, y, scale=90, seed=430, octaves=3)
+    noise = RAGGED*noise/noise.std()
+    edge = fbm(x, y, scale=80, seed=450, octaves=3) + fbm(2*CENTRE[0] - x, 2*CENTRE[1] - y, scale=80, seed=450, octaves=3)
+    margin = distance_to(impassable)*10 < MARGIN[0] + MARGIN[1]*edge/edge.std()
+    for cells in found:
+        if len(cells) > RAMP_CELLS:
+            continue
+        here = labels.ravel()[cells]
+        here = here[(here != UNPAINTED) & ground[np.maximum(here, 0)]]
+        if not len(here):
+            continue
+        share = np.bincount(here, minlength=len(names))/len(here)
+        mask = np.zeros(z.shape, bool)
+        mask.ravel()[cells] = True
+        ring = (smooth(mask.astype(float), 2*CLEAN) > 0) & ~mask & (labels != UNPAINTED)
+        around = np.bincount(labels[ring], minlength=len(names))
+        candidates = np.flatnonzero(share >= RAMP_SHARE)
+        texture = candidates[np.argmax(around[candidates])] if len(candidates) else share.argmax()
+        outline = (smooth(mask.astype(float), OUTLINE) + noise >= .5) & paintable
+        labels[outline] = texture
+        around[[not name.startswith('Grass') for name in names]] = 0
+        around[texture] = 0
+        if around.any():
+            labels[outline & margin] = around.argmax()
+    reach = OUTLINE
+    while (labels == UNPAINTED).any():
+        best, pick = np.zeros(z.shape), labels.copy()
+        for k in np.unique(labels[labels != UNPAINTED]):
+            if ground[k]:
+                cover = smooth((labels == k).astype(float), reach)
+                better = (labels == UNPAINTED) & (cover > best)
+                pick[better], best[better] = k, cover[better]
+        labels[(labels == UNPAINTED) & (best > 0)] = pick[(labels == UNPAINTED) & (best > 0)]
+        reach *= 2
+    return len(found)
 
 
 def open_ground(z, impassable):
@@ -282,7 +424,8 @@ def build(b):
     names = src['names']
     is_cliff = np.array([name.startswith('Cliff') for name in names])
     for top, bottom in RAMPS:
-        widen_ramp(z, labels, impassable, top, bottom, names.index(RAMP_GROUND), names.index(RAMP_CLIFF), is_cliff)
+        widen_ramp(z, labels, impassable, top, bottom, names.index(RAMP_CLIFF), is_cliff)
+    cleaned = clean_ramps(z, labels, impassable, names)
     painted = labels                     # the original's painting, which the scenery follows
     names, chosen = ladders(painted, names)
     labels = soften(painted, chosen)
@@ -313,7 +456,7 @@ def build(b):
     walk, _ = walk_grid(m)
     field = distance_field(walk, CENTRE)
     walks = [at(field, walk, p) for p in SITES]
-    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed,
+    b.report.update(scale=dict(x=sx, y=sy, z=sz), palette=palette, placed=placed, ramps_cleaned=cleaned,
                     blends={f'{names[a]} > {names[b]}': [names[k] for k in steps] for (a, b), steps in chosen.items()},
                     sites=[
         dict(site=k, name=name, x=p[0], y=p[1], open=round(r), walk_to_centre=round(d),
