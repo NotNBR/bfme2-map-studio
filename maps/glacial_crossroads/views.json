@@ -32,103 +32,201 @@
       "heading": 0
     },
     "eastern-passes": {
-      "target": [21800, 15100, 850],
+      "target": [
+        21800,
+        15100,
+        850
+      ],
       "distance": 10800,
       "elevation": 38,
       "heading": 270
     },
     "southern-ranges": {
-      "target": [14300, 6500, 900],
+      "target": [
+        14300,
+        6500,
+        900
+      ],
       "distance": 13200,
       "elevation": 40,
       "heading": 180
     },
     "southwest-divide": {
-      "target": [7900, 7900, 1100],
+      "target": [
+        7900,
+        7900,
+        1100
+      ],
       "distance": 10000,
       "elevation": 36,
       "heading": 45
     },
     "southwest-checkpoint": {
-      "target": [10310, 10015], "distance": 1050, "elevation": 48, "heading": 145
+      "target": [
+        10310,
+        10015
+      ],
+      "distance": 1050,
+      "elevation": 48,
+      "heading": 145
     },
     "northwest-checkpoint": {
-      "target": [10248, 18587], "distance": 1050, "elevation": 48, "heading": 45
+      "target": [
+        10248,
+        18587
+      ],
+      "distance": 1050,
+      "elevation": 48,
+      "heading": 45
     },
     "northeast-checkpoint": {
-      "target": [18506, 18181], "distance": 1050, "elevation": 48, "heading": 145
+      "target": [
+        18506,
+        18181
+      ],
+      "distance": 1050,
+      "elevation": 48,
+      "heading": 145
     },
     "southeast-checkpoint": {
-      "target": [18533, 10458], "distance": 1050, "elevation": 48, "heading": 45
+      "target": [
+        18533,
+        10458
+      ],
+      "distance": 1050,
+      "elevation": 48,
+      "heading": 45
     },
     "north-inn": {
-      "target": [14460, 23390], "distance": 1150, "elevation": 48, "heading": 108
+      "target": [
+        14460,
+        23390
+      ],
+      "distance": 1150,
+      "elevation": 48,
+      "heading": 108
     },
     "east-inn": {
-      "target": [23186, 14473], "distance": 1150, "elevation": 48, "heading": 337
+      "target": [
+        23186,
+        14473
+      ],
+      "distance": 1150,
+      "elevation": 48,
+      "heading": 337
     },
     "south-inn": {
-      "target": [14270, 4790], "distance": 1150, "elevation": 48, "heading": 182
+      "target": [
+        14270,
+        4790
+      ],
+      "distance": 1150,
+      "elevation": 48,
+      "heading": 182
     },
     "west-inn": {
-      "target": [5160, 14000], "distance": 1150, "elevation": 48, "heading": 174
+      "target": [
+        5160,
+        14000
+      ],
+      "distance": 1150,
+      "elevation": 48,
+      "heading": 174
     },
     "pass-detail": {
-      "target": [7717, 20438, 900],
+      "target": [
+        7717,
+        20438,
+        900
+      ],
       "distance": 2600,
       "elevation": 36,
       "heading": 315
     },
     "side-pass": {
-      "target": [10221, 20260],
+      "target": [
+        10221,
+        20260
+      ],
       "distance": 3200,
       "elevation": 65,
       "heading": 100
     },
     "rear-saddle": {
-      "target": [14267, 21206],
+      "target": [
+        14267,
+        21206
+      ],
       "distance": 3200,
       "elevation": 58,
       "heading": 90
     },
     "ice-surface": {
-      "target": [14250, 14250, 120],
+      "target": [
+        14250,
+        14250,
+        120
+      ],
       "distance": 6200,
       "elevation": 68,
       "heading": 0
     },
     "glacier-low": {
-      "target": [14250, 14250, 145],
+      "target": [
+        14250,
+        14250,
+        145
+      ],
       "distance": 5200,
       "elevation": 30,
       "heading": 25
     },
     "north-rupture": {
-      "target": [13850, 15090, 120],
+      "target": [
+        13850,
+        15090,
+        120
+      ],
       "distance": 2300,
       "elevation": 42,
       "heading": 20
     },
     "south-rupture": {
-      "target": [14760, 13400, 110],
+      "target": [
+        14760,
+        13400,
+        110
+      ],
       "distance": 2400,
       "elevation": 44,
       "heading": 205
     },
     "north-spruce": {
-      "target": [15120, 19060, 220],
+      "target": [
+        15120,
+        19060,
+        220
+      ],
       "distance": 1500,
       "elevation": 42,
       "heading": 315
     },
     "glacier-waystation": {
-      "target": [15142, 18529, 220],
+      "target": [
+        15142,
+        18529,
+        220
+      ],
       "distance": 1100,
       "elevation": 42,
       "heading": 60
     },
     "high-lookout": {
-      "target": [23409, 25022, 1650],
+      "target": [
+        23409,
+        25022,
+        1650
+      ],
       "distance": 1300,
       "elevation": 40,
       "heading": 90
@@ -142,6 +240,51 @@
       "distance": 3450.0,
       "elevation": 52,
       "heading": 0
+    },
+    "sealed-gate": {
+      "target": [
+        3495,
+        25863
+      ],
+      "distance": 900,
+      "elevation": 30,
+      "heading": 285
+    },
+    "sealed-gate-southeast": {
+      "target": [
+        25905,
+        3810
+      ],
+      "distance": 1000,
+      "elevation": 28,
+      "heading": 0
+    },
+    "travellers-camp": {
+      "target": [
+        11343,
+        25042
+      ],
+      "distance": 600,
+      "elevation": 40,
+      "heading": 0
+    },
+    "forest-edge": {
+      "target": [
+        4417,
+        18057
+      ],
+      "distance": 3000,
+      "elevation": 42,
+      "heading": 120
+    },
+    "road-shrine": {
+      "target": [
+        11174,
+        20721
+      ],
+      "distance": 420,
+      "elevation": 25,
+      "heading": 241
     }
   }
 }

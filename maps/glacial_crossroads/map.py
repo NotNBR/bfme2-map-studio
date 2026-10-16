@@ -7,14 +7,14 @@ snow-filled gullies and irregular cirques frame gently winding passes.
 Two deep, impassable ruptures split the central sheet into connected fighting
 spaces. A four-times-scale snowy ruin stands on a broad rocky snow mound,
 with a broken ring of arches and uneven outer rock spires.
-Snowy woods, moraine boulders and ruined waystations frame the passes.
+Spruce forests, moraines, ruined waystations, road shrines and the sealed
+gates of abandoned Dwarf holds frame the passes.
 Eight marked locations carry four signal fires and four capturable inns.
 One normal-scale fortress at site 13 provides a size reference; no economy
 or combat balance is authored. The sixteen-site scaffold
 is for terrain review; native sixteen-player support is not established.
 The build checks final pad elevations and route clearance/connectivity.
 """
-from copy import deepcopy
 import json
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -34,6 +34,8 @@ from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, HIGH, ICE, LOW, MID,
 from .terrain import landscape, PALETTE, CLIFF
 from .features import ARENA_MODELS, ARENA_TOWER, CAPTURE_LINKS, CHECKPOINTS, CREVASSES
 from .scenery import arena_tower, checkpoint_sites, populate
+
+PLAYER_START_NUMBERS = (2, 3, 5, 6, 8, 9, 11, 12)
 
 
 # Viewer review lines, copied into source so later builds do not depend on
@@ -240,26 +242,6 @@ def plan(t):
     return sheet
 
 
-def site_scaffold(m):
-    """Local sixteen-site preview scaffold, not an extension of native play."""
-    sides = sections.read(m, 'SidesList')
-    template = sides['players'][-1]
-    for i in range(9, 17):
-        side = deepcopy(template)
-        side['properties'] = [(k, t, f'Player_{i}' if k in ('playerName', 'playerDisplayName') else v)
-                              for k, t, v in side['properties']]
-        sides['players'].append(side)
-    sections.write(m, 'SidesList', sides)
-    teams = sections.read(m, 'Teams')
-    for i in range(9, 17):
-        teams.append([('teamName', 3, f'teamPlayer_{i}'), ('teamOwner', 3, f'Player_{i}'), ('teamIsSingleton', 0, 1)])
-    sections.write(m, 'Teams', teams)
-    for name in ('MPPositionList', 'LibraryMapLists', 'PlayerScriptsList'):
-        records = sections.read(m, name)
-        records.extend(deepcopy(records[-1]) for _ in range(8))
-        sections.write(m, name, records)
-
-
 def rupture_water(m, t):
     """Still meltwater below the ice; dry banks clip each buried polygon."""
     level = 35  # 85 units below the solid sheet, just above the uneven beds.
@@ -294,16 +276,16 @@ def build(b):
     report = validate(t)
     m = create(WIDTH, HEIGHT, BORDER, title=b.project.title,
                description=b.project.description, player_count=8, experimental_large=True)
-    site_scaffold(m)
     set_heights(m, t['z'])
     report['scenery'] = populate(m, t)
     report['arena_tower'] = arena_tower(m, t)
     report['checkpoints'] = checkpoint_sites(m, t)
     set_materials(m, PALETTE, t['materials'], blocked=t['blocked'],
                   cell_sizes=terrain_cell_sizes(PALETTE), corner_blends=True,
-                  cliffs=(t['materials'] == CLIFF) & steep_cells(t['z']), cliff_scale=3)
+                  cliffs=(t['materials'] == CLIFF) & steep_cells(t['z'], .7), cliff_scale=3)
     report['glacier']['meltwater'] = rupture_water(m, t)
-    starts(m, [(base['x'], base['y']) for base in BASES])
+    starts(m, [(base['x'], base['y']) for base in BASES
+               if base['number'] in PLAYER_START_NUMBERS])
     # The four asset views show the entrance ramp on local +x. Rotate it
     # south toward the ice. Keep the game's default scale for comparison.
     reference_base = next(base for base in BASES if base['number'] == 13)

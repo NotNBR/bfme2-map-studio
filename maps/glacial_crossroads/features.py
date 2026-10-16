@@ -37,8 +37,6 @@ ROCKS = [('SnowyRock01', 55.), ('SnowyRock05', 85.),
          ('SnowyRock15', 105.), ('SnowyRock17', 45.),
          ('SnowyRock09', 45.), ('SnowyRock10', 40.),
          ('SnowyRock11', 30.), ('SnowyRock12', 28.)]
-# Measured top outlines fit within 28 units of their native origins.
-TREES = [('TreeSnowySpruce01', 28.), ('TreeSnowySpruce03', 28.)]
 
 # Eight circles in 1000073095.jpg replace the old diagonal/saddle sites.
 # The four inner marks follow diagonal passes; the outer four sit at the
@@ -76,6 +74,17 @@ CAPTURE_LINKS = [
     dict(name='East saddle link', points=[(23392., 14146.), (22841., 14159.)], width=220., main=False),
     dict(name='South saddle link', points=[(14280., 5163.), (14504., 5697.)], width=220., main=False),
     dict(name='West saddle link', points=[(4911., 14280.), (5343., 14362.)], width=220., main=False),
+]
+
+# Sealed hold gates in the headwalls behind the four high corner cirques.
+# Found by searching each headwall for the steepest wall behind a level
+# foot, then fixed here: terrain.py carves each one's portal around them.
+# Facing is the bearing the doors look along, counterclockwise from east.
+GATES = [
+    dict(base=1, position=(3495.5, 25863.6), facing=4.9742),
+    dict(base=4, position=(26088.6, 23882.5), facing=2.6180),
+    dict(base=7, position=(25905.0, 3810.0), facing=3.1416),
+    dict(base=10, position=(3464.5, 2520.5), facing=1.3090),
 ]
 
 # Unequal straight shoulders describe a cut into bedrock, not a circular

@@ -13,15 +13,18 @@ from mapworkshop.mapkit.relief import distance_to, smooth
 from mapworkshop.mapkit.walkable import flood
 from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, ICE, PAD_HALF,
                      RIDGES, ROUTES, SCALE, WIDTH, floor_height)
-from .features import (ARENA_TOWER, BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS,
+from .features import (ARENA_TOWER, BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS, GATES,
                        CHECKPOINT_SHELF, CREVASSES)
 
 PALETTE = ['SnowLargeType1', 'SnowType6', 'SnowCaradhras07', 'SnowCaradhras05',
            'SnowCaradhras08', 'SnowCaradhras09', 'SnowType4',
            'SnowCaradhras21', 'StoneCaradhras03', 'CliffCaradhras02',
-           'SnowCaradhras04', 'CliffCaradhras03']
-DRIFT, WIND, SCREE, DEPTH = 6, 7, 8, 9
-TALUS = len(PALETTE)-2
+           'SnowCaradhras04', 'SnowCaradhras24', 'RockCaradhras02',
+           'CliffEttenmoors02', 'CliffCaradhras03']
+DRIFT, WIND, SCREE, DEPTH, TALUS = 6, 7, 8, 9, 10
+# Wind-smoothed snow, then rock showing through snow in three steps:
+# scattered stones, snow-streaked ledges and bare, cliff-mapped faces.
+POLISH, STONES, LEDGES = 11, 12, 13
 CLIFF = len(PALETTE)-1
 # Sheet fractures are surface material, never gaps in the walkable ice.
 # Coordinates are offsets from the field centre, in world units.
@@ -144,7 +147,13 @@ def glacier(x, y, shore, ice):
     mound = ARENA_TOWER['mound_height']*(1-smooth(
         (radius-ARENA_TOWER['foundation_radius'])/(reach-ARENA_TOWER['foundation_radius'])))
     apron = 1-smooth((radius-reach+45)/145)
-    relief = (lips-cut_depth+9*snow*(1-frost)+mound)*inset
+    # Broad pressure swells give the sheet's light some movement. They
+    # fade out before the tower's level footing and the rupture rims.
+    calm = smooth((radius-ARENA_TOWER['foundation_radius']-120)/380)*(1-frost)
+    swells = (6*fbm(xx, yy, scale=700, octaves=2, seed=5812)
+              + 2.5*fbm(.86*xx+.51*yy, (-.51*xx+.86*yy)*3, scale=260,
+                        octaves=2, seed=5813))*calm
+    relief = (lips-cut_depth+9*snow*(1-frost)+mound+swells)*inset
     return dict(crop=crop, relief=relief, lips=lips*inset, depth=cut_depth,
                 snow=snow, frost=frost, rupture=rupture, grain=grain,
                 tower_mound=mound, tower_apron=apron)
@@ -168,7 +177,7 @@ def paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin):
     along, across = .86*xx+.51*yy, -.51*xx+.86*yy
     fringe = fbm(along*.48+180*broad, across, scale=190, octaves=2, seed=5822)
     snowline = shore[crop]+130+620*broad+180*fringe
-    width = 360+180*smooth(.5+1.5*broad)
+    width = 620+340*smooth(.5+1.5*broad)
     cover = smooth((snowline+width*.5)/width)
     inner = (slice(rows.start-crop[0].start, rows.stop-crop[0].start),
              slice(cols.start-crop[1].start, cols.stop-crop[1].start))
@@ -186,10 +195,10 @@ def paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin):
     surface = materials[crop]
     # The thin coat is blue-white frost, then compacted snow, then the same
     # soft snow as the valley. Unequal thresholds break up parallel bands.
-    surface[area & (cover < .12)] = 2
-    surface[area & (cover >= .12)] = 5
-    surface[area & (cover > .34+.10*fringe)] = 1
-    surface[area & (cover > .62+.12*broad)] = 0
+    surface[area & (cover < .10)] = 2
+    surface[area & (cover >= .10)] = 5
+    surface[area & (cover > .44+.10*fringe)] = 1
+    surface[area & (cover > .66+.12*broad)] = 0
 
 
 def upscale(values, cx, cy, x, y):
@@ -324,6 +333,118 @@ def ridge_envelope(bed, chains, x, y, noise, crags):
             rock[crop] = np.maximum(rock[crop], face)
             arc += length
     return rock, blur(incision, 2)
+
+
+def relax_floor(floor, fixed, length=650., iterations=1500):
+    """Round the creases where the base height envelopes meet the valley grade.
+
+    Clipping the radial grade to each base's height band leaves dead-flat
+    terraces that bend into straight ramps along the cirque rims, and
+    trenches where the band lets the floor fall beside a basin. A screened
+    smoothing at 30-unit spacing keeps the floor's large-scale grading
+    (the screening length) but replaces those kinks with long rounded
+    transitions. Fixed cells (the construction pads, the ice core) keep
+    their heights. Returns the coarse correction, zero on fixed cells.
+    """
+    prior = floor[::3, ::3].astype(np.float32)
+    keep = fixed[::3, ::3]
+    f = prior.copy()
+    a = np.float32((30/length)**2)
+    inner = (slice(1, -1), slice(1, -1))
+    for _ in range(iterations):
+        average = (f[:-2, 1:-1]+f[2:, 1:-1]+f[1:-1, :-2]+f[1:-1, 2:])*np.float32(.25)
+        f[inner] = (average+a*prior[inner])/(1+a)
+        f[keep] = prior[keep]
+    return (f-prior).astype(float)
+
+
+def trails(x, y, cx, cy):
+    """Faint trodden lines from each base out to the mouths of its passes.
+
+    Each wanders between the pad centre and a route end in its cirque; its
+    width changes and drifts interrupt it, so it reads as wear, not a road.
+    """
+    worn = np.zeros(x.shape, bool)
+    width = upscale(22+12*fbm(cx, cy, scale=380, octaves=2, seed=5690), cx, cy, x, y)
+    for base in BASES:
+        rng = np.random.default_rng(5691+base['number'])
+        ends = []
+        for route in ROUTES:
+            # Routes begin at the base anchor; the trail runs to where the
+            # pass leaves the cirque.
+            p = np.asarray(route['points'])
+            for q in (p, p[::-1]):
+                if np.hypot(q[0, 0]-base['x'], q[0, 1]-base['y']) > 300:
+                    continue
+                arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(q, axis=0), axis=1))]
+                station = min(1350+rng.uniform(-150, 250), arc[-1]*.5)
+                ends.append(tuple(np.interp(station, arc, q[:, i]) for i in range(2)))
+        for ex, ey in ends:
+            sx, sy = base['x']+rng.uniform(-250, 250), base['y']+rng.uniform(-250, 250)
+            mx, my = (sx+ex)/2+rng.uniform(-180, 180), (sy+ey)/2+rng.uniform(-180, 180)
+            points = [(sx, sy)]+[((1-u)**2*sx+2*u*(1-u)*mx+u*u*ex,
+                                  (1-u)**2*sy+2*u*(1-u)*my+u*u*ey)
+                                 for u in np.linspace(.1, 1, 10)]
+            p = np.asarray(points)
+            r0, r1 = np.searchsorted(y[:, 0], [p[:, 1].min()-80, p[:, 1].max()+80])
+            c0, c1 = np.searchsorted(x[0], [p[:, 0].min()-80, p[:, 0].max()+80])
+            crop = (slice(r0, r1), slice(c0, c1))
+            d, _ = polyline_distance(p, x[crop], y[crop], reach=80)
+            worn[crop] |= d < width[crop]
+    return worn
+
+
+def portal(z, x, y, gate, edge):
+    """Carve a hold gate's level forecourt and the rock face it is set into.
+
+    In the gate's frame, u runs out toward its cirque and v along the wall.
+    The forecourt is levelled at the ground in front of the doors; behind
+    them the face rises sheer, covering the back of the arch and the doors.
+    Reserved ground (pads and routes) is left as it was.
+    """
+    gx, gy = gate['position']
+    ux, uy = np.cos(gate['facing']), np.sin(gate['facing'])
+    r0, c0 = round(gy/10)+BORDER, round(gx/10)+BORDER
+    crop = (slice(r0-55, r0+56), slice(c0-55, c0+56))
+    dx, dy = x[crop]-gx, y[crop]-gy
+    u, v = dx*ux+dy*uy, -dx*uy+dy*ux
+    level = float(z[round((gy+120*uy)/10)+BORDER, round((gx+120*ux)/10)+BORDER])
+    court = ((1-smooth((np.abs(v)-260)/90))*(1-smooth((u-260)/120))
+             * smooth((u+40)/12)*smooth((edge[crop]-40)/120))
+    local = z[crop]*(1-court)+level*court
+    # The cut face is uneven: its top and its line along the wall vary.
+    wall = smooth((-u-30-6*np.sin(v/37))/40)*(1-smooth((np.abs(v)-250)/70))
+    top = level+175+20*np.sin(v/53)
+    z[crop] = np.maximum(local, local*(1-wall)+top*wall)
+
+
+def moraines(x, y, cx, cy, reserved, route_clearance, pads, ice, shore,
+             checkpoints, tower_hollows, recess):
+    """Broken lateral moraines and hummocky drift on the open valley floors.
+
+    Retreating ice left low ridges a little way out from the mountain feet
+    and scattered mounds across the cirques. They stay gentle (below 0.35),
+    lower than the 55-unit rise that would close them to movement, and fade
+    out before route cores, construction pads, capture shelves and the ice.
+    """
+    inside = distance_to(~reserved)*10
+    pad_gap = distance_to(pads)*10
+    site_gap = distance_to(checkpoints)*10
+    room = (smooth((route_clearance-60)/220)*smooth((pad_gap-80)/420)
+            * smooth((site_gap-140)/260)*smooth(shore/450)*smooth(inside/50))
+    room[ice] = 0
+    # Lateral ridges follow the foot at an uneven distance, broken into
+    # separate lengths, and are lower in the fighting hollows.
+    breaks = upscale(smooth(.35+1.6*fbm(cx, cy, scale=900, octaves=2, seed=5661)),
+                     cx, cy, x, y)
+    crest = 150+70*recess
+    ridge = 24*np.exp(-((inside-crest)/85)**2)*breaks
+    ridge *= np.where(tower_hollows, .45, 1.)
+    # Mounds of dumped till, rounded rather than noise-like dimples.
+    mounds = upscale(16*np.maximum(fbm(cx, cy, scale=330, octaves=2, seed=5662)+.05, 0)**1.4
+                     + 5*fbm(cx, cy, scale=140, octaves=2, seed=5663), cx, cy, x, y)
+    mounds *= upscale(smooth(.4+1.3*fbm(cx, cy, scale=1700, octaves=2, seed=5664)), cx, cy, x, y)
+    return np.clip(ridge+mounds, -4, 34)*room
 
 
 def drainage_incision(z, spacing, protected):
@@ -494,6 +615,17 @@ def landscape():
                     +130*np.sin(3*angle+.4)+85*np.sin(7*angle-.5))
     ice = shore <= 0
     floor = floor*(smooth(shore/650))+ICE*(1-smooth(shore/650))
+    # Viewer marks traced creases and ramps where the inner terraces, passes
+    # and the ice meet. The floor is relaxed around its fixed pads and ice
+    # core; the correction fades in from their edges so they stay exact.
+    # The capture approaches were balanced for walking distance on the
+    # unrelaxed terrain, so the correction also fades out around them.
+    delta = upscale(relax_floor(floor, pads | (shore < -150)), cx, cy, x, y)
+    delta *= smooth(distance_to(pads)*10/150)*smooth((shore+150)/150)
+    for site in CHECKPOINTS:
+        px, py = site['position']
+        delta *= smooth((np.hypot(x-px, y-py)-550)/650)
+    floor += delta
     checkpoints = np.zeros(x.shape, bool)
     tower_hollows = np.zeros(x.shape, bool)
     for hollow in BATTLE_HOLLOWS:
@@ -617,6 +749,15 @@ def landscape():
         px, py = site['position']
         crown *= smooth((np.hypot(cx-px, cy-py)-800)/1100)
     raw = raw*(1-crown)+blur(raw, 5)*crown
+    # Small irregularities on the steep faces seed the drainage operator:
+    # flow gathers in them and cuts branching gullies with ribs between,
+    # instead of leaving the smaller spurs as smooth cones.
+    gy, gx = np.gradient(blur(raw, 3), 30)
+    seed_face = smooth((np.hypot(gx, gy)-.55)/.5)*smooth((raw-cfloor-90)/220)
+    # Ridged noise adds sharp ribs and aretes down the faces; its mean is
+    # removed so the massifs keep their height and their feet stay put.
+    ribs = (1-np.abs(fbm(cx+90*noise, cy-70*noise, scale=520, octaves=3, seed=5681)*2))**2
+    raw += (34*fbm(cx, cy, scale=150, octaves=3, seed=5680)+95*(ribs-.62))*seed_face
     raw = drainage_incision(raw, 30, 1-smooth(depth/300))
     mountains = upscale(raw, cx, cy, x, y)
     floor_join = smooth((upscale(land_edge, cx, cy, x, y)-25)/110)
@@ -628,7 +769,11 @@ def landscape():
                     +3*fbm(cx, cy, scale=300, octaves=2, seed=5607), cx, cy, x, y)
     floor_blend = smooth(distance_to(basins | ice | checkpoints)*10/450)
     z += rolls*floor_blend*smooth(shore/500)
+    z += moraines(x, y, cx, cy, reserved, route_clearance, pads, ice, shore,
+                  checkpoints, tower_hollows, recess)
     z = np.maximum(z, ICE)
+    for gate in GATES:
+        portal(z, x, y, gate, edge)
     basin = glacier(x, y, shore, ice)
     z[basin['crop']] += basin['relief']
     slope = np.hypot(*np.gradient(z, 10))
@@ -673,20 +818,40 @@ def landscape():
     grade = upscale(coarse_grade, cx, cy, x, y)
     hollow = upscale(np.clip((blur(raw, 6)-raw)/65, 0, 1), cx, cy, x, y)
     lee = upscale(np.maximum((gx-.55*gy)/np.maximum(coarse_grade, .1), 0), cx, cy, x, y)
+    couloir = upscale(np.clip(channels/150, 0, 1), cx, cy, x, y)
     materials = np.zeros(x.shape, np.uint16)
-    # Fine debris is concentrated at the foot of the headwalls. Sheltered
-    # faces and drainage hollows retain snow instead of a uniform rock band.
     debris = (z-floor < 260+100*drift) & (grade > .50+.15*drift) & (grade < 1.1)
-    materials[debris & (edge > 180) & (hollow < .3)] = 3
-    exposure = grade-(1.08+.12*drift+.55*hollow+.25*lee)
-    materials[(exposure > -.16) & (edge > 210)] = TALUS
-    materials[(exposure > 0) & (edge > 230)] = CLIFF
+    # Rock shows through by the actual, terraced slope: bed risers expose
+    # stone and their ledges keep snow. Gullies, hollows and lee faces hold
+    # snow on steeper ground, so the faces are streaked, not uniform walls.
+    # Each step is a separate texture; a short-scale field frays its edge.
+    # Cliff and ledge texture follow the face's broad slope, so a mapped
+    # cliff is one continuous region; within it, flat bed treads hold snow.
+    # Unmapped rock textures beside mapped ones would show as offset blocks.
+    steep = blur(slope, 1)
+    face = blur(slope, 4)
+    rise = z-floor
+    hold = .50*hollow+.28*lee+.14*drift+.40*couloir
+    fray = upscale(fbm(cx, cy, scale=170, octaves=2, seed=5670), cx, cy, x, y)
+    patches = upscale(fbm(cx, cy, scale=420, octaves=2, seed=5671), cx, cy, x, y)
+    land = (rise > 25) & (edge > 110)
+    # Stones break through in patches below gullies and on scoured slopes,
+    # never as a continuous belt along every foot.
+    materials[land & (steep > .62+.28*hold+.10*fray) & (rise < 320+120*drift)
+              & (patches+.30*couloir-.25*hollow > .24)] = STONES
+    materials[land & (face > .95+.36*hold+.12*fray) & (edge > 160)] = LEDGES
+    cliff = land & (face > 1.22+.45*hold+.12*fray) & (edge > 200)
+    materials[cliff] = CLIFF
+    materials[cliff & (steep < .66+.20*hold)] = DRIFT
     # Broad wind-polished snow on exposed shoulders, and softer drifts in
     # the lee. These follow landforms instead of speckling every open floor.
+    # High lee snowfields are smooth, blue-white cornice snow.
     materials[(materials == 0) & (lee < .20)
               & (grade > .50+.18*drift+.12*scallop)
               & (z-floor > 100+100*recess) & (drift > -.20)] = WIND
     materials[(materials == 0) & (hollow > .16) & (edge > 100)] = DRIFT
+    materials[(materials <= DRIFT) & (materials != 1) & (z > 1450+150*drift)
+              & (lee > .30) & (steep < .62) & (edge > 100)] = POLISH
     # Scree collects below exposed faces in unequal fans; a fixed distance
     # band would trace every pass and leave angular, painted cutouts.
     fan = (edge > 170+100*recess) & (edge < 300+170*scallop+90*recess)
@@ -701,16 +866,26 @@ def landscape():
     soft = (grade < .40) & (z-floor < 70) & ~ice
     materials[soft] = 0
     materials[soft & (snow+.40*filaments > .18)] = DRIFT
+    # Moraine crests are wind-scoured, with till breaking through in places.
+    crest = soft & reserved & (rise > 17+4*fray)
+    materials[crest] = WIND
+    materials[crest & (fray+.5*drift > .12)] = STONES
     # A quiet, low-contrast compacted trace links broad junctions. Its width
     # and axis wander; windblown cover interrupts it in the same field as
     # the surrounding floor instead of ending it at a pad boundary.
     packed = (main_edge < 0) & (slope < .35)
     materials[packed & (snow+.40*filaments < .25)] = 1
+    materials[trails(x, y, cx, cy) & (slope < .30) & (snow+.40*filaments < .30)] = 1
     # Broken snow wear, not an evenly painted perimeter around each shelf.
     materials[checkpoints & (wear+drift*.35 > .05)] = 1
     materials[ice] = 2
-    fracture = np.sin((x+.3*y)/1650+drift)+.45*np.sin((y-.2*x)/975)
-    materials[ice & (fracture > 1.05)] = 4
+    # Older, crazed ice in broad irregular fields, and fine snow dust blown
+    # into streaks along the prevailing wind across the clear blue sheet.
+    crazed = upscale(fbm(cx, cy, scale=950, octaves=3, seed=5675), cx, cy, x, y)
+    materials[ice & (crazed+.20*drift > .10)] = 4
+    dust = upscale(fbm((.86*cx+.51*cy)*.32, -.51*cx+.86*cy, scale=150,
+                       octaves=2, seed=5676), cx, cy, x, y)
+    materials[ice & (dust+.25*crazed > .32)] = 5
     # A few branching sheet-scale seams remain legible above the fine
     # cracks already present in the game's tiled ice texture.
     rows, cols = np.nonzero(ice)

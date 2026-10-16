@@ -1,32 +1,33 @@
-"""Winter waystations, sheltered spruce groves and broken moraine margins.
+"""Winter waystations, Dwarf-road shrines, sealed gates, camps and remains.
 
-The scenery follows the existing cirques and pass edges. Level construction
-pads and the full widths of approach routes retain an additional clear margin.
-The central ruined tower, outer spires and ring walls have authored scales.
-Stable per-position seeds prevent rerolling
-unrelated scenery when one cluster changes.
+An old Dwarven road crossed these passes. Small waystations overlook the
+cirques; carved shrines stand at the mountain feet beside the main ways,
+their backs set into the slope; and in the four high corner cirques the
+sealed gates of abandoned holds are set into the headwalls, guarded by
+weathered statues, with derelict ore carts before them. Travellers keep
+fires in a few sheltered cirque margins. Bones and broken carts lie in the
+four fighting hollows, where old battles were fought at the crossroads.
+
+Forests, thickets, boulders and tarns come from wilds.py; boulder trains
+follow the main passes. Every placement shares the clearances of
+placement.py: level construction pads and the full widths of approach
+routes keep an additional clear margin, and shrines and gates stand wholly
+on the closed mountain side of the movement edge. The central ruined tower,
+outer spires and ring walls have authored scales. Stable per-position seeds
+prevent rerolling unrelated scenery when one cluster changes.
 """
-from collections import Counter, defaultdict
 import math
 import numpy as np
 
 from mapworkshop.mapkit.ambient import ambient
 from mapworkshop.mapkit.blank import add_object
-from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.sites import neutral_site
 from mapworkshop.mapkit.variety import spot_random
-from .design import BASES, BORDER, CENTRE, EXTENT, ROUTES
-from .features import ARENA_TOWER, CAPTURE_LINKS, CHECKPOINTS, ROCKS, TREES
-from .terrain import DRIFT, SCREE
-
-# Two unequal stands per lower basin, selected along different sheltered
-# flanks. The first is a substantial wood, the second a smaller wind-torn edge.
-WOODLANDS = {
-    2: (-1.05, 2.55), 3: (1.10, -2.40), 5: (-.85, 2.65),
-    6: (1.30, -2.65), 8: (-1.10, 2.40), 9: (1.00, -2.50),
-    11: (-1.00, 2.60), 12: (1.10, -2.50), 13: (1.15, 2.60),
-    14: (-1.10, -2.40), 15: (1.00, 2.50), 16: (-1.00, -2.50),
-}
+from .design import BASES, BORDER, CENTRE, PAD_HALF, ROUTES
+from .features import ARENA_TOWER, BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS, GATES, ROCKS
+from .placement import Placer
+from .terrain import SCREE, STONES
+from .wilds import populate_wilds
 
 # Main surviving structure and nearby collapse fragments in its local frame.
 # The fragments form one ruin, rather than detached props around an apron.
@@ -52,87 +53,55 @@ STATION_TYPES = {1: 'watchwall', 4: 'fallenwall', 7: 'shelter', 10: 'waymarkers'
                  2: 'shelter', 5: 'fallenwall', 8: 'watchwall', 12: 'shelter',
                  13: 'watchwall', 14: 'shelter', 15: 'fallenwall', 16: 'waymarkers'}
 
+# Inspected 0/40, 90/40, 180/40, 270/40 and the diagonals: the arch's and
+# the doors' carved faces are local -y; the niche's statue faces its local
+# (-x, -y) corner and its back is an open shell, so it needs a slope behind;
+# SnowyStatue02's hooded figure faces local +x.
+GATE_FRONT = math.pi/2
+NICHE_FRONT = 3*math.pi/4
+STATUE_FRONT = 0.
+# Pieces of each travellers' camp: template, offsets toward the base and
+# across, footprint, turn. Tents face the fire; carts and stores stand back.
+CAMP = [('Tent01', -30, -40, 26, .6), ('Tent01', -45, 42, 26, 2.4),
+        ('FireCampfire', 15, 0, 10, 0.), ('CartWreck', -95, -10, 24, 1.6),
+        ('Barrel02', -70, 70, 6, 0.), ('BarrelKeg', -62, 82, 4, .5),
+        ('Beams', 40, -60, 14, .3), ('IthilienSupplies05', -80, -60, 8, .2)]
+REMAINS = ['Skeleton', 'Bones01', 'Bones02', 'Bones03', 'Bones04', 'Bones05',
+           'Bones06', 'Discarded02', 'Discarded04']
+
 
 def populate(m, t):
-    """Compose clear-margin scenery and its small, terrain-following aprons."""
-    protected = t['pads'] | t['route_core'] | t['ice'] | t['checkpoints'] | t['tower_hollows']
-    clearance = distance_to(protected)*10
-    open_clearance = distance_to(t['blocked'])*10
-    closed_clearance = distance_to(~t['blocked'])*10
-    counts, layers = Counter(), Counter()
-    occupied = defaultdict(list)
-    trees = 0
-    minimum_margin = math.inf
+    """Compose all scenery; returns the counts and sites for the report."""
+    p = Placer(m, t)
+    stations = waystations(p)
+    gates = sealed_gates(p, t)
+    shrines = road_shrines(p, t)
+    camps = travellers_camps(p)
+    wild = populate_wilds(p, t)
+    pass_moraines(p)
+    cirque_erratics(p)
+    remains = battle_remains(p, t)
+    if p.trees < 1500 or len(stations) < 8 or len(gates) < 4:
+        raise ValueError(f'Scenery sites too sparse: {p.trees} trees, '
+                         f'{len(stations)} waystations, {len(gates)} gates')
+    heights = [(s['x'], s['y']) for s in stations]+[g['position'] for g in gates]
+    sounds = ambient(m, 'winter', CENTRE, zones=dict(
+        woods=wild['stands'], heights=heights,
+        open=[(13250, 15050), (15050, 13400), (14250, 16350), (14250, 12150)]),
+        spacing=1200, limits=dict(woods=40, heights=16, open=4))
+    return dict(objects=dict(p.counts), layers=dict(p.layers),
+                total_scenery=sum(p.counts.values()), trees=p.trees, shrubs=p.shrubs,
+                tree_limit_ignored=True,
+                wilds={k: v for k, v in wild.items() if k != 'stands'},
+                waystations=stations, gates=gates, shrines=len(shrines), camps=camps,
+                battle_remains=remains, sounds=len(sounds),
+                minimum_protected_margin=round(p.minimum_margin, 1),
+                pads_and_approaches_clear=True)
 
-    def at(x, y):
-        return round(y/10)+BORDER, round(x/10)+BORDER
 
-    def free(x, y, radius, max_slope=.25, max_rise=None, spacing=None):
-        if not (300 < x < EXTENT-300 and 300 < y < EXTENT-300):
-            return False
-        r, c = at(x, y)
-        if clearance[r, c] < radius+70 or t['slope'][r, c] > max_slope:
-            return False
-        # A footprint must sit entirely on one side of the terrain's
-        # movement edge, avoiding tiny enclosed pockets behind a rock.
-        if max(open_clearance[r, c]-30, closed_clearance[r, c]) < radius+20:
-            return False
-        if max_rise is not None:
-            n = math.ceil(radius/10)
-            ground = t['z'][r-n:r+n+1, c-n:c+n+1]
-            if np.ptp(ground) > max_rise:
-                return False
-        key = (int(x//250), int(y//250))
-        separation = radius if spacing is None else spacing
-        for ky in range(key[1]-1, key[1]+2):
-            for kx in range(key[0]-1, key[0]+2):
-                if any((x-a)**2+(y-b)**2 < (separation+size+5)**2
-                       for a, b, size in occupied[kx, ky]):
-                    return False
-        return True
-
-    def paint(x, y, radius, material, stretch=1., angle=0.):
-        r, c = at(x, y)
-        n = math.ceil(radius*max(1, stretch)/10)+2
-        sy, sx = slice(r-n, r+n+1), slice(c-n, c+n+1)
-        yy, xx = np.mgrid[-n:n+1, -n:n+1]*10.
-        along = xx*math.cos(angle)+yy*math.sin(angle)
-        across = -xx*math.sin(angle)+yy*math.cos(angle)
-        contour = radius*(1+.22*np.sin((xx+x)/65+(yy+y)/110)+.13*np.cos((yy+y)/43))
-        mask = (np.hypot(along/stretch, across) < contour) & ~protected[sy, sx]
-        t['materials'][sy, sx][mask] = material
-
-    def place(template, x, y, layer, radius, angle=None, max_slope=.25, max_rise=None, sink=0., spacing=None):
-        nonlocal minimum_margin
-        if not free(x, y, radius, max_slope, max_rise, spacing):
-            return False
-        rng = spot_random(8612, template, x, y)
-        add_object(m, template, x, y, z=-sink,
-                   angle=rng.random()*math.tau if angle is None else angle, layer=layer)
-        occupied[int(x//250), int(y//250)].append((x, y, radius if spacing is None else spacing))
-        counts[template] += 1
-        layers[layer] += 1
-        r, c = at(x, y)
-        minimum_margin = min(minimum_margin, clearance[r, c]-radius)
-        return True
-
-    def find_site(px, py, radius, reach=650, max_height=2100):
-        candidates = []
-        offsets = sorted(set(range(-reach, reach+1, 40)) | {0})
-        for dy in offsets:
-            for dx in offsets:
-                if dx*dx+dy*dy > reach*reach:
-                    continue
-                x, y = px+dx, py+dy
-                r, c = at(x, y)
-                if (300 < x < EXTENT-300 and 300 < y < EXTENT-300
-                        and t['z'][r, c] < max_height and free(x, y, radius, .12, 9)):
-                    candidates.append((dx*dx+dy*dy, x, y))
-        return min(candidates)[1:] if candidates else None
-
+def waystations(p):
+    """Unequal small ruins beside the cirque mouths; landmarks, not gameplay sites."""
     stations = []
-    # An old Dwarven way crosses the cirques. Unequal small remnants stand
-    # beside its mouths; they are landmarks, not capturable/gameplay sites.
     for number in (13, 14, 15, 16, 1, 4, 7, 10, 2, 5, 8, 12):
         base = next(b for b in BASES if b['number'] == number)
         bearing = math.atan2(CENTRE[1]-base['y'], CENTRE[0]-base['x'])
@@ -140,7 +109,7 @@ def populate(m, t):
         target = (base['x']+1430*math.cos(flank), base['y']+1430*math.sin(flank))
         style = STATION_TYPES[number]
         main, footprint, front, pieces = STATIONS[style]
-        site = find_site(*target, footprint)
+        site = p.find_site(*target, footprint)
         if site is None:
             continue
         x, y = site
@@ -148,9 +117,9 @@ def populate(m, t):
         # face and 04's carved broken face are local -x. 05 is a plain pillar.
         angle = math.atan2(base['y']-y, base['x']-x)+front
         layer = f'Waystation {number:02}'
-        if not place(main, x, y, layer, footprint, angle, .12, 9):
+        if not p.place(main, x, y, layer, footprint, angle, .12, 9):
             continue
-        paint(x, y, footprint*.8, SCREE, 1.3, angle)
+        p.paint(x, y, footprint*.8, SCREE, 1.3, angle)
         stations.append(dict(base=number, x=x, y=y, facing=angle, style=style))
         rng = spot_random(8640, layer, x, y)
         for dx, dy, template, radius, turn in pieces:
@@ -159,83 +128,165 @@ def populate(m, t):
             turn += rng.uniform(-.15, .15)
             px = x+dx*math.cos(angle)-dy*math.sin(angle)
             py = y+dx*math.sin(angle)+dy*math.cos(angle)
-            ground = find_site(px, py, radius, reach=60)
-            if ground and place(template, *ground, layer, radius, angle+turn, .12, 9):
-                paint(*ground, radius*.8, SCREE, 1.15, angle+turn)
+            ground = p.find_site(px, py, radius, reach=60)
+            if ground and p.place(template, *ground, layer, radius, angle+turn, .12, 9):
+                p.paint(*ground, radius*.8, SCREE, 1.15, angle+turn)
         # Small rubble joins the masonry into a collapse fan. No large,
         # smooth oval of different snow marks the station's footprint.
         for _ in range(30):
             dx, dy = rng.gauss(0, 70), rng.gauss(35, 55)
             px = x+dx*math.cos(angle)-dy*math.sin(angle)
             py = y+dx*math.sin(angle)+dy*math.cos(angle)
-            if place('SnowyRock19', px, py, layer+' collapse', 15,
-                     max_slope=.20, max_rise=5, sink=.5):
-                paint(px, py, 12, SCREE)
+            if p.place('SnowyRock19', px, py, layer+' collapse', 15,
+                       max_slope=.20, max_rise=5, sink=.5):
+                p.paint(px, py, 12, SCREE)
+    return stations
 
-    groves = []
-    # Overlapping, unequal lobes follow sheltered cirque margins. Continuous
-    # candidate sampling avoids the rows of a jittered planting grid.
-    for base in BASES:
-        if base['height'] > 1200:
-            continue
-        bearing = math.atan2(CENTRE[1]-base['y'], CENTRE[0]-base['x'])
-        for wing, turn in enumerate(WOODLANDS[base['number']]):
-            rng = spot_random(8614, 'grove shape', base['number'], wing)
-            angle = bearing+turn+rng.uniform(-.20, .20)
-            reach = rng.uniform(1430, 1680)
-            target = (base['x']+reach*math.cos(angle), base['y']+reach*math.sin(angle))
-            site = find_site(*target, 40, reach=570, max_height=1400)
-            if site is None:
-                continue
-            x, y = site
-            layer = f'Cirque {base["number"]:02} spruce'
-            before = trees
-            quota = (48+7*(base['number'] % 3)) if wing == 0 else (18+7*(base['number'] % 3))
-            spread = 1. if wing == 0 else .72
-            lobes = [(-35, -100, 85, 155), (35, 150, 65, 105), (95, 340, 90, 110)]
-            for _ in range(1800):
-                if trees-before >= quota or trees >= 1080:
-                    break
-                pick = rng.random()
-                lx, ly, sx, sy = lobes[0 if pick < .70 else 1 if pick < .94 else 2]
-                dx = (lx+np.clip(rng.gauss(0, 1), -2.2, 2.2)*sx)*spread
-                dy = (ly+np.clip(rng.gauss(0, 1), -2.2, 2.2)*sy)*spread
-                px = x+dx*math.cos(angle)-dy*math.sin(angle)
-                py = y+dx*math.sin(angle)+dy*math.cos(angle)
-                r, c = at(px, py)
-                if t['z'][r, c] > 1400:
-                    continue
-                template, radius = TREES[int(rng.random()*2)]
-                # Native crowns can overlap slightly in the wood's core;
-                # stems remain separated, and the full measured crown still
-                # clears construction pads and all movement reservations.
-                if place(template, px, py, layer, radius, max_slope=.30, spacing=18):
-                    trees += 1
-                    if rng.random() < .32:
-                        paint(px, py, 40+rng.random()*20, DRIFT)
-            if trees > before:
-                groves.append((x, y))
-            # Low twig scrub at the grove's ragged edge supplies a second
-            # vegetation scale without filling the base or its main routes.
-            for i in range(16):
-                rng = spot_random(8620, layer, x+i, y)
-                a = rng.random()*math.tau
-                px, py = x+math.cos(a)*rng.uniform(170, 340), y+math.sin(a)*rng.uniform(270, 500)
-                template = ('SnowyShrub01', 'SnowyShrub03', 'SnowyShrub05')[i % 3]
-                place(template, px, py, layer+' scrub', 18, max_slope=.32)
 
-    # Related boulder trains follow the valley sides. Offset from the actual
-    # bent route axis, each train breaks into short groups rather than fences.
+def ground_at(t, x, y):
+    return float(t['z'][round(y/10)+BORDER, round(x/10)+BORDER])
+
+
+def sealed_gates(p, t):
+    """Sealed hold gates in the headwalls behind the four high corner cirques.
+
+    Each stands at its authored position in features.GATES, in the portal
+    terrain.py carves: a level forecourt before it and a sheer face behind,
+    which covers the back of the arch. Statues guard the forecourt, ore
+    carts stand derelict before the doors and masonry has fallen around it.
+    """
+    gates = []
+    for gate in GATES:
+        gx, gy = gate['position']
+        facing = gate['facing']
+        # u: out of the mountain toward the cirque is -u here.
+        ux, uy = -math.cos(facing), -math.sin(facing)
+        layer = f'Sealed gate {gate["base"]:02}'
+        z0 = ground_at(t, gx+120*math.cos(facing), gy+120*math.sin(facing))
+        rise = ground_at(t, gx+150*ux, gy+150*uy)-z0
+
+        def sunk(x, y, extra=0.):
+            # Masonry stays level at the forecourt height where ground rises.
+            return ground_at(t, x, y)-z0+extra
+
+        add_object(p.m, 'EreborDestructableDoor', gx, gy, angle=facing+GATE_FRONT,
+                   z=-sunk(gx, gy, 4), layer=layer)
+        # The doors stand just behind the arch, inside the slope.
+        dx, dy = gx+16*ux, gy+16*uy
+        add_object(p.m, 'EreborGateDoors', dx, dy, angle=facing+GATE_FRONT,
+                   z=-sunk(dx, dy, 2), layer=layer)
+        for side in (-1, 1):
+            cx, cy = gx-235*side*uy-12*ux, gy+235*side*ux-12*uy
+            add_object(p.m, 'EreborColumn01', cx, cy, angle=facing+GATE_FRONT,
+                       z=-sunk(cx, cy, 6), layer=layer)
+            sx, sy = gx-130*side*uy-120*ux, gy+130*side*ux-120*uy
+            p.place('SnowyStatue02', sx, sy, layer+' guardians', 14,
+                    angle=facing+STATUE_FRONT+.12*side, max_slope=.8, sink=3, margin=60)
+        rng = spot_random(8650, layer, gx, gy)
+        # Derelict ore carts in a broken line, and fallen masonry.
+        for k in range(4):
+            along = 190+k*38+rng.uniform(-8, 8)
+            off = rng.uniform(-40, 40)
+            px, py = gx-along*ux-off*uy, gy-along*uy+off*ux
+            p.place(f'EreborCart0{1+k % 3}', px, py, layer+' carts', 12,
+                    angle=facing+GATE_FRONT+rng.uniform(-.4, .4), max_slope=.5, margin=60)
+        for k in range(14):
+            depth, spread = rng.uniform(80, 300), rng.gauss(0, 150)
+            px, py = gx-depth*ux-spread*uy, gy-depth*uy+spread*ux
+            template = 'DwarvishRuinSnow02' if k < 3 else 'SnowyRock19'
+            p.place(template, px, py, layer+' rubble', 33 if k < 3 else 15,
+                    max_slope=.6, sink=1, margin=60)
+        p.place('Skeleton', gx-150*ux, gy-150*uy, layer+' carts', 12, max_slope=.5, margin=60)
+        gates.append(dict(base=gate['base'], position=(gx, gy), facing=facing,
+                          wall_rise=round(rise, 1)))
+    return gates
+
+
+def road_shrines(p, t):
+    """Carved niches at the mountain feet beside the main ways, every ~1,900 units."""
+    shrines = []
     for route in ROUTES:
         if not route['main']:
             continue
-        p = np.asarray(route['points'])
-        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
+        pts = np.asarray(route['points'])
+        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+        rng = spot_random(8660, route['name'], *pts[0])
+        side = 1 if rng.random() < .5 else -1
+        for station in np.arange(800+rng.random()*700, arc[-1]-700, 1900):
+            j = min(np.searchsorted(arc, station)-1, len(pts)-2)
+            direction = (pts[j+1]-pts[j])/np.linalg.norm(pts[j+1]-pts[j])
+            xy = pts[j]+direction*(station-arc[j])
+            normal = np.array([-direction[1], direction[0]])
+            for s in (side, -side):
+                foot = None
+                for d in range(int(route['width']/2)+140, int(route['width']/2)+1100, 20):
+                    q = xy+s*normal*d
+                    if t['blocked'][p.at(*q)]:
+                        foot = q
+                        break
+                if foot is None:
+                    continue
+                # Wholly on the closed slope, its open back into the hill.
+                pos = foot+s*normal*48
+                facing = math.atan2(-s*normal[1], -s*normal[0])
+                layer = 'Dwarf-road shrines'
+                if p.place('EreborNiche01', *pos, layer, 26, angle=facing+NICHE_FRONT,
+                           max_slope=.75, sink=6):
+                    shrines.append(pos.tolist())
+                    for _ in range(3):
+                        qx, qy = pos-s*normal*rng.uniform(40, 70)+direction*rng.uniform(-60, 60)
+                        p.place('SnowyRock19', qx, qy, layer+' rubble', 15, max_slope=.6, sink=1)
+                    side = -s
+                    break
+    return shrines
+
+
+def travellers_camps(p):
+    """Fires and tents in sheltered margins of six middle cirques, where level ground is found."""
+    camps = []
+    for number in (2, 5, 6, 9, 11, 12):
+        base = next(b for b in BASES if b['number'] == number)
+        rng = spot_random(8680, 'camp', base['x'], base['y'])
+        away = math.atan2(base['y']-CENTRE[1], base['x']-CENTRE[0])
+        a = away+rng.choice((-1, 1))*rng.uniform(.6, 1.1)
+        target = (base['x']+(PAD_HALF+380)*math.cos(a), base['y']+(PAD_HALF+380)*math.sin(a))
+        site = p.find_site(*target, 110, reach=700, max_height=1400, max_slope=.16, max_rise=20)
+        if site is None:
+            continue
+        x, y = site
+        facing = math.atan2(base['y']-y, base['x']-x)
+        layer = f'Camp {number:02}'
+        placed = 0
+        for template, along, across, radius, turn in CAMP:
+            px = x+along*math.cos(facing)-across*math.sin(facing)
+            py = y+along*math.sin(facing)+across*math.cos(facing)
+            # Tent01's flap is its local -y side, turned toward the fire.
+            angle = math.atan2(y-py, x-px)+math.pi/2 if template == 'Tent01' else facing+turn
+            placed += p.place(template, px, py, layer, radius, angle=angle,
+                              max_slope=.18, spacing=radius*.6)
+        # Trampled snow in a few uneven lobes, with ash and stones by the fire.
+        for _ in range(6):
+            a, d = rng.random()*math.tau, rng.uniform(15, 70)
+            p.paint(x+d*math.cos(a), y+d*math.sin(a), rng.uniform(28, 48), 1,
+                    rng.uniform(1, 1.6), rng.random()*math.pi)
+        fx, fy = x+15*math.cos(facing), y+15*math.sin(facing)
+        p.paint(fx, fy, 18, STONES)
+        camps.append(dict(base=number, position=(x, y), pieces=placed))
+    return camps
+
+
+def pass_moraines(p):
+    """Related boulder trains along the main passes, broken into short groups."""
+    for route in ROUTES:
+        if not route['main']:
+            continue
+        pts = np.asarray(route['points'])
+        arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
         for station in np.arange(240, arc[-1]-240, 250):
-            j = min(np.searchsorted(arc, station)-1, len(p)-2)
-            direction = p[j+1]-p[j]
+            j = min(np.searchsorted(arc, station)-1, len(pts)-2)
+            direction = pts[j+1]-pts[j]
             direction /= np.linalg.norm(direction)
-            xy = p[j]+direction*(station-arc[j])
+            xy = pts[j]+direction*(station-arc[j])
             rng = spot_random(8616, route['name'], *xy)
             if rng.random() > .73:
                 continue
@@ -245,21 +296,23 @@ def populate(m, t):
                 px, py = xy+side*normal*offset
                 template, radius = ROCKS[int(rng.random()*len(ROCKS))]
                 layer = 'Pass moraine '+route['name']
-                if place(template, px, py, layer, radius, max_slope=.32, max_rise=24, sink=3):
-                    paint(px, py, radius*.65, SCREE, 1.25)
+                if p.place(template, px, py, layer, radius, max_slope=.32, max_rise=24, sink=3):
+                    p.paint(px, py, radius*.65, SCREE, 1.25)
                     # Smaller pieces spill downhill from the main outcrop.
                     for fragment in range(2):
                         qx, qy = np.array([px, py])+direction*(115+fragment*85)-normal*side*25
-                        place('SnowyRock17', qx, qy, layer, 45, max_slope=.28, max_rise=15, sink=1)
+                        p.place('SnowyRock17', qx, qy, layer, 45, max_slope=.28, max_rise=15, sink=1)
                 # Small loose fragments can rest on narrow shelves where
                 # the large boulder meshes would overhang the valley floor.
                 for fragment in range(3):
-                    qx, qy = xy+side*normal*(route['width']/2+145+fragment*40)+direction*rng.uniform(-65, 65)
-                    place('SnowyRock19', qx, qy, layer+' rubble', 15,
-                          max_slope=.22, max_rise=5, sink=.5)
+                    qx, qy = (xy+side*normal*(route['width']/2+145+fragment*40)
+                              + direction*rng.uniform(-65, 65))
+                    p.place('SnowyRock19', qx, qy, layer+' rubble', 15,
+                            max_slope=.22, max_rise=5, sink=.5)
 
-    # Boulders on the wider cirque margins give open base surrounds a few
-    # obstacles while leaving the level construction rectangles untouched.
+
+def cirque_erratics(p):
+    """A few obstacles on the wider cirque margins, outside the construction pads."""
     for base in BASES:
         for i in range(32):
             angle = i*math.tau/32+.17*base['number']
@@ -267,20 +320,42 @@ def populate(m, t):
             radius = rng.uniform(1170, 1850)
             x, y = base['x']+radius*math.cos(angle), base['y']+radius*math.sin(angle)
             template, footprint = ROCKS[int(rng.random()*len(ROCKS))]
-            if place(template, x, y, f'Cirque {base["number"]:02} erratics', footprint,
-                     max_slope=.22, max_rise=18, sink=2):
-                paint(x, y, footprint*.65, SCREE)
+            if p.place(template, x, y, f'Cirque {base["number"]:02} erratics', footprint,
+                       max_slope=.22, max_rise=18, sink=2):
+                p.paint(x, y, footprint*.65, SCREE)
 
-    if trees < 150 or len(stations) < 8:
-        raise ValueError(f'Scenery sites too sparse: {trees} trees, {len(stations)} waystations')
-    sounds = ambient(m, 'winter', CENTRE, zones=dict(
-        woods=groves, heights=[(s['x'], s['y']) for s in stations],
-        open=[(13250, 15050), (15050, 13400), (14250, 16350), (14250, 12150)]),
-        spacing=1200, limits=dict(woods=24, heights=12, open=4))
-    return dict(objects=dict(counts), layers=dict(layers), total_scenery=sum(counts.values()),
-                trees=trees, tree_limit=1200, groves=groves, waystations=stations,
-                sounds=len(sounds), minimum_protected_margin=round(minimum_margin, 1),
-                pads_and_approaches_clear=True)
+
+def battle_remains(p, t):
+    """Bones, cast-off arms and broken carts strewn through the fighting hollows.
+
+    They are flat props that do not obstruct movement, so unlike the other
+    scenery they may lie inside the hollows; they still keep off route cores.
+    """
+    counts = {}
+    for hollow in BATTLE_HOLLOWS:
+        px, py = hollow['center']
+        rng = spot_random(8670, hollow['name'], px, py)
+        bearing = math.radians(hollow['bearing'])
+        layer = f'Battle remains {hollow["name"]}'
+        placed = 0
+        for _ in range(7):
+            along = rng.uniform(-.85, .85)*hollow['length']
+            across = rng.uniform(-.9, .9)*hollow['breadth']
+            cx = px+along*math.cos(bearing)-across*math.sin(bearing)
+            cy = py+along*math.sin(bearing)+across*math.cos(bearing)
+            for _ in range(rng.randint(5, 11)):
+                qx, qy = cx+rng.gauss(0, 55), cy+rng.gauss(0, 55)
+                if t['route_core'][p.at(qx, qy)]:
+                    continue
+                placed += p.place(rng.choice(REMAINS), qx, qy, layer, 10, max_slope=.35,
+                                  spacing=3, margin=-1000)
+            if rng.random() < .55:
+                qx, qy = cx+rng.gauss(0, 40), cy+rng.gauss(0, 40)
+                if not t['route_core'][p.at(qx, qy)]:
+                    placed += p.place(rng.choice(('CartWreck', 'CartPiece')), qx, qy, layer, 22,
+                                      max_slope=.25, margin=-1000)
+        counts[hollow['name']] = placed
+    return counts
 
 
 def arena_tower(m, t):
