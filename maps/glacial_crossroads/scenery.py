@@ -2,7 +2,8 @@
 
 The scenery follows the existing cirques and pass edges. Level construction
 pads and the full widths of approach routes retain an additional clear margin.
-All assets retain native scale. Stable per-position seeds prevent rerolling
+The central ruined tower, outer spires and ring walls have authored scales.
+Stable per-position seeds prevent rerolling
 unrelated scenery when one cluster changes.
 """
 from collections import Counter, defaultdict
@@ -15,7 +16,7 @@ from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.sites import neutral_site
 from mapworkshop.mapkit.variety import spot_random
 from .design import BASES, BORDER, CENTRE, EXTENT, ROUTES
-from .features import CAPTURE_LINKS, CHECKPOINTS, ROCKS, TREES
+from .features import ARENA_TOWER, CAPTURE_LINKS, CHECKPOINTS, ROCKS, TREES
 from .terrain import DRIFT, SCREE
 
 # Two unequal stands per lower basin, selected along different sheltered
@@ -280,6 +281,71 @@ def populate(m, t):
                 trees=trees, tree_limit=1200, groves=groves, waystations=stations,
                 sounds=len(sounds), minimum_protected_margin=round(minimum_margin, 1),
                 pads_and_approaches_clear=True)
+
+
+def arena_tower(m, t):
+    """A four-times-scale ruin, broad snow mound, broken ring and outer spires."""
+    x, y = ARENA_TOWER['position']
+    r, c = round(y/10)+BORDER, round(x/10)+BORDER
+    footing = t['z'][r-12:r+13, c-12:c+13]
+    yy, xx = np.mgrid[-12:13, -12:13]*10.
+    if np.ptp(footing[xx*xx+yy*yy <= 120**2]) > .1:
+        raise ValueError('Arena tower foundation is not level')
+    # Inspected 0/40,90/40,180/40,270/40: the intact doorway is on local
+    # -y. Angle zero faces it south; the rocky buttresses leave it open.
+    add_object(m, ARENA_TOWER['template'], x, y, angle=0, layer='Arena tower',
+               extra=[('objectName', 3, 'Arena_RuinedTower'),
+                      ('objectPrototypeScale', 2, ARENA_TOWER['scale'])])
+    # Rock ribs climb toward the tower; the south doorway remains open.
+    rocks = [
+        ('GlacialArenaSpireSmall', -192, 35, .25, 13),
+        ('GlacialArenaSpireSmall', 169, 112, 2.1, 14),
+        ('SnowyRock09', -42, 198, 4.0, 6),
+        ('SnowyRock03', -246, -30, .8, 5),
+        ('SnowyRock08', 242, 55, 2.7, 5),
+        ('SnowyRock04', 40, 254, 4.6, 5),
+        ('SnowyRock14', -260, 92, 1.1, 3),
+        ('SnowyRock18', 258, -83, .2, 3),
+        ('SnowyRock19', -151, -165, 2.4, 1),
+        ('SnowyRock19', 148, -195, .7, 1),
+    ]
+    for template, dx, dy, angle, sink in rocks:
+        add_object(m, template, x+dx, y+dy, angle=angle, z=-sink,
+                   layer='Arena foundation rocks')
+    # Inspected four views: this snowy arch runs along local x, with its
+    # front on -y. Tangential placement turns that face out from the ring.
+    # Four broken arcs leave broad cardinal entrances, never a closed fence.
+    wall_angles = (20, 39, 58, 119, 138, 157, 203, 222, 241, 299, 318, 337)
+    for i, degrees in enumerate(wall_angles):
+        a = math.radians(degrees)
+        px, py = x+420*math.cos(a), y+330*math.sin(a)
+        tangent = math.atan2(330*math.cos(a), -420*math.sin(a))
+        add_object(m, 'GlacialArenaRingWall', px, py, angle=tangent,
+                   z=-12-(i % 3)*4, layer='Arena broken ring')
+        # Collapse material joins each surviving arc to the snow apron.
+        if i % 3 == 2:
+            add_object(m, 'DwarvishRuinSnow02', px+35*math.cos(a),
+                       py+35*math.sin(a), angle=tangent+.3, z=-4,
+                       layer='Arena ring collapse')
+    spires = [
+        (-690, -180, 'Large', .3), (-580, 300, 'Medium', 1.6),
+        (-260, 520, 'Small', 2.8), (250, 470, 'Medium', 4.0),
+        (650, 240, 'Large', .9), (720, -180, 'Small', 2.0),
+        (390, -460, 'Medium', 3.3), (-290, -480, 'Small', 5.1),
+    ]
+    for dx, dy, size, angle in spires:
+        px, py = x+dx, y+dy
+        rr, cc = round(py/10)+BORDER, round(px/10)+BORDER
+        if t['rupture'][rr, cc] or t['blocked'][rr, cc]:
+            raise ValueError('Arena spire falls inside a glacier rupture')
+        add_object(m, 'GlacialArenaSpire'+size, px, py, angle=angle, z=-10,
+                   layer='Arena outer spires')
+        add_object(m, 'SnowyRock18', px+35, py-32, angle=angle+.5, z=-3,
+                   layer='Arena spire rubble')
+    return dict(template=ARENA_TOWER['template'], position=[x, y],
+                scale=ARENA_TOWER['scale'], foundation_height=float(t['z'][r, c]),
+                rocks=len(rocks), ring_walls=len(wall_angles), outer_spires=len(spires),
+                door_faces='south')
 
 
 def checkpoint_sites(m, t):

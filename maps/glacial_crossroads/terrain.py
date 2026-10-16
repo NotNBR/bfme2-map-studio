@@ -13,7 +13,7 @@ from mapworkshop.mapkit.relief import distance_to, smooth
 from mapworkshop.mapkit.walkable import flood
 from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, ICE, PAD_HALF,
                      RIDGES, ROUTES, SCALE, WIDTH, floor_height)
-from .features import (BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS,
+from .features import (ARENA_TOWER, BATTLE_HOLLOWS, CAPTURE_LINKS, CHECKPOINTS,
                        CHECKPOINT_SHELF, CREVASSES)
 
 PALETTE = ['SnowLargeType1', 'SnowType6', 'SnowCaradhras07', 'SnowCaradhras05',
@@ -133,9 +133,21 @@ def glacier(x, y, shore, ice):
         tongue = (1-smooth(d/np.maximum(reach, 20)))*smooth((length-along)/150)
         snow = np.maximum(snow, tongue)
     lips *= 1-smooth(cut_depth/45)
-    relief = (lips-cut_depth+9*snow*(1-frost))*inset
+    # A level tower footing descends into unequal snow-covered rock ribs.
+    # The longer southeast apron is wind drift, not a circular plinth.
+    tx, ty = ARENA_TOWER['position']
+    dx, dy = x[crop]-tx, y[crop]-ty
+    angle = np.arctan2(dy/.80, dx)
+    radius = np.hypot(dx, dy/.80)
+    reach = (640+55*np.cos(3*angle+.6)+30*np.sin(5*angle-.4)
+             +65*np.cos(angle+.8))
+    mound = ARENA_TOWER['mound_height']*(1-smooth(
+        (radius-ARENA_TOWER['foundation_radius'])/(reach-ARENA_TOWER['foundation_radius'])))
+    apron = 1-smooth((radius-reach+45)/145)
+    relief = (lips-cut_depth+9*snow*(1-frost)+mound)*inset
     return dict(crop=crop, relief=relief, lips=lips*inset, depth=cut_depth,
-                snow=snow, frost=frost, rupture=rupture, grain=grain)
+                snow=snow, frost=frost, rupture=rupture, grain=grain,
+                tower_mound=mound, tower_apron=apron)
 
 
 def paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin):
@@ -629,6 +641,10 @@ def landscape():
     # Height alone does not stop units in the engine, so retain explicit
     # flags on that physical mountain body, including its gentler crest.
     mountain_body = (z-floor > 55) | (slope >= .60)
+    # The arena's raised, gentle foundation is playable; only its objects
+    # obstruct movement. Retain the slope rule even within this authored mound.
+    mountain_body[basin['crop']] &= ((basin['tower_mound'] == 0)
+                                    | (slope[basin['crop']] >= .60))
     candidate = ~mountain_body & inside & (rupture == 0)
     origin = (round(CENTRE[1]/10)+BORDER, round(CENTRE[0]/10)+BORDER)
     # Classify connectivity with the engine's eight-neighbour expansion of
@@ -713,6 +729,13 @@ def landscape():
     sheet[basin['depth'] > 12] = 4
     sheet[basin['depth'] > 80] = DEPTH
     paint_glacier_margin(materials, x, y, shore, z, slope, rupture, basin)
+    # Snow settles between exposed ribs and fades into frost at the ice.
+    apron = basin['tower_apron']
+    sheet[apron > .05] = 5
+    sheet[apron > .30] = DRIFT
+    sheet[apron > .64] = 0
+    rock = (basin['tower_mound'] > 6) & (slope[crop] > .28)
+    sheet[rock & (basin['grain'] > -.15)] = TALUS
     return dict(z=z, blocked=~walk, slope=slope, materials=materials,
                 pads=pads, reserved=reserved, ice=ice, rupture=rupture,
                 route_core=route_core, basins=basins, checkpoints=checkpoints,

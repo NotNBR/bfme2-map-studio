@@ -51,6 +51,17 @@ Junctions share a continuous floor. These widths are terrain clearances,
 not verified army-formation capacities. The central ice is walkable terrain;
 liquid meltwater is confined to the bottoms of its two ruptures.
 
+The center pin at (14253.6, 14191.3) carries `RuinedTowerSnow` at 4x scale,
+with its door facing south. Its level footing sits 80 units above the ice;
+broad, unequal snowy shoulders and rocky buttresses merge it into the
+glacier. Its map-local child template, `GlacialArenaRuinedTower`, inherits
+the stock artwork and enlarges its collision radius and height explicitly.
+Twelve snowy arches form four broken arcs with broad cardinal entrances;
+eight outer snowy rock spires vary from 2x to 3.2x native scale. Map-local
+definitions give the enlarged scenery matching collision geometry.
+The build checks the foundation and connectivity between all four entrances.
+This centerpiece is the deliberate exception to the scenery's ice exclusion.
+
 Base 13, immediately north of the ice field, contains one normal-scale
 `DwarvenFortressCitadel` as a size reference. Its entrance ramp faces south.
 The asset measures about 234 x 113 x 109 units before rotation, compared with

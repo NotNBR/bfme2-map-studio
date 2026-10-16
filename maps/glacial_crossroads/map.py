@@ -5,7 +5,9 @@ corner bases 1/4/7/10 overlook eight middle terraces; 13-16 stand just above
 a broad central solid-ice field. Broken summit chains, descending buttresses,
 snow-filled gullies and irregular cirques frame gently winding passes.
 Two deep, impassable ruptures split the central sheet into connected fighting
-spaces. Snowy woods, moraine boulders and ruined waystations frame the passes.
+spaces. A four-times-scale snowy ruin stands on a broad rocky snow mound,
+with a broken ring of arches and uneven outer rock spires.
+Snowy woods, moraine boulders and ruined waystations frame the passes.
 Eight marked locations carry four signal fires and four capturable inns.
 One normal-scale fortress at site 13 provides a size reference; no economy
 or combat balance is authored. The sixteen-site scaffold
@@ -30,8 +32,8 @@ from .design import (BASES, BORDER, CENTRE, EXTENT, HEIGHT, HIGH, ICE, LOW, MID,
                      PAD_HALF, RIDGES, ROUTES, SCALE, WIDTH)
 
 from .terrain import landscape, PALETTE, CLIFF
-from .features import CAPTURE_LINKS, CHECKPOINTS, CREVASSES
-from .scenery import checkpoint_sites, populate
+from .features import ARENA_MODELS, ARENA_TOWER, CAPTURE_LINKS, CHECKPOINTS, CREVASSES
+from .scenery import arena_tower, checkpoint_sites, populate
 
 
 # Viewer review lines, copied into source so later builds do not depend on
@@ -295,6 +297,7 @@ def build(b):
     site_scaffold(m)
     set_heights(m, t['z'])
     report['scenery'] = populate(m, t)
+    report['arena_tower'] = arena_tower(m, t)
     report['checkpoints'] = checkpoint_sites(m, t)
     set_materials(m, PALETTE, t['materials'], blocked=t['blocked'],
                   cell_sizes=terrain_cell_sizes(PALETTE), corner_blends=True,
@@ -313,22 +316,55 @@ def build(b):
     apply_weather(m, b.project.weather,
                   sun=dict(ambient=(.30, .34, .40), diffuse=(.92, .91, .87), direction=(.55, -.62, -.56)),
                   fill=dict(ambient=(0, 0, 0), diffuse=(.17, .20, .26), direction=(-.6, .4, -.6)))
-    report['capture_access'] = capture_access(m, b.assets, report['checkpoints'])
+    # Prototype scaling enlarges the drawable; declare matching collision
+    # explicitly on a child of RuinedTowerSnow, including local checks.
+    tower_scale = ARENA_TOWER['scale']
+    ini = ini_block(b.project.weather)+f'''
+ChildObject {ARENA_TOWER['template']} RuinedTowerSnow
+  GeometryMajorRadius = {26.4*tower_scale}
+  GeometryHeight = {112*tower_scale}
+End
+'''
+    for name, (parent, scale, radius, height) in ARENA_MODELS.items():
+        ini += f'''\nChildObject {name} {parent}
+  Scale = {scale}
+  Geometry = CYLINDER
+  GeometryMajorRadius = {radius}
+  GeometryHeight = {height}
+End
+'''
+    ini += '''
+ChildObject GlacialArenaRingWall OsgiliathRuin14Snow
+  Scale = 2.0
+  Geometry = BOX
+  GeometryMajorRadius = 65
+  GeometryMinorRadius = 18
+  GeometryHeight = 88
+End
+'''
+    report['capture_access'] = capture_access(m, b.assets, report['checkpoints'], ini)
     b.image('layout.png', plan(t))
     (b.work/'layout.json').write_text(json.dumps(dict(bases=BASES, routes=ROUTES, ridges=RIDGES,
                                                    crevasses=CREVASSES, captures=CHECKPOINTS,
                                                    capture_links=CAPTURE_LINKS), indent=2), encoding='utf-8')
     b.report.update(report)
-    b.save(m, ini=ini_block(b.project.weather))
+    b.save(m, ini=ini)
     print(f'All 16 sites and ice entrances connect around two deep ruptures; '
           f'{report["scenery"]["total_scenery"]} scenery objects, '
           f'{report["scenery"]["trees"]} trees, '
           f'{len(report["scenery"]["waystations"])} ruined waystations.', flush=True)
 
 
-def capture_access(m, assets, sites):
+def capture_access(m, assets, sites, map_ini=''):
     """Check the authored base groups against local, object-aware walking paths."""
-    fine = np.isin(categories(walking_grid(m, assets=assets)), PASSABLE)
+    fine = np.isin(categories(walking_grid(m, assets=assets, map_ini=map_ini)), PASSABLE)
+    # Every side of the landmark must remain connected around its footing.
+    x, y = ARENA_TOWER['position']
+    ring = [(round((y+dy)/10), round((x+dx)/10))
+            for dx, dy in ((600, 0), (0, 440), (-600, 0), (0, -440))]
+    reached = flood(fine, [ring[0]])
+    if not all(reached[r, c] for r, c in ring):
+        raise ValueError('Arena tower has severed the surrounding ice crossing')
     # Conservative 20-unit cells: all four native terrain cells must be
     # passable. Dijkstra disallows diagonal corner cutting around obstacles.
     walk = fine.reshape(HEIGHT//2, 2, WIDTH//2, 2).all(axis=(1, 3))

@@ -5,6 +5,17 @@ offset courses leave the middle of the ice sheet open and end before shore.
 Widths are half-widths; the frost shoulders extend beyond the actual void.
 """
 
+# Center pin from the viewer, retained after the mark was cleared.
+ARENA_TOWER = dict(position=(14253.6, 14191.3), template='GlacialArenaRuinedTower',
+                   scale=4., mound_height=80., foundation_radius=170.)
+
+# Enlarged scenery uses its own collision geometry as well as model scale.
+ARENA_MODELS = {
+    'GlacialArenaSpireSmall': ('SnowyRock09', 2., 60., 106.),
+    'GlacialArenaSpireMedium': ('SnowyRock09', 2.6, 78., 138.),
+    'GlacialArenaSpireLarge': ('SnowyRock09', 3.2, 96., 170.),
+}
+
 CREVASSES = [
     dict(name='North rupture', half_width=105., floor=8., points=[
         (12780., 14610.), (13030., 14820.), (13210., 14810.),
