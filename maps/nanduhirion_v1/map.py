@@ -14,11 +14,16 @@ its heights 2.86 times, the geometric mean of the two, so cliffs stay cliffs.
   way; every new cell takes the texture whose field is highest, and
   set_materials blends the boundaries again. The source has no cliff mapping.
 - The impassable and flammability planes are resampled the same way.
-- Its look is copied as it is (LOOK): the lighting (overbright, warm sun,
-  green fill), the environment's macro and cloud textures, the colour grade
-  (a lookup table post effect, which the renderer does not draw) and its
+- Its look is copied (LOOK): the lighting (overbright, warm sun, green
+  fill), the environment's macro and cloud textures, the colour grade (a
+  lookup table post effect, which the renderer does not draw) and its
   map.ini, which leaves the game's default weather. map.toml names no
-  weather preset for that reason.
+  weather preset for that reason. Two things grow with the map: the macro
+  tint and the cloud shadows repeat every 660 units by default, about eight
+  times across the original but 21 across this map, where they show as a
+  square grid. The macro tint is stretched over the whole map instead, and
+  the clouds repeat CLOUD_SIZE apart, drifting as fast over the ground as
+  the original's (CLOUD_DRIFT).
 Not copied: the source's camera settings. Its objects are placed again at
 their density and by their placement logic, on this map's scale: scenery.py.
 
@@ -66,6 +71,9 @@ ARCHIVE = '__patch202.big'      # in the ROTWK folder
 SOURCE = 'maps/map mp nanduhirion/map mp nanduhirion.map'
 SOURCE_INI = 'maps/map mp nanduhirion/map.ini'
 LOOK = ('GlobalLighting', 'EnvironmentData', 'PostEffectsChunk')   # copied from the source
+CLOUD_SIZE = (5200.0, 4700.0)   # one cloud repeat, map units (the game's default: 660 x 660)
+# weather.ini's default drift, -0.012 and -0.018 of a 660-unit repeat a second.
+CLOUD_DRIFT = (-0.012*660/CLOUD_SIZE[0], -0.018*660/CLOUD_SIZE[1])
 WIDTH = HEIGHT = 1425           # playable size in cells: 14,250 map units
 BORDER = 30                     # cells of unplayable border around it
 
@@ -117,7 +125,7 @@ def source():
                 labels=np.searchsorted(tile_starts, b['arrays']['tiles'], side='right') - 1,
                 impassable=b['arrays']['impassable'], flammability=b['arrays']['flammability'],
                 objects=m.objects(), look={name: sections.read(m, name) for name in LOOK},
-                ini=archive.read(SOURCE_INI))
+                ini=archive.read(SOURCE_INI).replace('\r\n', '\n'))
 
 
 def grid(cells, scale, border, size, centre=False):
@@ -285,7 +293,9 @@ def build(b):
     starts(m, [SITES[k - 1] for k in STARTS])
     placed = populate(m, src['objects'], Ground(src['heights'], src['impassable'], src['labels'], names, src['border']),
                       Ground(z, impassable, labels, palette, BORDER), (sx, sy, sz), SITES, CENTRE, twin, RAMPS)
-    for name, value in src['look'].items():
+    look = dict(src['look'])
+    look['EnvironmentData'] = dict(look['EnvironmentData'], macro_texture_stretched=1)
+    for name, value in look.items():
         sections.write(m, name, value)
 
     # Every site needs open ground, a way to the centre, and the same walk as its twin.
@@ -305,4 +315,6 @@ def build(b):
                  for k in range(1, 9) if abs(walks[k - 1] - walks[k + 7]) > .05*min(walks[k - 1], walks[k + 7])]
     if problems:
         raise ValueError('Layout: ' + '; '.join(problems))
-    b.save(m, ini=src['ini'])
+    clouds = (f'Weather\n  CloudTextureSize = X:{CLOUD_SIZE[0]:.1f} Y:{CLOUD_SIZE[1]:.1f}\n'
+              f'  CloudOffsetPerSecond = X:{CLOUD_DRIFT[0]:.5f} Y:{CLOUD_DRIFT[1]:.5f}\nEnd\n')
+    b.save(m, ini=src['ini'].rstrip() + '\n\n' + clouds)

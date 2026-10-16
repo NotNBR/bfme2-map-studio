@@ -15,10 +15,11 @@ Every object of the original (1,883) belongs to one of these:
   clump, stretched onto this map, and stand as far from other clumps as the
   original's do. So each kind of place looks as in the original at the same
   zoom: the same clumps at the same spacing in the open, the same spacing
-  along the cliffs. Then AMOUNT (1.5) times as many copies are asked for,
-  for a fuller map; where the clumps' spacing leaves no room, fewer stand.
-  Ambient sound emitters are copied one by one, by the same rule. Every copy keeps its original's template and properties and stands on
-  the same kind of ground: the same passability, within HEIGHT_MATCH of its
+  along the cliffs. Then AMOUNT times as many copies are asked for (1.5,
+  trees 1.3), for a fuller map; where the clumps' spacing leaves no room,
+  fewer stand. Ambient sound emitters are copied one by one, by the same
+  rule. Every copy keeps its original's template and properties and stands
+  on the same kind of ground: the same passability, within HEIGHT_MATCH of its
   height (scaled) and on a texture its group stands on in the original.
   Trees, shrubs and life turn freely; ruins keep their original's facing,
   within 0.3, turned with their clump.
@@ -59,7 +60,8 @@ CLUMPED = ('ruin', 'tree', 'shrub', 'life')                   # copied by the cl
 LAYERS = dict(ruin='Ruins', tree='Trees', shrub='Shrubs', life='Life', sound='Sound', farm='Farm sites')
 HEIGHT_MATCH = 40.0             # a copy stands within this of its original's height, scaled
 TRIES = 60                      # attempts per copy
-AMOUNT = 1.5                    # copies asked for, over what the original's density gives
+# Copies asked for, over what the original's density gives.
+AMOUNT = dict(ruin=1.5, tree=1.3, shrub=1.5, life=1.5, sound=1.5)
 EDGE = 60.0                     # a clump with a member this close to a cliff edge lines the edge
 EDGE_MATCH = 20.0               # its copies stand within this of its distance to the edge
 # Free space the original keeps (its nearest object of each group) around
@@ -224,7 +226,7 @@ def copies(originals, source, ground, scale, masks, ruins):
             c = centres[k]
             lines = min(source.edge(*P[i]) for i in members) <= EDGE
             edge_clumps += lines
-            factor = (line if lines else area)*AMOUNT
+            factor = (line if lines else area)*AMOUNT[g]
             count = int(factor) + (rng.random() < factor - int(factor))
             wanted += count*len(members)
             made = 0

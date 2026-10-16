@@ -32,4 +32,4 @@ def build(b):
     m = Map(archive.read_bytes(FOLDER + 'map mp nanduhirion.map'))
     set_world(m, mapName=b.project.title, mapDescription=b.project.description)
     minimap = Image.open(io.BytesIO(archive.read_bytes(FOLDER + 'map mp nanduhirion_art.tga')))
-    b.save(m, ini=archive.read(FOLDER + 'map.ini'), minimap=minimap)
+    b.save(m, ini=archive.read(FOLDER + 'map.ini').replace('\r\n', '\n'), minimap=minimap)
