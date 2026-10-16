@@ -66,10 +66,10 @@ CIRQUES = {
 # terrain cross-section itself: reopening the former broad blocked aprons
 # otherwise lets base 8 cut the southeast bend and base 9 cut the south
 # saddle approach. Protected route floors still have zero mountain depth.
-# Centre, elliptical reach, increase in cross-section steepness.
+# Centre, elliptical reach, increase in cross-section steepness, foot reach.
 PASS_BUTTRESSES = [
-    ((18880., 8620.), (900., 850.), 1.30),
-    ((12900., 4600.), (1500., 600.), .45),
+    ((18880., 8620.), (900., 850.), 1.30, 0.),
+    ((12900., 4600.), (1500., 600.), .45, 35.),
 ]
 
 
@@ -375,7 +375,7 @@ def landscape():
     main_edge = np.full(x.shape, np.inf)
     route_core = np.zeros(x.shape, bool)
     valleys = np.zeros(x.shape, bool)
-    for route in ROUTES+CAPTURE_LINKS:
+    for route_index, route in enumerate(ROUTES+CAPTURE_LINKS):
         points = np.asarray(route['points'])
         reach = route['width']/2+500
         c0, c1 = np.searchsorted(x[0], [points[:, 0].min()-reach, points[:, 0].max()+reach])
@@ -403,7 +403,20 @@ def landscape():
         # that prevent corner-cutting. Taper into shared route junctions.
         outside_bend = .5-.5*np.tanh(side*np.interp(along, arc, curvature)*12000)
         ends = smooth(np.minimum(along, arc[-1]-along)/800)
-        extra = (180 if route['main'] else 80)*smooth(.43+1.15*recess[crop]+.5*scallop[crop])
+        # Long independent bank profiles alternate rock noses and sheltered
+        # snow bays. Opposite banks need not widen or narrow together.
+        left = fbm(arc, np.full_like(arc, route_index*3700.),
+                   scale=1300, octaves=2, seed=5641)
+        right = fbm(arc, np.full_like(arc, route_index*3700.),
+                    scale=1300, octaves=2, seed=5642)
+        bank = np.where(side > 0, np.interp(along, arc, left),
+                        np.interp(along, arc, right))
+        extra = (420 if route['main'] else 190)*smooth(.55+1.8*bank+.25*scallop[crop])
+        # The crowded glacier spokes retain their compact bank envelope;
+        # the larger outer valleys have room for independent shoulders.
+        compact = (180 if route['main'] else 80)*smooth(.43+1.15*recess[crop]+.5*scallop[crop])
+        regional = smooth((radius[crop]-6000)/2000)
+        extra = compact*(1-regional)+extra*regional
         extra *= setback*outside_bend*ends
         # Keep the inner mountain toes between converging glacier mouths.
         # Even a small recess there can join two routes before their saddle.
@@ -527,6 +540,13 @@ def landscape():
         floor[crop] = floor[crop]*(1-foundation)+level*foundation
     reserved = valleys | basins | ice | checkpoints | tower_hollows
     edge = distance_to(reserved)*10
+    # A raster boundary has a regular staircase along diagonal banks. Smooth
+    # its signed distance before sculpting, including inside the valley, so
+    # those grid steps cannot turn into repeating scallops on the rock foot.
+    signed_edge = (edge-distance_to(~reserved)*10)[::3, ::3]
+    land_edge = blur(blur(signed_edge, 2), 2)
+    for (px, py), (rx, ry), strength, foot_reach in PASS_BUTTRESSES:
+        land_edge += foot_reach*np.exp(-((cx-px)/rx)**2-((cy-py)/ry)**2)
     small = fbm(cx, cy, scale=260, octaves=2, seed=5603)
     cfloor = floor[::3, ::3]
     # Regional rock supplies broad supporting volume beneath each crest.
@@ -534,20 +554,37 @@ def landscape():
     raw += 45*crags+12*small
     # Carve U-shaped passes from their uneven valley margins, with changing
     # side slopes and snow-filled recesses between the buttress feet.
-    depth = np.maximum(edge[::3, ::3]-30, 0)
+    depth = np.maximum(land_edge-30, 0)
     # A shallow snow-loaded flank and a steeper opposing face give each
     # divide a direction, rather than the same U-shaped cut on both sides.
-    ey, ex = np.gradient(blur(edge[::3, ::3], 4), 30)
+    ey, ex = np.gradient(blur(land_edge, 4), 30)
     aspect = (ex-.65*ey)/np.maximum(np.hypot(ex, ey), .1)
     apron = depth*np.clip(1+.7*noise+.35*crags+.24*aspect, .50, 1.65)
-    for (px, py), (rx, ry), strength in PASS_BUTTRESSES:
+    for (px, py), (rx, ry), strength, foot_reach in PASS_BUTTRESSES:
         apron *= 1+strength*np.exp(-((cx-px)/rx)**2-((cy-py)/ry)**2)
     inner = 1-smooth((radius[::3, ::3]-6500)/4000)
     # Keep a short snow apron, then rise into a real rock face. The former
     # basin-wide height reduction erased the narrow divides in all four
     # sectors, leaving low snow rolls inside broad navigation barriers.
-    rock_face = (.0012*np.minimum(apron, 80)**2
-                 +(1.35+.40*inner)*np.maximum(apron-80, 0))
+    # Snow-loaded feet alternate with rock rising directly from the valley.
+    # Long geological transitions replace the same apron on every bank.
+    foot_shape = fbm(cx+260*noise, cy-190*noise, scale=1050, octaves=2, seed=5643)
+    foot_strength = smooth((radius[::3, ::3]-6000)/2000)
+    for site in CHECKPOINTS:
+        px, py = site['position']
+        keep = 2000 if site['template'] == 'Inn' else 1300
+        foot_strength = np.minimum(foot_strength,
+                                   smooth((np.hypot(cx-px, cy-py)-keep)/1300))
+    foot_run = 80+foot_strength*np.clip(240*foot_shape, -55, 120)
+    # Round the change of grade into the cliff. The former hard hinge jumped
+    # from a shallow apron directly to the full face slope along one crease.
+    transition = 65+35*smooth(.5+foot_shape)
+    run = apron-foot_run
+    steep_run = np.where(run <= -transition, 0,
+                         np.where(run >= transition, run,
+                                  (run+transition)**2/(4*transition)))
+    toe = np.maximum(apron-steep_run, 0)
+    rock_face = .0012*toe**2+(1.35+.40*inner)*steep_run
     snow_flank = np.where(apron < 180, .0015*apron*apron,
                           48.6+.55*(apron-180)+.00025*(apron-180)**2)
     # Strong inner barriers, but retain most of the older, uneven shoulders
@@ -570,7 +607,9 @@ def landscape():
     raw = raw*(1-crown)+blur(raw, 5)*crown
     raw = drainage_incision(raw, 30, 1-smooth(depth/300))
     mountains = upscale(raw, cx, cy, x, y)
-    z = floor+np.maximum(mountains-floor, 0)*smooth((edge-25)/110)
+    floor_join = smooth((upscale(land_edge, cx, cy, x, y)-25)/110)
+    floor_join[reserved] = 0
+    z = floor+np.maximum(mountains-floor, 0)*floor_join
     # Long, low rolls give the paths a natural surface without changing any
     # construction pad or introducing slopes that block formations.
     rolls = upscale(14*fbm(cx, cy, scale=1200, octaves=2, seed=5604)

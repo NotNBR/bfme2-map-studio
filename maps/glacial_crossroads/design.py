@@ -84,11 +84,11 @@ CONFLUENCES = [
     dict(mark=(19530.9, 8928.4), main='diagonal-2',
          branches={'saddle-east-1': 420., 'saddle-west-2': -460.}),
     dict(mark=(20317.4, 20107.7), main='diagonal-1',
-         branches={'saddle-east-0': 100., 'saddle-west-1': -300.}),
+         branches={'saddle-east-0': -400., 'saddle-west-1': -200.}),
     dict(mark=(8993.1, 19297.9), main='diagonal-0',
          branches={'saddle-west-0': 450., 'saddle-east-3': 50.}),
     dict(mark=(8409.9, 8250.9), main='diagonal-3',
-         branches={'saddle-east-2': 180., 'saddle-west-3': 500.}),
+         branches={'saddle-east-2': 500., 'saddle-west-3': -50.}),
 ]
 
 

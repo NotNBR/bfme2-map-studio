@@ -36,9 +36,12 @@ shoulders. Their height influence fades into the established saddle grading;
 the four inner rear entrances remain open. Orange main ways in
 the vector layout reserve at least 340 units of passage; their inner-base ice
 descents reserve 300 units. Blue side ways reserve 180 units in softer white
-snow. Unequal snow-filled recesses widen the actual valley floor between
-mountain feet. Broad bends and smaller scallops vary each bank independently;
-the narrow spurs beside capture approaches retain their topology.
+snow. Independent long profiles on the two banks alternate projecting rock
+shoulders with snow-filled recesses. The main valleys have larger bays;
+tributary and rear saddle passes have quieter, narrower variations. Recesses
+favour the outside of bends and taper towards junctions. Their amplitude
+reduces beside the capture sites and inner divides, preserving the authored
+battle hollows and the narrow spurs between approaches.
 At the four marked outer diagonal crossings, side valleys meet the main
 trough at staggered mouths rather than a single X. Their bends blend over
 1,700 units into the existing passes, leaving unequal projecting mountain
@@ -61,8 +64,14 @@ forms continuous summit chains, unequal cols and descending buttresses.
 Their overlapping height envelopes form continuous saddles; four backing
 ranges carry the landscape out to the map boundary. Different flank slopes
 and variable valley cross-sections give the massifs irregular footprints.
-Short snow aprons lead into steep mountain faces; unequal scree fans replace
-a fixed band along the foot of every pass. Inner divides retain pronounced
+Snow aprons vary in depth along each flank: some rock feet meet the valley
+directly while other reaches carry broader snow slopes. These transitions
+follow a long geological field rather than a fixed offset from the route.
+The sculpting field smooths the signed distance across valley boundaries,
+preventing raster stair steps from becoming repeated scallops along a face.
+A rounded change of grade joins the apron to the steep rock above it; the
+native route and construction reservations remain protected separately.
+Unequal scree fans break up the lower faces. Inner divides retain pronounced
 rock spines into the glacier approaches, below the larger crowns, with less
 crest rounding than the backing ranges. Cirque shoulders vary around each
 base. Two compact buttresses on the southeast and south-saddle approach
