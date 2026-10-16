@@ -1,0 +1,17 @@
+id = "nanduhirion-battle"
+title = "Battle of Nanduhirion"
+native_name = "map mp nanduhirion battle"
+players = 8
+description = "Nanduhirion v1 in the thick of a 4 vs 4: bases built, armies at the fronts, outposts held and reinforcements marching."
+
+[play]
+slots = [                               # slot k takes start k; starts 1-4 west, 5-8 east
+    {faction = "Men", team = 1},        # you: your army follows the scripts
+    {faction = "Elves", team = 1, ai = "hard"},
+    {faction = "Dwarves", team = 1, ai = "hard"},
+    {faction = "Men", team = 1, ai = "hard"},
+    {faction = "Mordor", team = 2, ai = "hard"},
+    {faction = "Isengard", team = 2, ai = "hard"},
+    {faction = "Wild", team = 2, ai = "hard"},
+    {faction = "Angmar", team = 2, ai = "hard"},
+]

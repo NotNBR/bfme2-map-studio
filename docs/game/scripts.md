@@ -160,6 +160,52 @@ windows, not exact execution timestamps. In this instrumented run simulation
 advanced at about five frames/second; seconds timers and frame timers clearly
 used different progress measures. General pause/game-speed behavior remains open.
 
+## Scripts and placed armies in a skirmish
+
+How a skirmish treats a map's sides, objects and scripts, from Open-BFME-2's
+decompilation of BFME2 1.06 (`D:\LAN\openbfme2\Open-BFME-2`, `Code/GameEngine/Source`;
+OpenBFME agrees for ROTWK where it covers it):
+
+- **Sides.** The neutral side, `PlyrCivilian` and `PlyrCreeps` keep their
+  script lists (`SidesList::rva0032FF91`, `reverse/attempts/0x0032ff91.cpp`).
+  Every other side moves to a skirmish list. Each slot becomes a player named
+  `Player_<start + 1>` with the singleton team `teamPlayer_<start + 1>`
+  (`GameLogic::CreateMPPlayers`, `GameLogic/System/GameLogicInit.cpp`). An AI
+  takes its AI scripts from the first `Skirmish<Faction>` side of its
+  faction, so a ROTWK map needs a `SkirmishAngmar` side too.
+- **Owners.** An object whose `originalOwner` is `Player_N/teamPlayer_N`
+  belongs to whoever holds start N. With no player there, it is not created
+  at all, unless its template is `NEVER_CULL_FOR_MP` (`GameLogic::loadAllObjects`,
+  `GameLogicInit.cpp`; `PlayerList::validateTeam`).
+- **Names in scripts.** An unqualified team, timer, counter or flag name is
+  scoped to the side running the script (`ScriptEngine resolveName`). A
+  `PlyrCivilian` script names a slot's team in full:
+  `Player_3/teamPlayer_3`. Player names are `Player_N`, or `<This Player>`,
+  `<Local Player>` and `<All Players>` with their enemies and allies
+  variants. `<1st Human Player>` does not exist in BFME2.
+- **The AI.** A computer player's AI takes over the units on its default
+  team, placed ones and script-created ones alike (`SkirmishAIManager`,
+  `AITeamBuilder`). It leaves units on other teams alone unless
+  `TEAM_SET_AI_RECRUITABLE_FLAG` sets their team recruitable. A human player
+  has no AI, so scripts alone move its units.
+- **Hordes** created by a map or a script fill themselves with their members,
+  on the horde's team (`HordeContain` createPayload).
+
+Seen in ROTWK 2.01 (Battle of Nanduhirion,
+[maps/nanduhirion_battle](../../maps/nanduhirion_battle/map.py): `mw capture`
+at set logic frames, 17 October 2026). Scripts on `PlyrCivilian` ran in an
+eight-player skirmish:
+- `MAP_REVEAL_ALL_PERM` lifted the shroud for `Player_1`, and
+  `PLAYER_GIVE_MONEY` gave every player its money.
+- Units, heroes, buildings and outposts placed for `Player_N/teamPlayer_N`
+  came out owned by start N.
+- `ATTACK_MOVE_NAMED_UNIT_TO` sent the placed armies forward.
+- `CREATE_NAMED_ON_TEAM_AT_WAYPOINT` on `Player_N/teamPlayer_N` created a
+  wave, which then marched off.
+- `SET_MILLISECOND_TIMER` with `TIMER_EXPIRED` started both.
+
+So the BFME2 1.06 catalogue's names resolved in ROTWK for these actions.
+
 ## Remaining authoring work
 
 - Establish legal values, named references, mode restrictions and compatibility
