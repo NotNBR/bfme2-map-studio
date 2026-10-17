@@ -29,6 +29,10 @@ class Cinematics(unittest.TestCase):
         with self.assertRaises(ValueError):
             cinematics.animation('Bad', [(1, (0, 0, 0), (0, 0, 0)), (1, (0, 0, 0), (0, 0, 0))])
 
+    def test_animation_keys_carry_their_lens(self):
+        a = cinematics.animation('Zoom', [(0, (0, 0, 9), (1, 1, 0)), (2, (5, 0, 9), (1, 1, 0), .3, .1)], fov=.8)
+        self.assertEqual([(k['fov_or_focal_parameter'], k['roll']) for k in a['camera_frames']], [(.8, 0.0), (.3, .1)])
+
     def test_install_writes_animations_and_scripts(self):
         m = create(200, 200, 30)
         w = Writer(m)

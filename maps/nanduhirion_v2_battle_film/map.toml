@@ -2,7 +2,7 @@ id = "nanduhirion-v2-battle-film"
 title = "Battle of Nanduhirion v2 (film)"
 native_name = "map mp nanduhirion v2 battle film"
 players = 8
-description = "The Battle of Nanduhirion v2 filmed: the armies drawn up, the advance, the clash round the inn, the strips and the waves, the interface hidden."
+description = "The Battle of Nanduhirion v2 filmed as a trailer of its scale: the armies waiting, the charge and the fight along the whole battle line, the interface hidden."
 
 [play]
 slots = [                               # the battle's line-up (maps/nanduhirion_v2_battle/map.toml)

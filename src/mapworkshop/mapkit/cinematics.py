@@ -25,6 +25,13 @@ read from local/profiles/rotwk/game/maps, 17 October 2026):
     film.shot('Orbit', cinematics.orbit((4000, 4000, 0), 1200, 600, 200, 120, seconds=14))
     scripts = film.install(m, writer, start=0.5)     # the animations into m; the scripts to install
 
+A key is (seconds, camera (x, y, z), target (x, y, z)), optionally followed
+by its field of view (radians, horizontal in OpenBFME; else the shot's) and
+roll (radians about the line of sight, positive banking the camera to the
+right, so the picture turns counter-clockwise; else 0). OpenBFME
+(NotNBR/openbfme-godot) interpolates both through the keys as it does the
+positions, so a shot can zoom or bank; ROTWK has not been checked for either.
+
 Shots follow each other back to back from `start` unless a shot names its
 own start (seconds of game time). Scripts name timers unqualified, so they
 are the running side's own (docs/game/scripts.md): install them on one side.
@@ -60,15 +67,16 @@ def move(camera, to, target, target_to=None, seconds=8, steps=4):
 
 def animation(name, keys, fov=FOV):
     """A CameraAnimationList "look" animation from keys (seconds, camera
-    (x, y, z), target (x, y, z))."""
-    frames = [round(t*FPS) for t, _, _ in keys]
+    (x, y, z), target (x, y, z)[, fov[, roll]])."""
+    frames = [round(key[0]*FPS) for key in keys]
     if frames != sorted(set(frames)):
         raise ValueError(f'Shot {name}: its keys need rising times, at least 1/{FPS} s apart')
+    lens = [(float(key[3]) if len(key) > 3 else float(fov), float(key[4]) if len(key) > 4 else 0.0) for key in keys]
     return dict(type='look', name=name, num_frames=frames[-1] + 1, start_offset=0,
-                camera_frames=[dict(frame=f, interpolation='catm', position=tuple(map(float, camera)), roll=0.0,
-                                    fov_or_focal_parameter=float(fov)) for f, (_, camera, _) in zip(frames, keys)],
-                target_frames=[dict(frame=f, interpolation='catm', look_at=tuple(map(float, target)))
-                               for f, (_, _, target) in zip(frames, keys)])
+                camera_frames=[dict(frame=f, interpolation='catm', position=tuple(map(float, key[1])), roll=roll,
+                                    fov_or_focal_parameter=view) for f, key, (view, roll) in zip(frames, keys, lens)],
+                target_frames=[dict(frame=f, interpolation='catm', look_at=tuple(map(float, key[2])))
+                               for f, key in zip(frames, keys)])
 
 
 class Film:
@@ -80,7 +88,7 @@ class Film:
         self.shots = []                                   # (name, start or None, keys, fov)
 
     def shot(self, name, keys, start=None, fov=FOV):
-        """Add a shot: keys (seconds from its start, camera, target); `start`
+        """Add a shot: keys (seconds from its start, camera, target[, fov[, roll]]); `start`
         in seconds of game time, else right after the shot before."""
         self.shots.append((name, start, keys, fov))
         return self
