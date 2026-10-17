@@ -1,0 +1,1818 @@
+diff --git a/engine/src/GameClient/ClientEvents.cpp b/engine/src/GameClient/ClientEvents.cpp
+--- a/engine/src/GameClient/ClientEvents.cpp
++++ b/engine/src/GameClient/ClientEvents.cpp
+@@ -69,17 +69,7 @@ void ClientEventRecorder::objectDestroyed(Object &obj)
+ 	{
+ 		return; // never bound (the object died before it was announced)
+ 	}
+-	if (m_dirtySet.erase(obj.getID()) != 0) // lane ANIM-1: a drawable that goes needs no flush
+-	{
+-		for (size_t i = 0; i < m_dirty.size(); ++i)
+-		{
+-			if (m_dirty[i] == obj.getID())
+-			{
+-				m_dirty.erase(m_dirty.begin() + (std::ptrdiff_t)i);
+-				break;
+-			}
+-		}
+-	}
++	undirty(obj.getID()); // lane ANIM-1: a drawable that goes needs no flush
+ 	push(ClientEvent::DESTROYED, obj);
+ }
+ 
+@@ -137,27 +127,30 @@ void ClientEventRecorder::modelConditionChanged(Object &obj, int bit, bool on)
+ 	ClientEvent &e = push(ClientEvent::MODEL_CONDITION, obj);
+ 	e.bit = bit;
+ 	e.on = on;
+-	if (m_dirtySet.insert(obj.getID()).second) // lane ANIM-1: RW 0x679612 .. 0x67961F, the drawable is dirty until its flags are flushed
++	if (m_dirtyMark.try_emplace(obj.getID(), m_nextDirtyMark).second) // lane ANIM-1: RW 0x679612 .. 0x67961F, the drawable is dirty until its flags are flushed
++	{
++		m_dirty.push_back({ obj.getID(), m_nextDirtyMark++ });
++	}
++}
++
++bool ClientEventRecorder::undirty(ObjectID id)
++{
++	const auto it = m_dirtyMark.find(id);
++	if (it == m_dirtyMark.end())
+ 	{
+-		m_dirty.push_back(obj.getID());
++		return false;
+ 	}
++	m_dirtyMark.erase(it); // its m_dirty entry is stale from here
++	return true;
+ }
+ 
+ // lane ANIM-1: the flush of one drawable (RW 0x67449C with force 0: nothing when it is not dirty)
+ void ClientEventRecorder::flushModelConditions(Object &obj)
+ {
+-	if (m_dirtySet.erase(obj.getID()) == 0)
++	if (!undirty(obj.getID()))
+ 	{
+ 		return;
+ 	}
+-	for (size_t i = 0; i < m_dirty.size(); ++i)
+-	{
+-		if (m_dirty[i] == obj.getID())
+-		{
+-			m_dirty.erase(m_dirty.begin() + (std::ptrdiff_t)i);
+-			break;
+-		}
+-	}
+ 	pushFlush(obj);
+ }
+ 
+@@ -225,15 +218,21 @@ std::vector<ClientEvent> ClientEventRecorder::take(bool endOfFrame)
+ 	// lane ANIM-1: the end of the logic frame, RW 0x6759C4: every dirty drawable's flags reach its draw modules once
+ 	if (endOfFrame)
+ 	{
+-		for (ObjectID id : m_dirty)
++		for (const DirtyEntry &d : m_dirty)
+ 		{
+-			if (const Object *o = m_logic.findObjectByID(id))
++			const auto live = m_dirtyMark.find(d.id);
++			if (live == m_dirtyMark.end() || live->second != d.mark)
++			{
++				continue; // flushed or destroyed since (a later entry, if any, is its live one)
++			}
++			if (const Object *o = m_logic.findObjectByID(d.id))
+ 			{
+ 				pushFlush(*o);
+ 			}
+ 		}
+ 		m_dirty.clear();
+-		m_dirtySet.clear();
++		m_dirtyMark.clear();
++		m_nextDirtyMark = 0;
+ 	}
+ 	std::vector<ClientEvent> out;
+ 	out.swap(m_events);
+diff --git a/engine/src/GameClient/ClientEvents.h b/engine/src/GameClient/ClientEvents.h
+--- a/engine/src/GameClient/ClientEvents.h
++++ b/engine/src/GameClient/ClientEvents.h
+@@ -34,8 +34,8 @@
+ #include "GameClient/DrawableScriptTarget.h"
+ 
+ #include <cstdint>
+-#include <set>
+ #include <string>
++#include <unordered_map>
+ #include <vector>
+ 
+ class ThingTemplate;
+@@ -121,8 +121,17 @@ private:
+ 	void pushFlush(const Object &obj);
+ 
+ 	// lane ANIM-1: the objects whose MODEL_CONDITION events have not been flushed (RW Drawable + 0x443), in the order of their first change
+-	std::vector<ObjectID> m_dirty;
+-	std::set<ObjectID> m_dirtySet;
++	// (a flush or a destroy drops an object by erasing its mark, O(1); its m_dirty entry stays behind, stale, and only entries whose mark is the object's current
++	// one count: a drawable dirtied again after a flush is in the order of that new change, as when the entry was erased)
++	struct DirtyEntry
++	{
++		ObjectID id;
++		std::uint32_t mark;
++	};
++	std::vector<DirtyEntry> m_dirty;
++	std::unordered_map<ObjectID, std::uint32_t> m_dirtyMark; // the dirty objects -> the mark of their live m_dirty entry
++	std::uint32_t m_nextDirtyMark = 0;
++	bool undirty(ObjectID id); ///< false when `id` was not dirty
+ 
+ 	GameLogic &m_logic;
+ 	std::vector<ClientEvent> m_events;
+diff --git a/engine/src/GameClient/Drawable.cpp b/engine/src/GameClient/Drawable.cpp
+--- a/engine/src/GameClient/Drawable.cpp
++++ b/engine/src/GameClient/Drawable.cpp
+@@ -223,19 +223,14 @@ void Drawable::setModelConditionFlags(const ModelConditionFlags &flags)
+ 
+ ModelConditionFlags Drawable::dependencySharedModelFlags() const
+ {
++	// the union of the draws' sets, a word at a time (mapworkshop openbfme-perf.patch: the bit loop ran for every contained drawable every render frame;
++	// MODELCONDITION_COUNT is the type's width and its unused high bits are zero, so the words give the same set)
+ 	ModelConditionFlags out;
+ 	for (const DrawEntry &e : m_entries)
+ 	{
+ 		if (e.draw)
+ 		{
+-			const ModelConditionFlags &f = e.draw->dependencySharedModelFlags();
+-			for (int b = 0; b < MODELCONDITION_COUNT; ++b)
+-			{
+-				if (f.test(b))
+-				{
+-					out.set(b);
+-				}
+-			}
++			out.set(e.draw->dependencySharedModelFlags());
+ 		}
+ 	}
+ 	return out;
+@@ -243,19 +238,15 @@ ModelConditionFlags Drawable::dependencySharedModelFlags() const
+ 
+ bool Drawable::applyDependencyFlags(const ModelConditionFlags &shared, const ModelConditionFlags &containerFlags)
+ {
++	// the shared bits take the container's values, the others keep this drawable's (a word at a time, as dependencySharedModelFlags)
+ 	ModelConditionFlags next = m_flags;
+-	for (int b = 0; b < MODELCONDITION_COUNT; ++b)
+-	{
+-		if (shared.test(b))
+-		{
+-			next.set(b, containerFlags.test(b));
+-		}
+-	}
+-	bool changed = false;
+-	for (int b = 0; b < MODELCONDITION_COUNT && !changed; ++b)
++	std::uint32_t *n = next.words();
++	const std::uint32_t *s = shared.words(), *c = containerFlags.words();
++	for (int w = 0; w < ModelConditionFlags::NUM_WORDS; ++w)
+ 	{
+-		changed = next.test(b) != m_flags.test(b);
++		n[w] = (n[w] & ~s[w]) | (c[w] & s[w]);
+ 	}
++	const bool changed = next != m_flags;
+ 	if (changed)
+ 	{
+ 		setModelConditionFlags(next);
+diff --git a/engine/src/GameLogic/AI/AIMove.cpp b/engine/src/GameLogic/AI/AIMove.cpp
+--- a/engine/src/GameLogic/AI/AIMove.cpp
++++ b/engine/src/GameLogic/AI/AIMove.cpp
+@@ -44,6 +44,20 @@ std::vector<std::string> AIMover::allStops()
+ 
+ void AIMover::note(const char *stop)
+ {
++	// the movers note these on every frame of a move: a known stop is compared by its text only the first time (a bit per stop)
++	static const char *const kKnown[] = { kStopSpecialLayer, kStopUpdate, kStopPatch, kStopExplicit, kStopDistance, kStopRequests, kStopGroup };
++	for (unsigned i = 0; i < sizeof(kKnown) / sizeof(kKnown[0]); ++i)
++	{
++		if (kKnown[i] == stop)
++		{
++			if (m_notedBits & (1u << i))
++			{
++				return;
++			}
++			m_notedBits |= 1u << i;
++			break;
++		}
++	}
+ 	for (const std::string &s : m_stops)
+ 	{
+ 		if (s == stop)
+diff --git a/engine/src/GameLogic/AI/AIMove.h b/engine/src/GameLogic/AI/AIMove.h
+--- a/engine/src/GameLogic/AI/AIMove.h
++++ b/engine/src/GameLogic/AI/AIMove.h
+@@ -286,6 +286,7 @@ private:
+ 	unsigned m_colliderFrames[4] = {};
+ 	int m_colliderCount = 0;
+ 	std::vector<std::string> m_stops;
++	unsigned m_notedBits = 0; // note: the known stops already in m_stops
+ };
+ 
+ // AIInternalMoveToState (RW vtable 0xC27448): move to a position, then optionally turn to a final angle.
+diff --git a/engine/src/GameLogic/AI/AIPathfind.cpp b/engine/src/GameLogic/AI/AIPathfind.cpp
+--- a/engine/src/GameLogic/AI/AIPathfind.cpp
++++ b/engine/src/GameLogic/AI/AIPathfind.cpp
+@@ -220,6 +220,7 @@ Pathfinder::Pathfinder(const PathfindConfig &config, const PathfindWorld *world)
+ 	m_extent.lo = ICoord2D();
+ 	m_extent.hi = ICoord2D();
+ 	m_logicalExtent = m_extent;
++	m_pool.setGrowthLimit(kCellInfoPoolMax); // lane PATHPERF-4
+ 	m_pool.allocate(config.cellInfoPoolSize);
+ 	m_zoneManager.setBlockSize(config.zoneBlockSize);
+ 	m_queue1.reset();
+diff --git a/engine/src/GameLogic/AI/AIPathfind.h b/engine/src/GameLogic/AI/AIPathfind.h
+--- a/engine/src/GameLogic/AI/AIPathfind.h
++++ b/engine/src/GameLogic/AI/AIPathfind.h
+@@ -238,15 +238,22 @@ public:
+ 	void allocate(int count);
+ 	PathfindCellInfo *get(PathfindCell *cell, const ICoord2D &pos);
+ 	void release(PathfindCellInfo *info);
+-	int capacity() const { return (int)m_infos.size(); }
++	int capacity() const { return m_capacity; }
+ 	int freeCount() const;
+ 	bool exhaustedOnce() const { return m_exhausted; }
++	// lane PATHPERF-4: above allocate's count the pool grows in blocks up to `maxRecords` (0: fixed, the default); allocate keeps the limit
++	void setGrowthLimit(int maxRecords) { m_growthLimit = maxRecords; }
++	int growths() const { return m_growths; }
+ 	PathfindOccupant *newOccupant();
+ 	void freeOccupant(PathfindOccupant *o);
+ 	size_t occupantsInUse() const { return m_occupantsInUse; }
+ 
+ private:
+-	std::vector<PathfindCellInfo> m_infos;
++	void addBlock(int count);
++	std::vector<std::unique_ptr<PathfindCellInfo[]>> m_blocks; // lane PATHPERF-4: blocks never move, cells keep pointers into them
++	int m_capacity = 0;
++	int m_growthLimit = 0;
++	int m_growths = 0;
+ 	PathfindCellInfo *m_firstFree = nullptr;
+ 	bool m_exhausted = false;
+ 	std::vector<std::unique_ptr<PathfindOccupant[]>> m_occChunks;
+@@ -478,13 +485,18 @@ class PathfindOpenHeap
+ public:
+ 	bool empty() const { return m_v.empty(); }
+ 	size_t size() const { return m_v.size(); }
+-	void clear() { m_v.clear(); }
++	void clear()
++	{
++		m_v.clear();
++		m_k.clear();
++	}
+ 	void push(PathfindCell *c);
+ 	PathfindCell *pop();
+ 	const std::vector<PathfindCell *> &items() const { return m_v; }
+ 
+ private:
+ 	std::vector<PathfindCell *> m_v;
++	std::vector<std::uint16_t> m_k; // lane PATHPERF-2: m_v[i]'s total cost (see push)
+ };
+ 
+ // ---------------------------------------------------------------------------------------------------------
+@@ -518,24 +530,46 @@ class PathfindRequestRing
+ public:
+ 	void reset()
+ 	{
+-		m_slots.assign(PATHFIND_QUEUE_LEN, PATHFIND_INVALID_ID);
++		m_slots.assign((size_t)m_len, PATHFIND_INVALID_ID);
+ 		m_head = m_tail = 0;
+ 	}
++	// lane PATHPERF-4: the ring's length (PATHFIND_QUEUE_LEN, retail's, unless the Uber profile's limits are on: Pathfinder::setUberLimits); the queued ids
++	// keep their order
++	void setLength(int len)
++	{
++		if (len == m_len || (int)size() >= len - 1)
++		{
++			return; // a ring never drops what it holds
++		}
++		std::vector<PathfindObjectID> ids;
++		for (size_t i = 0; i < size(); ++i)
++		{
++			ids.push_back(at(i));
++		}
++		m_len = len;
++		reset();
++		for (PathfindObjectID id : ids)
++		{
++			m_slots[(size_t)m_tail] = id;
++			m_tail = (m_tail + 1) % m_len;
++		}
++	}
++	int length() const { return m_len; }
+ 	bool empty() const { return m_head == m_tail; }
+-	size_t size() const { return (size_t)((m_tail - m_head + PATHFIND_QUEUE_LEN) % PATHFIND_QUEUE_LEN); }
++	size_t size() const { return (size_t)((m_tail - m_head + m_len) % m_len); }
+ 	// the i-th queued id from the head (state hash, MOVE-1)
+-	PathfindObjectID at(size_t i) const { return m_slots[(size_t)((m_head + (int)i) % PATHFIND_QUEUE_LEN)]; }
++	PathfindObjectID at(size_t i) const { return m_slots[(size_t)((m_head + (int)i) % m_len)]; }
+ 	// RW 0x6EC096 (linear duplicate scan) then 0x6EC069: true when queued or already queued, false when the ring is full
+ 	bool push(PathfindObjectID id)
+ 	{
+-		for (int s = m_head; s != m_tail; s = (s + 1) % PATHFIND_QUEUE_LEN)
++		for (int s = m_head; s != m_tail; s = (s + 1) % m_len)
+ 		{
+ 			if (m_slots[(size_t)s] == id)
+ 			{
+ 				return true;
+ 			}
+ 		}
+-		const int next = (m_tail + 1) % PATHFIND_QUEUE_LEN;
++		const int next = (m_tail + 1) % m_len;
+ 		if (next == m_head)
+ 		{
+ 			return false;
+@@ -548,13 +582,14 @@ public:
+ 	PathfindObjectID pop()
+ 	{
+ 		const PathfindObjectID id = m_slots[(size_t)m_head];
+-		m_head = (m_head + 1) % PATHFIND_QUEUE_LEN;
++		m_head = (m_head + 1) % m_len;
+ 		return id;
+ 	}
+ 
+ private:
+ 	std::vector<PathfindObjectID> m_slots;
+ 	int m_head = 0, m_tail = 0;
++	int m_len = PATHFIND_QUEUE_LEN;
+ };
+ 
+ // RW checkForMovement info (the ZH TCheckMovementInfo). Mode flags (RW info+0x14): 0x02 allies block, 0x04 count terrain
+@@ -778,6 +813,19 @@ public:
+ 
+ 	// ---- queue ----
+ 	bool queueForPath(PathfindObjectID id);
++	// lane PATHPERF-4 (Uber profile only, docs/UBER.md): retail's request rings hold 511 units (a refused unit waits for a path that never comes, until its
++	// next order) and the queue serves MaxPathfindCellsPerFrame cells a call. With the Uber limits the rings hold kUberQueueLength and the budget is
++	// kUberBudgetScale times retail's, so a mass order is served in a few frames. A Faithful game never turns them on
++	enum { kUberQueueLength = 16384, kUberBudgetScale = 4 };
++	// studio (Uber only): a rush of requests (more than kUberRushQueued queued at a call, a mass order such as a script's charge) is served at once: that
++	// call's budget is kUberRushBudget cells (retail's own budget for the first 25 frames, MaxPathfindCellsPerFrame 4000 x 100), so the units ordered
++	// together set off together instead of over many frames; one heavy logic frame instead. It depends on the queue alone (logic state)
++	enum { kUberRushQueued = 64, kUberRushBudget = 400000 };
++	void setUberLimits(bool on);
++	bool uberLimits() const { return m_uberLimits; }
++	// lane PATHPERF-4: the cell-info pool grows past PathfindConfig::cellInfoPoolSize up to this many records (about 100 MB), as retail's grows; the
++	// pathfinder's searches and reservations then no longer fail on a full pool in a big battle
++	enum { kCellInfoPoolMax = 1000000 };
+ 	// RW processPathfindQueue 0x6F2364: the counter of allocated cells is reset once; the blocked repaths run while it is below half the
+ 	// budget, then the path requests while it is below the budget (one counter for both); what is not reached stays queued
+ 	void processPathfindQueue(PathfindRequestHandler &handler);
+@@ -817,6 +865,22 @@ public:
+ 	// lane PATHPERF-1 (tests): false switches the search memo (occupantFacts) and the unit index (findUnit) off, every answer then asked afresh / looked up in
+ 	// the map; test_pathperf1_hier.cpp compares the searches both ways. Not part of the state (it changes no result)
+ 	void setSearchShortcuts(bool on) { m_searchShortcuts = on; }
++	// lane PATHPERF-2: while a scope lives (Path::optimize), isLinePassable remembers each line cell's verdict: whether the cell, entered from a given
++	// neighbour (or as the line's first cell), blocks the line. Optimize's greedy scan walks the lines from one anchor to ever farther nodes, which cross
++	// mostly the same cells in the same direction, and nothing the verdict reads changes inside it. Only isLinePassable calls with the scope's first
++	// (object, surfaces, blocked, allowPinched, layer) use it; with the shortcuts off it is not used
++	class LineMemoScope
++	{
++	public:
++		explicit LineMemoScope(Pathfinder &pf);
++		~LineMemoScope();
++		LineMemoScope(const LineMemoScope &) = delete;
++		LineMemoScope &operator=(const LineMemoScope &) = delete;
++
++	private:
++		Pathfinder &m_pf;
++		bool m_outer;
++	};
+ private:
+ 	enum { kUnitIndexMax = 1 << 20 };
+ 	void releaseSlot(PathfindObjectID id, Slot &slot);
+@@ -846,9 +910,17 @@ private:
+ 	// lane PATHPERF-1: what checkForMovement and occupantCost ask of an occupant `id` and of the searching unit `obj` (only side-effect-free getters, all
+ 	// asked at once). While internalFindPath runs for `obj` nothing they read can change, so the answers are kept per search (generation counted) and an
+ 	// occupant met in many cells is resolved once; elsewhere they are asked afresh. Null when the occupant's object is gone
++	// lane PATHPERF-2: a unit's secondsToReach inputs (PathfindObject::reachInputs), asked once per search: state 0 not asked yet, 1 asked, 2 not provided
++	struct ReachMemo
++	{
++		std::uint8_t state = 0;
++		float x = 0.0f, y = 0.0f, speed = 0.0f;
++	};
++	float reachSeconds(const PathfindObject &o, ReachMemo &memo, float x, float y) const;
+ 	struct OccupantFacts
+ 	{
+ 		unsigned gen = 0;
++		mutable ReachMemo reach; // lane PATHPERF-2
+ 		const PathfindObject *o = nullptr;
+ 		PathfindRelationship rel = PATHFIND_ENEMIES; // obj's relationship to o
+ 		bool parked = false, hasAI = false, hasLocomotor = false, infantry = false, largeRect = false, throughEachOther = false;
+@@ -906,9 +978,28 @@ private:
+ 	std::vector<OccupantFacts> m_memo;
+ 	OccupantFacts m_memoScratch;
+ 	SearcherFacts m_memoSelf;
++	ReachMemo m_memoSelfReach; // lane PATHPERF-2: m_memoObj's secondsToReach inputs
+ 	const PathfindObject *m_memoObj = nullptr;
+ 	unsigned m_memoGen = 0;
+ 	bool m_memoActive = false;
+ 	bool m_searchShortcuts = true;
++	bool m_uberLimits = false; // lane PATHPERF-4
++	// lane PATHPERF-2: the line memo (LineMemoScope): an open-addressed table of (cell index * 10 + entry code + 1) -> blocked, entries valid in generation
++	// m_lineMemoGen; the parameters are bound by the scope's first isLinePassable call
++	struct LineMemoEntry
++	{
++		std::uint32_t key = 0, gen = 0;
++		bool blocked = false;
++	};
++	bool lineMemoFind(std::uint32_t key, bool &blocked) const;
++	void lineMemoStore(std::uint32_t key, bool blocked);
++	std::vector<LineMemoEntry> m_lineMemo;
++	size_t m_lineMemoCount = 0;
++	std::uint32_t m_lineMemoGen = 0;
++	bool m_lineMemoActive = false, m_lineMemoBound = false;
++	const PathfindObject *m_lineMemoObj = nullptr;
++	unsigned m_lineMemoSurfaces = 0;
++	bool m_lineMemoBlockedArg = false, m_lineMemoPinchedArg = false;
++	PathfindLayerEnum m_lineMemoLayer = LAYER_GROUND;
+ 	std::vector<std::string> m_stops;
+ };
+diff --git a/engine/src/GameLogic/AI/AIPathfindCell.cpp b/engine/src/GameLogic/AI/AIPathfindCell.cpp
+--- a/engine/src/GameLogic/AI/AIPathfindCell.cpp
++++ b/engine/src/GameLogic/AI/AIPathfindCell.cpp
+@@ -16,22 +16,26 @@
+ #include "GameLogic/AI/AIPathfind.h"
+ #include "GameLogic/SimMath.h"
+ 
++#include <algorithm>
+ #include <cmath>
+ #include <cstdlib>
+ 
+ // ---------------------------------------------------------------------------------------------------------
+ // PathfindCellInfoPool
+ // ---------------------------------------------------------------------------------------------------------
+-void PathfindCellInfoPool::allocate(int count)
++// lane PATHPERF-4: the records live in blocks that never move (cells and searches keep pointers to them), so the pool can grow: allocate makes the
++// first block, and with a growth limit an empty free list gets another block instead of failing (setGrowthLimit; retail grows too: 0x200 fixed
++// slots plus an overflow list, Open-BFME-1 PathfindCellInfoPoolReset.cpp). Until the first block runs out nothing differs from a fixed pool
++void PathfindCellInfoPool::addBlock(int count)
+ {
+-	m_infos.assign((size_t)count, PathfindCellInfo());
+-	m_exhausted = false;
++	PathfindCellInfo *block = new PathfindCellInfo[(size_t)count]();
++	m_blocks.emplace_back(block);
+ 	for (int i = 0; i < count; ++i)
+ 	{
+-		PathfindCellInfo &info = m_infos[(size_t)i];
++		PathfindCellInfo &info = block[i];
+ 		info.m_nextOpen = nullptr;
+ 		info.m_prevOpen = nullptr;
+-		info.m_pathParent = (i + 1 < count) ? &m_infos[(size_t)i + 1] : nullptr;
++		info.m_pathParent = (i + 1 < count) ? &block[i + 1] : m_firstFree;
+ 		info.m_cell = nullptr;
+ 		info.m_totalCost = 0;
+ 		info.m_costSoFar = 0;
+@@ -48,7 +52,20 @@ void PathfindCellInfoPool::allocate(int count)
+ 		info.m_open = 0;
+ 		info.m_closed = 0;
+ 	}
+-	m_firstFree = count > 0 ? &m_infos[0] : nullptr;
++	if (count > 0)
++	{
++		m_firstFree = &block[0];
++	}
++	m_capacity += count;
++}
++
++void PathfindCellInfoPool::allocate(int count)
++{
++	m_blocks.clear();
++	m_capacity = 0;
++	m_firstFree = nullptr;
++	m_exhausted = false;
++	addBlock(count);
+ 	m_occChunks.clear();
+ 	m_occFree = nullptr;
+ 	m_occUsedInChunk = 0;
+@@ -57,6 +74,12 @@ void PathfindCellInfoPool::allocate(int count)
+ 
+ PathfindCellInfo *PathfindCellInfoPool::get(PathfindCell *cell, const ICoord2D &pos)
+ {
++	if (!m_firstFree && m_growthLimit > m_capacity)
++	{
++		const int grow = std::min(std::max(m_capacity / 2, 4096), m_growthLimit - m_capacity);
++		addBlock(grow);
++		++m_growths;
++	}
+ 	PathfindCellInfo *info = m_firstFree;
+ 	if (info)
+ 	{
+@@ -475,22 +498,28 @@ unsigned PathfindCell::costSoFar(const PathfindCell *parent) const
+ // ---------------------------------------------------------------------------------------------------------
+ // PathfindOpenHeap (RW 0x6ECF1D push, 0x6ECF65 pop; see AIPathfind.h)
+ // ---------------------------------------------------------------------------------------------------------
++// lane PATHPERF-2: the totals live beside the cells (m_k, parallel to m_v), so a comparison reads one dense array instead of cell -> info -> total.
++// A cell's total is set before its push and never changed while it is open (every push site skips open and closed cells), so the copy is its total.
+ void PathfindOpenHeap::push(PathfindCell *c)
+ {
+ 	c->info()->m_open = 1;
++	const std::uint16_t key = (std::uint16_t)c->getTotalCost();
+ 	m_v.push_back(c);
++	m_k.push_back(key);
+ 	size_t i = m_v.size() - 1;
+ 	while (i > 0)
+ 	{
+ 		const size_t p = (i - 1) / 2;
+-		if (!(m_v[p]->getTotalCost() > c->getTotalCost()))
++		if (!(m_k[p] > key))
+ 		{
+ 			break;
+ 		}
+ 		m_v[i] = m_v[p];
++		m_k[i] = m_k[p];
+ 		i = p;
+ 	}
+ 	m_v[i] = c;
++	m_k[i] = key;
+ }
+ 
+ PathfindCell *PathfindOpenHeap::pop()
+@@ -499,40 +528,47 @@ PathfindCell *PathfindOpenHeap::pop()
+ 	top->info()->m_open = 0;
+ 	const size_t n = m_v.size();
+ 	PathfindCell *val = m_v[n - 1];
++	const std::uint16_t valKey = m_k[n - 1];
+ 	m_v[n - 1] = m_v[0];
++	m_k[n - 1] = m_k[0];
+ 	const size_t len = n - 1; // the heap without the moved root
+ 	size_t h = 0;
+ 	size_t ch = 2 * h + 2;
+ 	while (ch < len)
+ 	{
+-		if (m_v[ch]->getTotalCost() > m_v[ch - 1]->getTotalCost())
++		if (m_k[ch] > m_k[ch - 1])
+ 		{
+ 			ch--;
+ 		}
+ 		m_v[h] = m_v[ch];
++		m_k[h] = m_k[ch];
+ 		h = ch;
+ 		ch = 2 * h + 2;
+ 	}
+ 	if (ch == len)
+ 	{
+ 		m_v[h] = m_v[len - 1];
++		m_k[h] = m_k[len - 1];
+ 		h = len - 1;
+ 	}
+ 	// sift the saved element up from the hole with the push rule
+ 	while (h > 0)
+ 	{
+ 		const size_t p = (h - 1) / 2;
+-		if (!(m_v[p]->getTotalCost() > val->getTotalCost()))
++		if (!(m_k[p] > valKey))
+ 		{
+ 			break;
+ 		}
+ 		m_v[h] = m_v[p];
++		m_k[h] = m_k[p];
+ 		h = p;
+ 	}
+ 	if (len > 0)
+ 	{
+ 		m_v[h] = val;
++		m_k[h] = valKey;
+ 	}
+ 	m_v.pop_back();
++	m_k.pop_back();
+ 	return top;
+ }
+diff --git a/engine/src/GameLogic/AI/AIPathfindHost.h b/engine/src/GameLogic/AI/AIPathfindHost.h
+--- a/engine/src/GameLogic/AI/AIPathfindHost.h
++++ b/engine/src/GameLogic/AI/AIPathfindHost.h
+@@ -170,6 +170,10 @@ public:
+ 	// RW 0x6ED21E: the unit has a locomotor and the time (seconds) it needs to get to (x, y): hypot / speed
+ 	virtual bool hasLocomotor() const { return false; }
+ 	virtual float secondsToReach(float x, float y) const { (void)x; (void)y; return 0.0f; }
++	// lane PATHPERF-2: the two inputs of secondsToReach, so the search can ask them once per unit: `x`, `y` the position, `speed` the speed (0: secondsToReach
++	// answers 0). secondsToReach(qx, qy) must equal speed > 0 ? divf32(length2d(subf32(qx, x), subf32(qy, y)), speed) : 0 for every point. false: not
++	// provided, the search asks secondsToReach itself
++	virtual bool reachInputs(float &x, float &y, float &speed) const { (void)x; (void)y; (void)speed; return false; }
+ 	// the object stands still (AI vtable +0x228 false): only such units hold a position slot
+ 	virtual bool isStationary() const { return true; }
+ 	// object status bits the footprint code reads (RW status index 0x58 and 0x4D; names INFERRED: S-164)
+diff --git a/engine/src/GameLogic/AI/AIPathfindPath.cpp b/engine/src/GameLogic/AI/AIPathfindPath.cpp
+--- a/engine/src/GameLogic/AI/AIPathfindPath.cpp
++++ b/engine/src/GameLogic/AI/AIPathfindPath.cpp
+@@ -217,6 +217,7 @@ void Path::optimize(Pathfinder &pathfinder, const PathfindObject *obj, unsigned
+ 		m_isOptimized = true;
+ 		return;
+ 	}
++	Pathfinder::LineMemoScope lineMemo(pathfinder); // lane PATHPERF-2: the line cells' verdicts are asked once per optimize
+ 	if (dir == nullptr)
+ 	{
+ 		const bool tflag = obj && obj->isKindOf(PK_MACHINE); // template KindOf bit 11 (MACHINE): RW tmpl+0x108 >> 11 & 1
+diff --git a/engine/src/GameLogic/AI/AIPathfindSearch.cpp b/engine/src/GameLogic/AI/AIPathfindSearch.cpp
+--- a/engine/src/GameLogic/AI/AIPathfindSearch.cpp
++++ b/engine/src/GameLogic/AI/AIPathfindSearch.cpp
+@@ -416,9 +416,24 @@ bool Pathfinder::isLinePassable(const PathfindObject *obj, unsigned acceptableSu
+ 		worldToCell(&s, &start);
+ 		worldToCell(&e, &end);
+ 	}
++	// lane PATHPERF-2: the line memo (LineMemoScope) binds to the scope's first parameters; a call with others walks without it
++	bool memo = false;
++	if (m_lineMemoActive && m_searchShortcuts)
++	{
++		if (!m_lineMemoBound)
++		{
++			m_lineMemoBound = true;
++			m_lineMemoObj = obj;
++			m_lineMemoSurfaces = acceptableSurfaces;
++			m_lineMemoBlockedArg = blocked;
++			m_lineMemoPinchedArg = allowPinched;
++			m_lineMemoLayer = layer;
++		}
++		memo = m_lineMemoObj == obj && m_lineMemoSurfaces == acceptableSurfaces && m_lineMemoBlockedArg == blocked && m_lineMemoPinchedArg == allowPinched &&
++			m_lineMemoLayer == layer;
++	}
+ 	const bool blockedLine = walkLine(*this, layer, start, end, [&](PathfindCell *from, PathfindCell *to, int x, int y) -> bool {
+ 		// RW 0x6EE234, with info+0x5C = 1: goal reservations of other units block the line
+-		const PathfindOccupant *list = to->occupants(OCC_GROUND_GOAL);
+ 		if (to->getExtraPass())
+ 		{
+ 			li.latch5D = true;
+@@ -427,47 +442,172 @@ bool Pathfinder::isLinePassable(const PathfindObject *obj, unsigned acceptableSu
+ 		{
+ 			return true;
+ 		}
+-		for (const PathfindOccupant *n = list; n; n = n->next)
++		// the rest depends only on the cell and the neighbour it is entered from (checkForMovement's footprint overlap): walkLine steps to a neighbour, and
++		// li.prev is `from`'s cell whenever `from` is set
++		const size_t cellIndex = (size_t)(to - m_blockOfMapCells.data());
++		std::uint32_t key = 0;
++		if (memo && cellIndex < 400000000u)
+ 		{
+-			const PathfindObject *o = m_world ? m_world->findObjectByID(n->owner) : nullptr;
+-			if (!o)
++			const unsigned code = from ? (unsigned)((x - li.prev.x + 1) * 3 + (y - li.prev.y + 1)) : 9u;
++			key = (std::uint32_t)(cellIndex * 10u + code + 1u);
++			bool known = false;
++			if (lineMemoFind(key, known))
++			{
++				if (!known)
++				{
++					li.prev.x = x;
++					li.prev.y = y;
++				}
++				return known;
++			}
++		}
++		const bool cellBlocks = [&]() -> bool {
++			for (const PathfindOccupant *n = to->occupants(OCC_GROUND_GOAL); n; n = n->next)
++			{
++				const PathfindObject *o = m_world ? m_world->findObjectByID(n->owner) : nullptr;
++				if (!o)
++				{
++					// an occupant the world no longer knows blocks like an unknown object (retail dereferences it)
++					return true;
++				}
++				if (o != obj && o->getContainer() != obj)
++				{
++					return true;
++				}
++			}
++			li.move.cell.x = x;
++			li.move.cell.y = y;
++			li.move.layer = to->getLayer();
++			const bool ok = checkForMovement(obj, li.move, from ? &li.prev : nullptr);
++			if (!ok)
+ 			{
+-				// an occupant the world no longer knows blocks like an unknown object (retail dereferences it)
+ 				return true;
+ 			}
+-			if (o != obj && o->getContainer() != obj)
++			if (li.move.terrainPenalty != 0)
+ 			{
+ 				return true;
+ 			}
+-		}
+-		li.move.cell.x = x;
+-		li.move.cell.y = y;
+-		li.move.layer = to->getLayer();
+-		const bool ok = checkForMovement(obj, li.move, from ? &li.prev : nullptr);
+-		if (!ok)
++			if (!li.allowPinched)
++			{
++				if (to->getPinched())
++				{
++					return true;
++				}
++				if (to->getBit23())
++				{
++					return true;
++				}
++			}
++			return !validMovementPosition(li.move.mv, to);
++		}();
++		if (key != 0)
+ 		{
+-			return true;
++			lineMemoStore(key, cellBlocks);
+ 		}
+-		if (li.move.terrainPenalty != 0)
++		if (!cellBlocks)
+ 		{
+-			return true;
++			li.prev.x = x;
++			li.prev.y = y;
+ 		}
+-		li.prev.x = x;
+-		li.prev.y = y;
+-		if (!li.allowPinched)
++		return cellBlocks;
++	});
++	return !blockedLine;
++}
++
++// lane PATHPERF-2: the line memo
++Pathfinder::LineMemoScope::LineMemoScope(Pathfinder &pf) : m_pf(pf), m_outer(!pf.m_lineMemoActive)
++{
++	if (m_outer)
++	{
++		pf.m_lineMemoActive = true;
++		pf.m_lineMemoBound = false;
++		pf.m_lineMemoCount = 0;
++		if (++pf.m_lineMemoGen == 0)
+ 		{
+-			if (to->getPinched())
++			for (LineMemoEntry &e : pf.m_lineMemo)
+ 			{
+-				return true;
++				e.gen = 0;
+ 			}
+-			if (to->getBit23())
++			pf.m_lineMemoGen = 1;
++		}
++	}
++}
++
++Pathfinder::LineMemoScope::~LineMemoScope()
++{
++	if (m_outer)
++	{
++		m_pf.m_lineMemoActive = false;
++		m_pf.m_lineMemoBound = false;
++	}
++}
++
++namespace
++{
++inline size_t lineMemoSlot(std::uint32_t key, size_t mask)
++{
++	return (size_t)((key * 2654435761u) >> 7) & mask;
++}
++} // namespace
++
++bool Pathfinder::lineMemoFind(std::uint32_t key, bool &blocked) const
++{
++	if (m_lineMemo.empty())
++	{
++		return false;
++	}
++	const size_t mask = m_lineMemo.size() - 1;
++	for (size_t i = lineMemoSlot(key, mask);; i = (i + 1) & mask)
++	{
++		const LineMemoEntry &e = m_lineMemo[i];
++		if (e.gen != m_lineMemoGen)
++		{
++			return false;
++		}
++		if (e.key == key)
++		{
++			blocked = e.blocked;
++			return true;
++		}
++	}
++}
++
++void Pathfinder::lineMemoStore(std::uint32_t key, bool blocked)
++{
++	if ((m_lineMemoCount + 1) * 2 > m_lineMemo.size())
++	{
++		// grow (power of two, at most half full); the current generation's entries move over
++		std::vector<LineMemoEntry> old;
++		old.swap(m_lineMemo);
++		m_lineMemo.assign(old.empty() ? 4096 : old.size() * 2, LineMemoEntry());
++		const std::uint32_t gen = m_lineMemoGen;
++		m_lineMemoCount = 0;
++		for (const LineMemoEntry &e : old)
++		{
++			if (e.gen == gen)
+ 			{
+-				return true;
++				lineMemoStore(e.key, e.blocked);
+ 			}
+ 		}
+-		return !validMovementPosition(li.move.mv, to);
+-	});
+-	return !blockedLine;
++	}
++	const size_t mask = m_lineMemo.size() - 1;
++	for (size_t i = lineMemoSlot(key, mask);; i = (i + 1) & mask)
++	{
++		LineMemoEntry &e = m_lineMemo[i];
++		if (e.gen != m_lineMemoGen)
++		{
++			e.key = key;
++			e.gen = m_lineMemoGen;
++			e.blocked = blocked;
++			++m_lineMemoCount;
++			return;
++		}
++		if (e.key == key)
++		{
++			e.blocked = blocked;
++			return;
++		}
++	}
+ }
+ 
+ bool Pathfinder::isGroundLineClear(const Coord3D &a, const Coord3D &b)
+@@ -641,9 +781,9 @@ int Pathfinder::occupantCost(const PathfindObject *obj, const PathfindCell *pare
+ 					const float qx = SimMath::mulf32((SimMath::addf32((float)i, 0.5f)), 10.0f), qy = SimMath::mulf32((SimMath::addf32((float)j, 0.5f)), 10.0f);
+ 					if (selfT < 0.0f)
+ 					{
+-						selfT = obj->secondsToReach(qx, qy);
++						selfT = (m_memoActive && obj == m_memoObj) ? reachSeconds(*obj, m_memoSelfReach, qx, qy) : obj->secondsToReach(qx, qy);
+ 					}
+-					const float oT = o->secondsToReach(qx, qy);
++					const float oT = reachSeconds(*o, f->reach, qx, qy);
+ 					if (selfT > oT)
+ 					{
+ 						add = 4;
+@@ -947,6 +1087,7 @@ struct Pathfinder::SearchMemoScope
+ 		{
+ 			pf.m_memoSelf = pf.searcherFacts(obj);
+ 		}
++		pf.m_memoSelfReach = ReachMemo();
+ 	}
+ 	~SearchMemoScope()
+ 	{
+diff --git a/engine/src/GameLogic/AI/AIPathfindUnits.cpp b/engine/src/GameLogic/AI/AIPathfindUnits.cpp
+--- a/engine/src/GameLogic/AI/AIPathfindUnits.cpp
++++ b/engine/src/GameLogic/AI/AIPathfindUnits.cpp
+@@ -293,6 +293,7 @@ const Pathfinder::OccupantFacts *Pathfinder::occupantFacts(const PathfindObject
+ 		}
+ 	}
+ 	f->gen = m_memoGen;
++	f->reach = ReachMemo();
+ 	f->o = m_world ? m_world->findObjectByID(id) : nullptr;
+ 	if (!f->o)
+ 	{
+@@ -311,6 +312,27 @@ const Pathfinder::OccupantFacts *Pathfinder::occupantFacts(const PathfindObject
+ 	return f;
+ }
+ 
++// lane PATHPERF-2: secondsToReach from the memo's inputs. The speed is the costly part (Locomotor::getMaxSpeedForCondition reads the damage state, the
++// charge status and the crew), and nothing it reads changes during a search; the arithmetic is secondsToReach's own. With the shortcuts off every
++// answer is asked afresh (test_pathperf1_bench.cpp compares both ways)
++float Pathfinder::reachSeconds(const PathfindObject &o, ReachMemo &memo, float x, float y) const
++{
++	if (!m_searchShortcuts)
++	{
++		return o.secondsToReach(x, y);
++	}
++	if (memo.state == 0)
++	{
++		memo.state = o.reachInputs(memo.x, memo.y, memo.speed) ? 1 : 2;
++	}
++	if (memo.state == 2)
++	{
++		return o.secondsToReach(x, y);
++	}
++	const float dist = SimMath::length2d(SimMath::subf32(x, memo.x), SimMath::subf32(y, memo.y));
++	return memo.speed > 0.0f ? SimMath::divf32(dist, memo.speed) : 0.0f;
++}
++
+ // ---------------------------------------------------------------------------------------------------------
+ // checkForMovement (RW 0x6EB792 / 0x6EBAA0)
+ // ---------------------------------------------------------------------------------------------------------
+@@ -1382,6 +1404,14 @@ bool Pathfinder::adjustToPossibleDestination(PathfindObject &obj, const Pathfind
+ // ---------------------------------------------------------------------------------------------------------
+ // queue
+ // ---------------------------------------------------------------------------------------------------------
++void Pathfinder::setUberLimits(bool on)
++{
++	m_uberLimits = on;
++	const int len = on ? (int)kUberQueueLength : (int)PATHFIND_QUEUE_LEN;
++	m_queue1.setLength(len);
++	m_queue2.setLength(len);
++}
++
+ bool Pathfinder::queueForPath(PathfindObjectID id)
+ {
+ 	// TARGET RW 0x6ED0FB: a linear duplicate scan (a duplicate returns true), a full ring returns false
+@@ -1432,6 +1462,14 @@ void Pathfinder::processPathfindQueue(PathfindRequestHandler &handler)
+ 	setLogicalExtentFromTerrain();
+ 	m_cumulativeCellsAllocated = 0;
+ 	int budget = m_config.cellsPerFrame;
++	if (m_uberLimits)
++	{
++		budget *= kUberBudgetScale; // lane PATHPERF-4 (Uber only)
++		if (m_queue1.size() + m_queue2.size() > (size_t)kUberRushQueued && budget < (int)kUberRushBudget)
++		{
++			budget = kUberRushBudget; // studio: a rush is served at once (kUberRushQueued)
++		}
++	}
+ 	if (m_world && m_world->getFrame() < 25u)
+ 	{
+ 		budget *= 100;
+diff --git a/engine/src/GameLogic/AI/AIWorld.cpp b/engine/src/GameLogic/AI/AIWorld.cpp
+--- a/engine/src/GameLogic/AI/AIWorld.cpp
++++ b/engine/src/GameLogic/AI/AIWorld.cpp
+@@ -595,6 +595,17 @@ float ObjectPathfindAdapter::secondsToReach(float x, float y) const
+ 	return speed > 0.0f ? SimMath::divf32(dist, speed) : 0.0f;
+ }
+ 
++// lane PATHPERF-2: secondsToReach's position and speed (speed 0 without an AI or a locomotor: secondsToReach answers 0 then)
++bool ObjectPathfindAdapter::reachInputs(float &x, float &y, float &speed) const
++{
++	const Coord3D &p = *m_object->getPosition();
++	x = p.x;
++	y = p.y;
++	AIUpdateInterface *a = ai();
++	speed = (a && a->curLocomotor()) ? a->curLocomotorSpeed() : 0.0f;
++	return true;
++}
++
+ // RW 0x66288A (AI vtable +0x228): false (stationary) unless the unit follows a path with a special node
+ bool ObjectPathfindAdapter::isStationary() const
+ {
+@@ -785,7 +796,11 @@ void AIWorld::reportMovementFailure(const Object &obj, const std::string &text)
+ 
+ void AIWorld::noteStop(const char *stop)
+ {
+-	m_noted.insert(stop);
++	const std::string_view text(stop);
++	if (m_noted.find(text) == m_noted.end())
++	{
++		m_noted.emplace(text);
++	}
+ }
+ 
+ std::vector<std::string> AIWorld::allStops()
+@@ -858,6 +873,7 @@ void AIWorld::newMap(const PathfindTerrain &terrain)
+ 		}
+ 	}
+ 	m_pathfinder->newMap(terrain, &structures);
++	m_pathfinder->setUberLimits(m_logic.uber()); // lane PATHPERF-4
+ 	m_mapReady = m_pathfinder->isMapReady();
+ }
+ 
+@@ -1007,6 +1023,10 @@ void AIWorld::processPathfindQueue()
+ {
+ 	if (m_mapReady)
+ 	{
++		if (m_pathfinder->uberLimits() != m_logic.uber())
++		{
++			m_pathfinder->setUberLimits(m_logic.uber()); // lane PATHPERF-4: a profile set after the map
++		}
+ 		const size_t queued = m_pathfinder->queuedRequests() + m_pathfinder->queuedBlockedRepaths();
+ 		m_moveWorld->processQueues();
+ 		// diagnostics only (not logic state, not hashed): the cells one tick allocated and the deepest queue a tick found
+diff --git a/engine/src/GameLogic/AI/AIWorld.h b/engine/src/GameLogic/AI/AIWorld.h
+--- a/engine/src/GameLogic/AI/AIWorld.h
++++ b/engine/src/GameLogic/AI/AIWorld.h
+@@ -37,6 +37,7 @@
+ #include <memory>
+ #include <set>
+ #include <string>
++#include <string_view>
+ #include <vector>
+ 
+ class ArchiveFileSystem;
+@@ -101,6 +102,7 @@ public:
+ 	int aiPriority() const override;
+ 	bool hasLocomotor() const override;
+ 	float secondsToReach(float x, float y) const override;
++	bool reachInputs(float &x, float &y, float &speed) const override;
+ 	bool isStationary() const override;
+ 	bool footprintSkippedByStatus() const override;
+ 	bool ignoresAsTarget(const PathfindObject &other) const override;
+@@ -223,7 +225,7 @@ public:
+ 	void noteStop(const char *stop);
+ 	// the AICommandSink handler (production's commands to a produced object's AI)
+ 	bool executeCommand(Object &obj, const AICommand &command);
+-	const std::set<std::string> &noted() const { return m_noted; }
++	const std::set<std::string, std::less<>> &noted() const { return m_noted; }
+ 
+ private:
+ 	GameLogic &m_logic;
+@@ -235,7 +237,7 @@ private:
+ 	std::map<PathfindObjectID, AIUpdateInterface *> m_ais;
+ 	std::map<const ThingTemplate *, std::unique_ptr<ObjectMovementInfo>> m_info;
+ 	std::vector<std::string> m_errors;
+-	std::set<std::string> m_noted;
++	std::set<std::string, std::less<>> m_noted; // transparent: noteStop looks a text up without building a std::string (every AI update notes one)
+ 	std::map<std::string, unsigned> m_failures; // "template: text" -> count
+ 	bool m_mapReady = false;
+ 	bool m_attached = false;
+diff --git a/engine/src/GameLogic/Combat/TargetFinder.cpp b/engine/src/GameLogic/Combat/TargetFinder.cpp
+--- a/engine/src/GameLogic/Combat/TargetFinder.cpp
++++ b/engine/src/GameLogic/Combat/TargetFinder.cpp
+@@ -30,7 +30,10 @@ void TargetFinder::reset()
+ 
+ void TargetFinder::rebuild()
+ {
+-	m_cells.clear();
++	for (auto &cell : m_cells)
++	{
++		cell.second.clear();
++	}
+ 	m_count = 0;
+ 	for (Object *o = m_logic.getFirstObject(); o; o = o->getNextObject())
+ 	{
+@@ -39,7 +42,7 @@ void TargetFinder::rebuild()
+ 			continue;
+ 		}
+ 		const Coord3D &p = *o->getPosition();
+-		m_cells[{ cellOf(p.x), cellOf(p.y) }].push_back(o->getID());
++		m_cells[cellKey(cellOf(p.x), cellOf(p.y))].push_back(o->getID());
+ 		++m_count;
+ 	}
+ 	m_builtFrame = m_logic.getFrame();
+@@ -61,7 +64,7 @@ void TargetFinder::collectInRadius(const Coord3D &center, float radius, std::vec
+ 	{
+ 		for (int cy = y0; cy <= y1; ++cy)
+ 		{
+-			auto it = m_cells.find({ cx, cy });
++			auto it = m_cells.find(cellKey(cx, cy));
+ 			if (it == m_cells.end())
+ 			{
+ 				continue;
+@@ -99,6 +102,8 @@ Object *TargetFinder::findClosestEnemyNear(const Object &seeker, const Coord3D &
+ 	}
+ 	// the widest object may be `maxRadius` away at its centre and still have its edge in range: the box adds a margin
+ 	std::vector<Object *> near;
++	near.swap(m_near); // the kept storage (a nested query, if any, finds it taken and makes its own)
++	near.clear();
+ 	collectInRadius(center, SimMath::addf32(range, 80.0f), near);
+ 	Object *best = nullptr;
+ 	float bestD = 0.0f;
+@@ -142,5 +147,7 @@ Object *TargetFinder::findClosestEnemyNear(const Object &seeker, const Coord3D &
+ 			bestD = edge;
+ 		}
+ 	}
++	near.clear();
++	m_near.swap(near);
+ 	return best;
+ }
+diff --git a/engine/src/GameLogic/Combat/TargetFinder.h b/engine/src/GameLogic/Combat/TargetFinder.h
+--- a/engine/src/GameLogic/Combat/TargetFinder.h
++++ b/engine/src/GameLogic/Combat/TargetFinder.h
+@@ -11,8 +11,8 @@
+ #include "GameLogic/AI/AICommandSink.h"
+ #include "GameLogic/ObjectTypes.h"
+ 
+-#include <map>
+-#include <utility>
++#include <cstdint>
++#include <unordered_map>
+ #include <vector>
+ 
+ class GameLogic;
+@@ -47,5 +47,9 @@ private:
+ 	size_t m_builtCount = 0;
+ 	unsigned m_builtTransitions = 0; // GameLogic::containWorldTransitions at the build: a contain's rider leaving or entering the world (lane GARRISON-1) rebuilds
+ 	size_t m_count = 0;
+-	std::map<std::pair<int, int>, std::vector<ObjectID>> m_cells;
++	// cell (x, y) packed into a key -> its objects in list order. A rebuild empties the cells and keeps them with their storage (no allocation once the grid
++	// is warm; an empty cell answers like an absent one); queries visit cells by their own (x, y) loop, never in the map's order
++	std::unordered_map<std::uint64_t, std::vector<ObjectID>> m_cells;
++	std::vector<Object *> m_near; // findClosestEnemyNear's candidates, kept between calls for their storage
++	static std::uint64_t cellKey(int cx, int cy) { return ((std::uint64_t)(std::uint32_t)cx << 32) | (std::uint32_t)cy; }
+ };
+diff --git a/engine/src/GameLogic/Economy.cpp b/engine/src/GameLogic/Economy.cpp
+--- a/engine/src/GameLogic/Economy.cpp
++++ b/engine/src/GameLogic/Economy.cpp
+@@ -15,7 +15,9 @@
+ #include "GameLogic/ObjectTemplateInfo.h"
+ 
+ #include <stdexcept>
++#include <utility>
+ #include <variant>
++#include <vector>
+ 
+ namespace
+ {
+@@ -389,10 +391,40 @@ void Economy::removeUpgradeFromObjectsOfPlayer(const Player &player, const Upgra
+ 	}
+ }
+ 
++namespace
++{
++// mapworkshop (openbfme-perf.patch): ObjectFilterMatch::allows(filter, object, no other player) of the objects one player controls depends only on the object's
++// template (the side is the player's; with no other player a relationship rule refuses; the names, the equivalence and the KindOf are the template's), so a
++// scan over the player's objects asks the filter once per template. The filter resolves its names and equivalences through string lookups (findTemplate,
++// EquivalentTo, BuildVariations): the AI's special power checks made that a large part of a big battle's logic frame. Same answers, once each per scan
++struct FilterByTemplate
++{
++	GameLogic &logic;
++	const ObjectFilter &filter;
++	const Player &player;
++	std::vector<std::pair<const ThingTemplate *, bool>> seen;
++	bool allows(const Object &o)
++	{
++		const ThingTemplate *t = o.getTemplate();
++		for (const auto &s : seen)
++		{
++			if (s.first == t)
++			{
++				return s.second;
++			}
++		}
++		const bool r = ObjectFilterMatch::allows(logic, filter, t, &player, nullptr);
++		seen.emplace_back(t, r);
++		return r;
++	}
++};
++}
++
+ bool Economy::hasObjectMatching(const Player &player, const ObjectFilter &filter, bool completedOnly) const
+ {
+ 	// RW 0x6ABD0B -> 0x7A19AB -> 0x7A075A over the player's teams' members
+ 	const Bits &b = bits();
++	FilterByTemplate byTemplate{ m_logic, filter, player, {} };
+ 	for (const Object *o = m_logic.getFirstObject(); o; o = o->getNextObject())
+ 	{
+ 		if (o->getControllingPlayer() != &player)
+@@ -407,7 +439,7 @@ bool Economy::hasObjectMatching(const Player &player, const ObjectFilter &filter
+ 		{
+ 			continue; // retail tests the AWAITING_CONSTRUCTION / PARTIALLY_CONSTRUCTED model conditions: approximated by the construction statuses (S-253)
+ 		}
+-		if (ObjectFilterMatch::allows(m_logic, filter, *o, nullptr))
++		if (byTemplate.allows(*o))
+ 		{
+ 			return true;
+ 		}
+@@ -418,6 +450,7 @@ bool Economy::hasObjectMatching(const Player &player, const ObjectFilter &filter
+ int Economy::countOwnedObjectsAllowedBy(const Player &player, const ObjectFilter &filter) const
+ {
+ 	const Bits &b = bits();
++	FilterByTemplate byTemplate{ m_logic, filter, player, {} };
+ 	int n = 0;
+ 	for (const Object *o = m_logic.getFirstObject(); o; o = o->getNextObject())
+ 	{
+@@ -425,7 +458,7 @@ int Economy::countOwnedObjectsAllowedBy(const Player &player, const ObjectFilter
+ 		{
+ 			continue;
+ 		}
+-		if (ObjectFilterMatch::allows(m_logic, filter, *o, nullptr))
++		if (byTemplate.allows(*o))
+ 		{
+ 			++n;
+ 		}
+diff --git a/engine/src/GameLogic/GameLogic.h b/engine/src/GameLogic/GameLogic.h
+--- a/engine/src/GameLogic/GameLogic.h
++++ b/engine/src/GameLogic/GameLogic.h
+@@ -65,6 +65,7 @@
+ #include <memory>
+ #include <set>
+ #include <string>
++#include <string_view>
+ #include <utility>
+ #include <vector>
+ 
+@@ -355,12 +356,25 @@ public:
+ 	// problems nothing explains; each distinct text is kept once and reaches report().errors
+ 	void reportError(const std::string &text);
+ 	// lane BUILD-1: a rule met at runtime that is registered as a stop but not ported (a castle's PreBuiltList ...): each distinct text reaches report().stops once
+-	void noteStop(const std::string &text)
++	// (a view: the hot callers pass literals, and a noted text is found without building a std::string)
++	void noteStop(std::string_view text)
+ 	{
+-		m_notedStops.insert(text);
+-		++m_notedStopHits[text]; // lane QA-1: how often a game meets each stop (diagnostics, not simulation state)
++		if (m_notedStops.find(text) == m_notedStops.end())
++		{
++			m_notedStops.emplace(text);
++		}
++		// lane QA-1: how often a game meets each stop (diagnostics, not simulation state)
++		const auto hit = m_notedStopHits.find(text);
++		if (hit != m_notedStopHits.end())
++		{
++			++hit->second;
++		}
++		else
++		{
++			m_notedStopHits.emplace(std::string(text), 1u);
++		}
+ 	}
+-	const std::map<std::string, unsigned> &notedStopHits() const { return m_notedStopHits; }
++	const std::map<std::string, unsigned, std::less<>> &notedStopHits() const { return m_notedStopHits; }
+ 
+ 	// lane BACKLOG3 (S-2452): a radar event the logic's code makes for the client's radar. Retail calls TheRadar->createEvent (RW 0x6D98FA) from inside the
+ 	// logic frame (the scripts' radar actions RW 0x7BC221 / 0x7BC250 / 0x7C0B61, the dozer's finished building RW 0x88E125); here the logic records the event
+@@ -684,8 +698,8 @@ private:
+ 	std::unique_ptr<TerrainTrees> m_trees;               // lane SPELL-3
+ 	std::unique_ptr<ScriptEngine> m_scriptEngine;        // lane SCRIPT-1
+ 	CastleTemplateStore m_castleTemplates;
+-	std::set<std::string> m_notedStops;
+-	std::map<std::string, unsigned> m_notedStopHits;
++	std::set<std::string, std::less<>> m_notedStops;
++	std::map<std::string, unsigned, std::less<>> m_notedStopHits;
+ 	std::vector<RadarEventNotice> m_radarEventNotices; ///< lane BACKLOG3: oldest first, at most kRadarEventNotices
+ 	std::uint32_t m_radarEventSeq = 0;
+ 	ObjectClientHooks *m_clientHooks = nullptr;
+diff --git a/engine/src/GameLogic/Locomotor.h b/engine/src/GameLogic/Locomotor.h
+--- a/engine/src/GameLogic/Locomotor.h
++++ b/engine/src/GameLogic/Locomotor.h
+@@ -584,10 +584,12 @@ public:
+ 	// Acceptance-stop lines raised by the moves made so far (S-081, S-084); empty when none applied.
+ 	const std::vector<std::string> &unverified() const { return m_unverified; }
+ 	// The stops this component can raise at all (tests pin the exact text).
+-	static std::vector<std::string> allStops();
++	static const std::vector<std::string> &allStops();
+ 
+ private:
+ 	void noteStop(const char *line);
++	// allStops()[index], noted once: the movers raise these on every move, so the text is compared only the first time (a bit per index)
++	void noteStopOf(unsigned index);
+ 
+ 	const LocomotorTemplate *m_template;
+ 	float m_lookAheadMult = 1.0f;       // +0x20
+@@ -619,4 +621,5 @@ private:
+ 	float m_preferredHeightDamping = 1.0f;
+ 	int m_attackHeightState = 0;
+ 	std::vector<std::string> m_unverified;
++	unsigned m_notedStopBits = 0; // noteStopOf: the allStops() indices already in m_unverified
+ };
+diff --git a/engine/src/GameLogic/Module/EmotionModules.cpp b/engine/src/GameLogic/Module/EmotionModules.cpp
+--- a/engine/src/GameLogic/Module/EmotionModules.cpp
++++ b/engine/src/GameLogic/Module/EmotionModules.cpp
+@@ -611,8 +611,9 @@ UpdateSleepTime EmotionTrackerUpdate::update()
+ 		static const int kAirborne = statusBit("AIRBORNE_TARGET");
+ 		const ThingTemplate *gollum = nullptr;
+ 		bool gollumLooked = false;
+-		const std::vector<ObjectID> ids = logic.emotions().scaryOrHeroes();
+-		for (ObjectID id : ids)
++		const std::vector<ObjectID> &scaryOrHeroes = logic.emotions().scaryOrHeroes();
++		m_scanIds.assign(scaryOrHeroes.begin(), scaryOrHeroes.end()); // a copy, as before (the list may change under the scan), into kept storage
++		for (ObjectID id : m_scanIds)
+ 		{
+ 			Object *o = logic.findObjectByID(id);
+ 			if (!o || o->isDestroyed())
+diff --git a/engine/src/GameLogic/Module/EmotionModules.h b/engine/src/GameLogic/Module/EmotionModules.h
+--- a/engine/src/GameLogic/Module/EmotionModules.h
++++ b/engine/src/GameLogic/Module/EmotionModules.h
+@@ -121,6 +121,7 @@ private:
+ 	ObjectID m_forcedSource = INVALID_ID;                       ///< + 0xB8
+ 	UnsignedInt m_nextHeroCheer = 0;                            ///< + 0xBC
+ 	bool m_heroFlag = false;                                    ///< + 0xC0
++	std::vector<ObjectID> m_scanIds; ///< update's copy of the scary / hero list, kept for its storage (not state: refilled before each scan)
+ };
+ 
+ class RadiateFearUpdateModuleData : public UpgradeModuleData
+diff --git a/engine/src/GameLogic/Object/LocomotorMove.cpp b/engine/src/GameLogic/Object/LocomotorMove.cpp
+--- a/engine/src/GameLogic/Object/LocomotorMove.cpp
++++ b/engine/src/GameLogic/Object/LocomotorMove.cpp
+@@ -165,9 +165,9 @@ Locomotor::Locomotor(const LocomotorTemplate *tmpl)
+ 	}
+ }
+ 
+-std::vector<std::string> Locomotor::allStops()
++const std::vector<std::string> &Locomotor::allStops()
+ {
+-	return {
++	static const std::vector<std::string> stops = {
+ 		"S-081: locomotor numeric parity unproven: the movers mix x87 and SSE (moveForward RW 0x5E586F) and use the CRT / x87 sin, cos and atan2; "
+ 		"operation order and PC24 precision are reproduced through NumericState, the trigonometry is NumericState's deterministic double-double "
+ 		"(lane WIN-1: the same bits on every OS), not the retail CRT / x87 results.",
+@@ -178,6 +178,7 @@ std::vector<std::string> Locomotor::allStops()
+ 		"constant-calling result, the transform write (RW 0x70BA76) and the WINGS hold (RW 0x5E74C1) are not run; an idle unit's height and sleep follow "
+ 		"the movers' last frame."
+ 	};
++	return stops;
+ }
+ 
+ void Locomotor::noteStop(const char *line)
+@@ -192,6 +193,16 @@ void Locomotor::noteStop(const char *line)
+ 	m_unverified.push_back(line);
+ }
+ 
++void Locomotor::noteStopOf(unsigned index)
++{
++	if (m_notedStopBits & (1u << index))
++	{
++		return;
++	}
++	m_notedStopBits |= 1u << index;
++	noteStop(allStops()[index].c_str());
++}
++
+ // ---- getters ---------------------------------------------------------------------------------------------------
+ bool Locomotor::isCharging(const LocomotorHost &host) const
+ {
+@@ -301,7 +312,7 @@ void Locomotor::moveForward(LocomotorHost &host, const Coord3D &goal, float onPa
+ {
+ 	const LocomotorTemplate &t = *m_template;
+ 	const Bits &b = bits();
+-	noteStop(allStops()[0].c_str()); // S-081 applies to every move
++	noteStopOf(0); // S-081 applies to every move
+ 
+ 	const float maxSpeed = getMaxSpeedForCondition(host); // [ebp-0xc]
+ 	if (desiredSpeed > maxSpeed)
+@@ -516,7 +527,7 @@ void Locomotor::rotateTowardsPosition(LocomotorHost &host, const Coord3D &goal,
+ 	const Bits &b = bits();
+ 	if (t.m_appearance == LOCO_GIANT_BIRD)
+ 	{
+-		noteStop(allStops()[1].c_str());
++		noteStopOf(1);
+ 		throw std::logic_error("S-084: rotateTowardsPosition for GIANT_BIRD locomotors is not ported");
+ 	}
+ 
+@@ -937,7 +948,7 @@ void Locomotor::moveTowardsPositionHorde(LocomotorHost &host, const Coord3D &goa
+ 		const int node = path->currentSpecialNodeType();
+ 		if (node == 2 || node == 3 || node == 7 || node == 8)
+ 		{
+-			noteStop(allStops()[1].c_str());
++			noteStopOf(1);
+ 			throw std::logic_error("S-084: HORDE mover formation path nodes (types 2, 3, 7, 8) are not ported");
+ 		}
+ 		const LocomotorPathPoint ahead = path->computePointAhead(m_speed); // RW 0x766173
+@@ -1234,7 +1245,7 @@ void Locomotor::handleBehaviorZ(LocomotorHost &host, const Coord3D &goal)
+ 		// the movers left in the matrix stays: no ground snap
+ 		Coord3D p{ m_matrix.m[0][3], m_matrix.m[1][3], m_matrix.m[2][3] }; // RW 0x5E3A5A
+ 		host.setPendingPosition(p);
+-		noteStop(allStops()[1].c_str());
++		noteStopOf(1);
+ 		return;
+ 	}
+ 	if (zAxis == Z_SEA_LEVEL)
+@@ -1319,7 +1330,7 @@ void Locomotor::handleBehaviorZ(LocomotorHost &host, const Coord3D &goal)
+ 				}
+ 				if (host.hasStealthModule())
+ 				{
+-					noteStop(allStops()[1].c_str()); // RW 0x5E7C0A: the stealth reveal of a climbing object is not ported
++					noteStopOf(1); // RW 0x5E7C0A: the stealth reveal of a climbing object is not ported
+ 				}
+ 			}
+ 			else if (host.testModelCondition(climbing))
+@@ -1334,7 +1345,7 @@ void Locomotor::handleBehaviorZ(LocomotorHost &host, const Coord3D &goal)
+ 	}
+ 	if (zAxis != Z_NO_Z_MOTIVE_FORCE)
+ 	{
+-		noteStop(allStops()[1].c_str());
++		noteStopOf(1);
+ 		throw std::logic_error("S-084: ZAxisBehavior other than NO_Z_MOTIVE_FORCE, FLOATING_Z, SEA_LEVEL, SURFACE_RELATIVE_HEIGHT, ABSOLUTE_HEIGHT and SCALING_WALLS is not ported");
+ 	}
+ 	Coord3D pos{ m_matrix.m[0][3], m_matrix.m[1][3], m_matrix.m[2][3] }; // RW 0x5E3A5A
+@@ -1342,7 +1353,7 @@ void Locomotor::handleBehaviorZ(LocomotorHost &host, const Coord3D &goal)
+ 	{
+ 		// RW 0x5E774A-0x5E7816: z comes from the terrain (RW 0x5E5785 on the ground layer, else the terrain query);
+ 		// the layer / water / falling special cases are not ported (S-084)
+-		noteStop(allStops()[1].c_str());
++		noteStopOf(1);
+ 		pos.z = host.groundHeightAt(pos.x, pos.y);
+ 		m_matrix.m[2][3] = pos.z;
+ 	}
+@@ -1485,7 +1496,7 @@ bool Locomotor::locomotorMaintainCurrentPosition(LocomotorHost &host)
+ 		m_speed = 0.0f;
+ 		break;
+ 	case LOCO_WINGS:
+-		noteStop(allStops()[2].c_str()); // RW 0x5E74C1, not ported
++		noteStopOf(2); // RW 0x5E74C1, not ported
+ 		break;
+ 	default:
+ 		m_speed = 0.0f;
+@@ -1495,7 +1506,7 @@ bool Locomotor::locomotorMaintainCurrentPosition(LocomotorHost &host)
+ 		}
+ 		break;
+ 	}
+-	noteStop(allStops()[2].c_str()); // the tail (RW 0x5E76AC on the held position, RW 0x70BA76) is not run
++	noteStopOf(2); // the tail (RW 0x5E76AC on the held position, RW 0x70BA76) is not run
+ 	return result;
+ }
+ 
+@@ -1527,7 +1538,7 @@ void Locomotor::locomotorMoveTowardsPosition(LocomotorHost &host, const Coord3D
+ 	}
+ 	if (t.m_scalesWalls)
+ 	{
+-		noteStop(allStops()[1].c_str()); // the wall-scaling look-ahead (RW 0x5E8956-0x5E8FF8) is not ported
++		noteStopOf(1); // the wall-scaling look-ahead (RW 0x5E8956-0x5E8FF8) is not ported
+ 	}
+ 	switch (t.m_appearance)
+ 	{
+diff --git a/engine/src/GameLogic/Object/Object.cpp b/engine/src/GameLogic/Object/Object.cpp
+--- a/engine/src/GameLogic/Object/Object.cpp
++++ b/engine/src/GameLogic/Object/Object.cpp
+@@ -1078,7 +1078,7 @@ void Object::clearDisabled(unsigned type)
+ 	checkDisabledStatus(m_logic.getFrame()); // RW 0x69261D
+ }
+ 
+-BehaviorModule *Object::findModule(const std::string &className) const
++BehaviorModule *Object::findModule(std::string_view className) const
+ {
+ 	for (const std::unique_ptr<BehaviorModule> &m : m_modules)
+ 	{
+@@ -1955,18 +1955,22 @@ void Object::setStatusAcrossHorde(unsigned bit, bool set)
+ 
+ Object *Object::getHordeObject(bool alsoProducer) const
+ {
+-	if (isKindOfName("HORDE"))
++	// mapworkshop (openbfme-perf.patch): the HORDE bit looked up once (isKindOfName searched the KindOf names on each of up to three tests; the client asks this
++	// for every unit in a big battle). The name table is the engine's, fixed for the process
++	static const int kHorde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
++	const auto isHorde = [](const Object &o) { return kHorde >= 0 && o.isKindOf((unsigned)kHorde); };
++	if (isHorde(*this))
+ 	{
+ 		return const_cast<Object *>(this);
+ 	}
+-	if (m_containedBy && m_containedBy->isKindOfName("HORDE"))
++	if (m_containedBy && isHorde(*m_containedBy))
+ 	{
+ 		return m_containedBy;
+ 	}
+ 	if (alsoProducer)
+ 	{
+ 		Object *producer = m_logic.findObjectByID(m_producerID);
+-		if (producer && producer->isKindOfName("HORDE"))
++		if (producer && isHorde(*producer))
+ 		{
+ 			return producer;
+ 		}
+diff --git a/engine/src/GameLogic/Object/Object.h b/engine/src/GameLogic/Object/Object.h
+--- a/engine/src/GameLogic/Object/Object.h
++++ b/engine/src/GameLogic/Object/Object.h
+@@ -58,6 +58,7 @@
+ #include <memory>
+ #include <set>
+ #include <string>
++#include <string_view>
+ #include <vector>
+ 
+ class ExperienceTracker;
+@@ -359,7 +360,7 @@ public:
+ 	BodyModuleInterface *getBodyModule() const { return m_body; }
+ 	ContainModuleInterface *getContain() const { return m_contain; }
+ 	AIUpdateInterface *getAIUpdateInterface() const { return m_ai; }
+-	BehaviorModule *findModule(const std::string &className) const; // the first module of this class (helpers included), or null
++	BehaviorModule *findModule(std::string_view className) const; // the first module of this class (helpers included), or null (a view: callers pass literals)
+ 	// RW 0x68BB14: the first module with an exit interface (array order); lane PROD-1
+ 	ExitInterface *getObjectExitInterface() const;
+ 	// RW 0x68C327: the ProductionUpdate's queue interface, or null
+diff --git a/engine/src/GameLogic/SkirmishAI/AIBaseBuilder.cpp b/engine/src/GameLogic/SkirmishAI/AIBaseBuilder.cpp
+--- a/engine/src/GameLogic/SkirmishAI/AIBaseBuilder.cpp
++++ b/engine/src/GameLogic/SkirmishAI/AIBaseBuilder.cpp
+@@ -413,22 +413,30 @@ ObjectID pickDozer(GameLogic &logic, const AIBuildState &s, const Coord3D &pos)
+ // the enemy count of RW 0x97DFCD and RW 0x9A1FA4 (the same four partition filters, range 300 around `site`)
+ int enemiesNear(GameLogic &logic, const Player &player, const Coord3D &site)
+ {
++	// mapworkshop (openbfme-perf.patch): the KindOf bits looked up once (isKindOfName searched the names for every object, five times), and the range tested
++	// first: every test here is pure, so their order does not change the count; the AI asks this for every build request and walked every object
++	static const int kGollum = KindOfTokens::indexOf("NEUTRALGOLLUM"), kCanAttack = KindOfTokens::indexOf("CAN_ATTACK"),
++					 kStructure = KindOfTokens::indexOf("STRUCTURE"), kHero = KindOfTokens::indexOf("HERO"),
++					 kSupport = KindOfTokens::indexOf("SUPPORT");
++	const auto kind = [](const Object &o, int bit) { return bit >= 0 && o.isKindOf((unsigned)bit); };
++	const float range2 = SimMath::mulf32(kEnemyScanRadius, kEnemyScanRadius);
+ 	int enemies = 0;
+ 	for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+ 	{
++		const float dx = SimMath::subf32(o->getPosition()->x, site.x), dy = SimMath::subf32(o->getPosition()->y, site.y);
++		if (!(SimMath::addf32(SimMath::mulf32(dx, dx), SimMath::mulf32(dy, dy)) <= range2))
++		{
++			continue;
++		}
+ 		// the four partition filters of RW 0x97DFCD: accept KindOf any of CAN_ATTACK | STRUCTURE | HERO | SUPPORT (RW 0xC309B4 -> 0x661359), reject
+ 		// NEUTRALGOLLUM (RW 0xC110A4), the AI's player ENEMIES with the object's team (RW 0xC1676C, mask 4), alive
+ 		// (object + 0x458 bit 0 clear, RW 0xC10E20); range 300 from the centre in 2D (partition vslot 0x34, mode 0)
+-		if (o->isEffectivelyDead() || !o->isInWorld() || !isEnemyOf(player, *o) || o->isKindOfName("NEUTRALGOLLUM") ||
+-			!(o->isKindOfName("CAN_ATTACK") || o->isKindOfName("STRUCTURE") || o->isKindOfName("HERO") || o->isKindOfName("SUPPORT")))
++		if (o->isEffectivelyDead() || !o->isInWorld() || !isEnemyOf(player, *o) || kind(*o, kGollum) ||
++			!(kind(*o, kCanAttack) || kind(*o, kStructure) || kind(*o, kHero) || kind(*o, kSupport)))
+ 		{
+ 			continue; // lane GARRISON-1: a contain's rider out of the world (RW 0x68C18F) is not in the partition
+ 		}
+-		const float dx = SimMath::subf32(o->getPosition()->x, site.x), dy = SimMath::subf32(o->getPosition()->y, site.y);
+-		if (SimMath::addf32(SimMath::mulf32(dx, dx), SimMath::mulf32(dy, dy)) <= SimMath::mulf32(kEnemyScanRadius, kEnemyScanRadius))
+-		{
+-			++enemies;
+-		}
++		++enemies;
+ 	}
+ 	return enemies;
+ }
+diff --git a/engine/src/GameLogic/SkirmishAI/AITacticalAI.cpp b/engine/src/GameLogic/SkirmishAI/AITacticalAI.cpp
+--- a/engine/src/GameLogic/SkirmishAI/AITacticalAI.cpp
++++ b/engine/src/GameLogic/SkirmishAI/AITacticalAI.cpp
+@@ -2152,6 +2152,10 @@ bool recruitable(GameLogic &logic, const AIBrainState &b, const AITacticTeam &te
+ 	{
+ 		return false;
+ 	}
++	if (!o.getName().empty())
++	{
++		return false; // studio (openbfme-perf.patch): a unit the map's scripts name (objectName, CREATE_NAMED_*) is the scripts', not the AI's
++	}
+ 	if (!team.requiredKinds.empty() && !anyKind(o, team.requiredKinds))
+ 	{
+ 		return false;
+@@ -2295,6 +2299,10 @@ void dispatchIdleUnits(GameLogic &logic, AISkirmishPlayer &ai, const std::vector
+ 		{
+ 			continue;
+ 		}
++		if (!o->getName().empty())
++		{
++			continue; // studio (openbfme-perf.patch): a unit the map's scripts name is the scripts' (recruitable)
++		}
+ 		if ((leavingFactory >= 0 && o->testStatus((unsigned)leavingFactory)) || b.dispatched.count(id) != 0)
+ 		{
+ 			continue;
+diff --git a/engine/src/GameLogic/System/ShroudManager.cpp b/engine/src/GameLogic/System/ShroudManager.cpp
+--- a/engine/src/GameLogic/System/ShroudManager.cpp
++++ b/engine/src/GameLogic/System/ShroudManager.cpp
+@@ -16,6 +16,7 @@
+ #include "GameLogic/Object/Object.h"
+ #include "GameLogic/Object/ObjectGeometry.h"
+ #include "GameLogic/SimMath.h"
++#include "Common/JobSystem.h"
+ 
+ #include <algorithm>
+ #include <stdexcept>
+@@ -1074,16 +1075,16 @@ void ShroudManager::clearCoverage(Record &r)
+ }
+ 
+ // the cells the object's geometry covers (RW 0xB4EB70 sphere / cylinder, RW 0xB4E660 box, RW 0xB4ECA0 small geometry)
+-void ShroudManager::cover(Record &r, const Object &obj, const TemplateVision &tv)
++void ShroudManager::coverCells(const Object &obj, const TemplateVision &tv, std::vector<int> &cells) const
+ {
+-	const std::uint32_t slot = m_slotById[r.id] - 1;
++	// (mapworkshop openbfme-perf.patch: the cells only, in their order and each once, as cover added them to the record's empty list; applyRecord writes them)
++	cells.clear();
+ 	auto addCell = [&](int index) {
+-		if (std::find(r.covered.begin(), r.covered.end(), index) != r.covered.end())
++		if (std::find(cells.begin(), cells.end(), index) != cells.end())
+ 		{
+ 			return;
+ 		}
+-		r.covered.push_back(index);
+-		m_cells[(size_t)index].coveredBy.push_back(slot);
++		cells.push_back(index);
+ 	};
+ 	const Coord3D &pos = *obj.getPosition();
+ 	ObjectGeometry::Shape g = tv.shape;
+@@ -1211,35 +1212,69 @@ void ShroudManager::cover(Record &r, const Object &obj, const TemplateVision &tv
+ // RW 0xB4EF50
+ void ShroudManager::processRecord(Record &r)
+ {
+-	Object *obj = m_logic.findObjectByID(r.id);
+-	if (!obj)
++	Prepared p;
++	prepareRecord(r, p);
++	applyRecord(r, p);
++}
++
++void ShroudManager::prepareRecord(Record &r, Prepared &p)
++{
++	// (mapworkshop openbfme-perf.patch) the reading half of RW 0xB4EF50: the record and its object only; may run on the logic job pool
++	p.obj = m_logic.findObjectByID(r.id);
++	if (!p.obj)
+ 	{
+ 		return;
+ 	}
+-	clearCoverage(r);
+ 	// the template is read once per processing (RW reads its fields directly: always the current values)
+-	const TemplateVision tv = templateVision(*obj->getTemplate()->getFinalOverride());
+-	cover(r, *obj, tv);
+-	const Coord3D &pos = *obj->getPosition();
+-	const int cx = SimMath::floorToInt(SimMath::pc24Mul(SimMath::pc24Sub(pos.x, m_loX), m_cellSizeInv));
+-	const int cy = SimMath::floorToInt(SimMath::pc24Mul(SimMath::pc24Sub(pos.y, m_loY), m_cellSizeInv));
+-	const float facing = obj->getOrientation();
+-	if (cx == r.lookX && cy == r.lookY && r.radii.forward >= 0 && (r.radii.forward != r.radii.side || r.radii.forward != r.radii.rear) && facing != r.facing)
++	p.tv = templateVision(*p.obj->getTemplate()->getFinalOverride());
++	coverCells(*p.obj, p.tv, p.cells);
++	const Coord3D &pos = *p.obj->getPosition();
++	p.cx = SimMath::floorToInt(SimMath::pc24Mul(SimMath::pc24Sub(pos.x, m_loX), m_cellSizeInv));
++	p.cy = SimMath::floorToInt(SimMath::pc24Mul(SimMath::pc24Sub(pos.y, m_loY), m_cellSizeInv));
++	p.facing = p.obj->getOrientation();
++	p.force = r.force;
++	if (p.cx == r.lookX && p.cy == r.lookY && r.radii.forward >= 0 && (r.radii.forward != r.radii.side || r.radii.forward != r.radii.rear) && p.facing != r.facing)
++	{
++		p.force = true;
++	}
++	p.look = p.cx != r.lookX || p.cy != r.lookY || p.force;
++	if (p.look)
++	{
++		// the look reads the object, its owner's alliances and the terrain (and refreshes this record's ground reference), never the cells: preparing it before
++		// the record's coverage and unlook change gives the values the serial order gave
++		p.in = LookInputs();
++		p.in.mask = r.mask; // the object writes the mask only when it looks (RW 0x694A45)
++		if (m_source.look)
++		{
++			m_source.look(*p.obj, p.tv, p.in);
++		}
++	}
++}
++
++void ShroudManager::applyRecord(Record &r, Prepared &p)
++{
++	// (mapworkshop openbfme-perf.patch) the writing half of RW 0xB4EF50, in the dirty list's order
++	if (!p.obj)
+ 	{
+-		r.force = true;
++		return;
+ 	}
+-	if (cx != r.lookX || cy != r.lookY || r.force)
++	clearCoverage(r);
++	const std::uint32_t slot = m_slotById[r.id] - 1;
++	for (int index : p.cells)
++	{
++		r.covered.push_back(index);
++		m_cells[(size_t)index].coveredBy.push_back(slot);
++	}
++	const int cx = p.cx, cy = p.cy;
++	const float facing = p.facing;
++	r.force = p.force;
++	if (p.look)
+ 	{
+ 		if (r.radii.forward >= 0)
+ 		{
+ 			queueUnlook(r);
+ 		}
+-		LookInputs in;
+-		in.mask = r.mask; // the object writes the mask only when it looks (RW 0x694A45)
+-		if (m_source.look)
+-		{
+-			m_source.look(*obj, tv, in);
+-		}
++		const LookInputs &in = p.in;
+ 		r.mask = in.mask;
+ 		r.facing = facing;
+ 		const float ranges[3] = { in.forward, in.side, in.rear };
+@@ -1265,6 +1300,34 @@ void ShroudManager::update()
+ {
+ 	// RW 0xB51970
+ 	++m_counter;
++	// mapworkshop (openbfme-perf.patch): a long dirty list (a moving army) is prepared on the logic job pool, each record by one chunk (prepareRecord reads only
++	// the record and its object), then applied here in the list's order, the head first, exactly as the loop below takes them. Should the list change under
++	// the applies (no apply queues a record today), the loop below takes over from the first record that is not where the order expects it
++	constexpr size_t kParallelRecords = 32;
++	if (m_dirty.size() >= kParallelRecords)
++	{
++		m_preparedOrder.assign(m_dirty.rbegin(), m_dirty.rend()); // the processing order: the back (the head) first
++		const size_t n = m_preparedOrder.size();
++		if (m_prepared.size() < n)
++		{
++			m_prepared.resize(n);
++		}
++		JobSystem::logic().parallelFor(n, 16, [this](size_t, size_t begin, size_t end) {
++			for (size_t i = begin; i < end; ++i)
++			{
++				Prepared &p = m_prepared[i];
++				p = Prepared();
++				prepareRecord(m_records[m_preparedOrder[i]], p);
++			}
++		});
++		for (size_t i = 0; i < n && !m_dirty.empty() && m_dirty.back() == m_preparedOrder[i]; ++i)
++		{
++			m_dirty.pop_back();
++			Record &r = m_records[m_preparedOrder[i]];
++			r.dirty = false;
++			applyRecord(r, m_prepared[i]);
++		}
++	}
+ 	while (!m_dirty.empty())
+ 	{
+ 		const std::uint32_t slot = m_dirty.back(); // the head of RW's prepend list
+diff --git a/engine/src/GameLogic/System/ShroudManager.h b/engine/src/GameLogic/System/ShroudManager.h
+--- a/engine/src/GameLogic/System/ShroudManager.h
++++ b/engine/src/GameLogic/System/ShroudManager.h
+@@ -262,7 +262,26 @@ private:
+ 	void processPending(bool considerTime); ///< RW 0xB51690
+ 	void processRecord(Record &r);          ///< RW 0xB4EF50
+ 	void clearCoverage(Record &r);          ///< RW 0xB4E620
+-	void cover(Record &r, const Object &obj, const TemplateVision &tv);
++	// mapworkshop (openbfme-perf.patch): RW 0xB4EF50 in two halves, so the dirty list's records can be prepared on the logic job pool (JobSystem.h). prepare
++	// reads only the record and its object (the template's vision, the covered cells, the look's inputs: none reads the cell grid or another record; the look
++	// may refresh the record's own ground reference); apply does everything that writes the grid and the record, in the dirty list's order. processRecord is
++	// prepare then apply, on one thread
++	struct Prepared
++	{
++		Object *obj = nullptr;
++		TemplateVision tv;
++		std::vector<int> cells;  ///< cover's cells, in its order, each once
++		int cx = 0, cy = 0;
++		float facing = 0.0f;
++		bool force = false;      ///< r.force after the facing test
++		bool look = false;       ///< the record looks again (in holds the inputs)
++		LookInputs in;
++	};
++	void prepareRecord(Record &r, Prepared &p);
++	void applyRecord(Record &r, Prepared &p);
++	void coverCells(const Object &obj, const TemplateVision &tv, std::vector<int> &cells) const; ///< cover's cells, without writing anything
++	std::vector<Prepared> m_prepared;       ///< update's prepared records (kept for their storage)
++	std::vector<std::uint32_t> m_preparedOrder; ///< the dirty list in processing order (the slots m_prepared belongs to)
+ 	void removeLookOf(Record &r);           ///< RW 0xB4E100
+ 	void evaluate(Record &r, int player, const Object *obj);
+ 	ObjectShroudStatus computeStatus(const Record &r, int player, const Object *obj, int &seen) const;
+diff --git a/engine/src/GodotDevice/GodotGameWorld.cpp b/engine/src/GodotDevice/GodotGameWorld.cpp
+--- a/engine/src/GodotDevice/GodotGameWorld.cpp
++++ b/engine/src/GodotDevice/GodotGameWorld.cpp
+@@ -3840,11 +3840,26 @@ Dictionary GameWorld::net_status() const
+ 	NetGameSession &s = *m_netSession;
+ 	r["frame"] = (int64_t)m_game->frame();
+ 	// lane RENDERWAIT-1: game.gd's overlay asks every render frame: the state hash is computed only where the logic is held (the client window, an idle
+-	// worker), else the last one is shown again; "hash_frame" is the logic frame it belongs to (never a wait for the worker)
+-	if (m_game->logicHeld())
++	// worker), else the last one is shown again; "hash_frame" is the logic frame it belongs to (never a wait for the worker).
++	// mapworkshop (openbfme-perf.patch): the whole state hash costs tens of ms in a big battle, and every held render frame took it again, also of a
++	// frame already hashed: two or three render frames after each logic frame stalled, and the window they held made the worker's next frame late. The
++	// worker's own hash of the published frame is taken when it made one (a recorded game); else the render thread hashes at most every
++	// kNetHashFrames logic frames (game.gd prints it every 50). Display only: the CRC exchange of the lockstep is the driver's, on the worker
++	constexpr UnsignedInt kNetHashFrames = 50;
++	const std::shared_ptr<const LogicSnapshot> published = m_game->latestSnapshot();
++	if (published && published->hashed)
+ 	{
+-		m_netHashFrame = m_game->logic().getFrame();
+-		m_netHash = m_game->logic().computeStateHash();
++		m_netHashFrame = published->frame;
++		m_netHash = published->stateHash;
++	}
++	else if (m_game->logicHeld())
++	{
++		const UnsignedInt frame = m_game->logic().getFrame();
++		if (m_netHashFrame == 0 || frame < m_netHashFrame || frame >= m_netHashFrame + kNetHashFrames)
++		{
++			m_netHashFrame = frame;
++			m_netHash = m_game->logic().computeStateHash();
++		}
+ 	}
+ 	r["hash"] = (int64_t)m_netHash;
+ 	r["hash_frame"] = (int64_t)m_netHashFrame;
+@@ -4710,6 +4725,12 @@ void GameWorld::refresh_shroud(bool force)
+ 	{
+ 		return;
+ 	}
++	// mapworkshop (openbfme-perf.patch): not drawn (--no-shroud: the shaders' shroud_enabled is false and never read the texture), nothing to rebuild;
++	// set_shroud_drawn rebuilds it (force) when the shroud is drawn again
++	if (!m_shroudDrawn && !force)
++	{
++		return;
++	}
+ 	const bool changed = view->version != m_shroudVersionShown || view != m_shroudViewShown;
+ 	if (!changed && !force)
+ 	{
+@@ -4743,9 +4764,11 @@ void GameWorld::refresh_shroud(bool force)
+ 		}
+ 	});
+ 	Ref<Image> img = Image::create_from_data(tw, th, false, Image::FORMAT_L8, bytes);
++	bool newTexture = false;
+ 	if (m_shroudTexture.is_null() || m_shroudTexture->get_width() != tw || m_shroudTexture->get_height() != th)
+ 	{
+ 		m_shroudTexture = ImageTexture::create_from_image(img);
++		newTexture = true;
+ 	}
+ 	else
+ 	{
+@@ -4761,6 +4784,20 @@ void GameWorld::refresh_shroud(bool force)
+ 	const Vector2 origin(SimMath::subf32(sm.originX, sm.cellSize), SimMath::subf32(sm.originY, sm.cellSize));
+ 	const Vector2 extent(SimMath::mulf32(sm.cellSize, (float)tw), SimMath::mulf32(sm.cellSize, (float)th)); // the audited file's float rule (client values)
+ 	const Color color(vs.shroudRed, vs.shroudGreen, vs.shroudBlue);
++	// mapworkshop (openbfme-perf.patch): the materials keep what they were given and the texture above is updated in place, so the terrain's materials are
++	// visited only when a parameter's value changes (a new texture, the grid, the colour, shroud_enabled) or on force (the load, set_shroud_drawn). Walking
++	// the tree and setting five parameters on every material after each change of the shroud cost about 4 ms per logic frame in a big battle. The terrain's
++	// materials are made once, by the load's build_map
++	if (!force && !newTexture && m_shroudParamsSet && origin == m_shroudParamOrigin && extent == m_shroudParamExtent && color == m_shroudParamColor &&
++		m_shroudDrawn == m_shroudParamEnabled)
++	{
++		return;
++	}
++	m_shroudParamsSet = true;
++	m_shroudParamOrigin = origin;
++	m_shroudParamExtent = extent;
++	m_shroudParamColor = color;
++	m_shroudParamEnabled = m_shroudDrawn;
+ 	std::vector<Node *> stack{ terrain };
+ 	while (!stack.empty())
+ 	{
+diff --git a/engine/src/GodotDevice/GodotGameWorld.h b/engine/src/GodotDevice/GodotGameWorld.h
+--- a/engine/src/GodotDevice/GodotGameWorld.h
++++ b/engine/src/GodotDevice/GodotGameWorld.h
+@@ -590,6 +590,11 @@ private:
+ 	void refresh_shroud(bool force);
+ 	Ref<godot::ImageTexture> m_shroudTexture;
+ 	bool m_shroudDrawn = true;
++	// mapworkshop (openbfme-perf.patch): the shroud parameters the terrain's materials were last given (refresh_shroud visits them only when one changes)
++	bool m_shroudParamsSet = false;
++	bool m_shroudParamEnabled = false;
++	Vector2 m_shroudParamOrigin, m_shroudParamExtent;
++	Color m_shroudParamColor;
+ 	void refresh_streaks(bool record = true); ///< RENDER-1: W3DStreakDraw trails of the live drawables (S-391)
+ 	void remove_view(uint32_t drawableId);
+ 
+diff --git a/godot/scripts/game.gd b/godot/scripts/game.gd
+--- a/godot/scripts/game.gd
++++ b/godot/scripts/game.gd
+@@ -4149,6 +4149,7 @@ func _on_online_started(start_json: String) -> void:
+ func _net_open() -> void:
+ 	var r: Dictionary
+ 	if _net_host > 0:
++		_sync_simulation_profile() # studio: the hosted game runs the player's simulation profile (Options.ini OpenBFMEUberPerformance)
+ 		var slots: Array = []
+ 		var i := 0
+ 		for spec in _net_slots.split(";"):
+@@ -4160,6 +4161,8 @@ func _net_open() -> void:
+ 		while slots.size() < 8:
+ 			slots.append({"state": 1, "name": "", "faction": "", "color": -1, "start_pos": -1, "team": -1, "player_template": -1}) # SLOT_CLOSED
+ 		var message := {"mode": "skirmish", "map": _map_key, "map_crc": 0, "map_size": 0, "seed": _seed if _seed != 0 else Time.get_ticks_msec(), "starting_cash": 1500, "slots": slots}
++		if _world.simulation_profile() == "uber":
++			message["simulation_profile"] = 1 # studio: the lobby's game carries it (absent: Faithful), as the lobby's identity does
+ 		r = _world.net_host(_net_host, message, _net_run_ahead, _net_crc)
+ 	else:
+ 		r = _world.net_join(_net_join, _net_name)

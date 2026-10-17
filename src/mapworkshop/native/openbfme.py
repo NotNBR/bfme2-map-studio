@@ -16,6 +16,25 @@ script engine hands MOVE_CAMERA_BY_ANIMATION, OPTIONS_SET_DRAWICON_UI_MODE
 and SET_CAMERA_CLIP_DEPTH_MULTIPLIER to the client, GameWorld gives the map's
 camera animations to the scripts, and a skirmish or LAN game presents its
 map's script requests (campaign_cine.gd) as a campaign mission does.
+openbfme-perf.patch makes big battles smoother without changing what the
+logic computes (the state hash stays the same). GameWorld.net_status(), which
+game.gd calls every render frame of a network game (mw play's LAN host),
+hashed the whole game state on the render thread whenever the logic was idle,
+stalling two or three render frames after each logic frame: it now takes the
+worker's hash, or hashes at most every 50 logic frames. A horde member's
+model flags merge with its horde's a word at a time, not bit by bit, in every
+render frame's sync. The shroud texture is not rebuilt while it is not drawn
+(--no-shroud), and the terrain's materials get its parameters only when one
+changes. Object::getHordeObject looks the HORDE kind up once, not by name on
+every call. The skirmish AI's enemy count near a building site tests the range first
+and looks its KindOf bits up once; Economy's scans of a player's objects ask
+the object filter once per template. The shroud prepares a long dirty list's
+records on the logic job pool (JobSystem::logic: the template's vision, the
+covered cells, the look's inputs) and applies them in the list's order. In
+the logic, stop
+notes and module lookups no longer build strings for every unit every frame,
+and the target index, the emotion scan and the client's dirty list keep their
+storage.
 OpenBFME reads maps only from verified archives and ignores loose map files,
 so each installed map goes into a .big of its own, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
@@ -60,7 +79,8 @@ from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
 PATCH = Path(__file__).resolve().parent/'openbfme.patch'                  # the engine's: the build depends on it
 CINEMATICS = Path(__file__).resolve().parent/'openbfme-cinematics.patch'  # the engine's and the scripts': the build depends on it
-PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch', CINEMATICS)   # each applied on its own, in this order
+PERF = Path(__file__).resolve().parent/'openbfme-perf.patch'              # the engine's: the build depends on it
+PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch', CINEMATICS, PERF)   # each applied on its own, in this order
 HOME = LOCAL/'openbfme'
 TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
@@ -161,14 +181,15 @@ def _program(name):
 
 
 def _stamp():
-    """What the build depends on: the submodule's commit, the patch, the toolchain."""
+    """What the build depends on: the submodule's commit, the engine patches, the toolchain."""
     head = _git('rev-parse', 'HEAD', cwd=SOURCE)
-    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes() + CINEMATICS.read_bytes()).hexdigest()
+    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes() + CINEMATICS.read_bytes()
+                          + PERF.read_bytes()).hexdigest()
 
 
 def build(progress=print):
     """Build the GDExtension and import the Godot project, unless already done for
-    this commit, patch and toolchain. Returns Godot's (window, console) executables."""
+    this commit, its engine patches and toolchain. Returns Godot's (window, console) executables."""
     source(progress)
     llvm, gui, console = toolchain(progress)
     stamp = BUILD/'stamp.txt'
@@ -405,13 +426,16 @@ def net_slots(project):
                     f'{s["start"]}:{s["team"]}' for s in seats)
 
 
-def play(project, progress=print, download=False, fog=False):
+def play(project, progress=print, download=False, fog=False, record=False):
     """Start OpenBFME straight in a skirmish on the project's map, as mw play
     starts the game: its line-up (net_slots()). OpenBFME's LAN host
     (--net-host) seats the slots without the lobby screens and, every slot
     but yours a computer, starts at once. The game is drawn without its
-    shroud and fog (--no-shroud) unless `fog`. With no project: its main
-    menu, with the maps packed before. Returns the process."""
+    shroud and fog (--no-shroud) unless `fog`. It is not recorded
+    (--no-record) unless `record`: OpenBFME records every LAN game, and a
+    replay keeps the whole game state's hash of every logic frame, which in a
+    big battle was a third of the simulation's time. With no project: its
+    main menu, with the maps packed before. Returns the process."""
     gui, _, env, key = prepare(project, progress, download)
     args = [str(gui), '--path', str(SOURCE/'godot'), '--', '--no-intro', '--no-update-check', '--free-camera']
     if project is not None:
@@ -419,6 +443,7 @@ def play(project, progress=print, download=False, fog=False):
             s.bind(('127.0.0.1', 0))
             port = s.getsockname()[1]
         args += [f'--net-host={port}', f'--map={key}', f'--net-slots={net_slots(project)}'] + ([] if fog else ['--no-shroud'])
+        args += [] if record else ['--no-record']
     return subprocess.Popen(args, env=env, cwd=HOME, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

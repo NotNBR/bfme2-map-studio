@@ -88,6 +88,9 @@ def parser():
                         'the first time builds the engine (with --check: a headless scripted skirmish)')
     s.add_argument('--download', action='store_true',
                    help="With --godot: download the unmodified game files your installs lack (the OpenBFME launcher's source)")
+    s.add_argument('--record', action='store_true',
+                   help="With --godot: record the game as a replay (OpenBFME's Load Replay); off by default, "
+                        "as the replay's hash of every logic frame slows big battles")
     s = sub.add_parser('history', help='Earlier builds of a map')
     s.add_argument('map', nargs='?')
     s = sub.add_parser('config', help='Show or change settings')
@@ -338,7 +341,7 @@ def cmd_play(args, extra):
             say(f'OpenBFME played {p.title}: loaded in {report.get("load_ms", 0)/1000:.1f} s, logic frame {report["frame"]} '
                 f'with {report["objects"]} objects. Report: {openbfme.LOGS/f"check-{p.id}.json"}')
             return 0
-        openbfme.play(p, progress=say, download=args.download, fog=args.fog)
+        openbfme.play(p, progress=say, download=args.download, fog=args.fog, record=args.record)
         seats = openbfme.net_slots(p).count(';')
         say(f'OpenBFME is starting a skirmish on {p.title}: you and {seats} computer player'
             f'{"s" if seats > 1 else ""}. Its logs: {openbfme.APPDATA}')

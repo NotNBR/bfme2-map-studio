@@ -115,6 +115,10 @@ slot a computer, starts at once. The game is drawn without its shroud and fog
 of war, as BFME2's test games reveal the map: `openbfme-no-shroud.patch` gives
 OpenBFME a `--no-shroud` option (its viewers' debug view: only the drawing
 changes, the players and the AI keep their shroud); `--fog` keeps them.
+The game is not recorded as a replay unless you add `--record`. OpenBFME
+records every LAN game by default. A replay also stores the full game state's
+hash for every logic frame, and in the Nanduhirion v2 battle that hashing was
+a third of the simulation's time.
 `openbfme-cinematics.patch` lets OpenBFME play a map's
 [cinematics](../game/scripts.md#cinematics), as a film made with
 `mapkit.cinematics` sets them up. In the viewer, choose **OpenBFME (Godot)** in the
@@ -133,13 +137,107 @@ minutes plus the time to check the game files:
   `mw setup`). It also downloads llvm-mingw and Godot 4.7.2, pinned to their
   releases' SHA-256, then builds the engine. CMake and Ninja must be on PATH
   or in the studio's environment (`pip install cmake ninja`). Windows only.
-  A later run rebuilds only when the submodule's commit changes.
+  A later run rebuilds only when the submodule's commit or an engine patch
+  changes.
 - **Engine patch:** `native/openbfme.patch` adds one thing upstream lacks:
   the `OPENBFME_EXTRA_ARCHIVES` variable, which mounts extra `.big` files.
   OpenBFME reads maps only from verified archives and ignores loose map files.
   So each map is packed into `local/openbfme/maps/<name>.big`, and
   `local/openbfme/mapcache.big` carries the Skirmish list (retail's
   `maps\mapcache.ini` plus every packed map).
+- **Performance patch:** `native/openbfme-perf.patch` makes big battles
+  smoother without changing what the logic computes. Its first changes, the
+  ones under "Logic frame cost", were checked with OpenBFME's 10,000-troop
+  benchmark, which gives the same state hash every frame with and without
+  them. The later logic changes (the horde lookups, the computer players'
+  scans) give the same results by construction but haven't been hash-tested.
+  - **Stalls after each logic frame.** The game's network overlay, which runs
+    in every `mw play --godot` game, hashed the whole game state on the render
+    thread on every frame while the logic was idle. That stalled two or three
+    rendered frames by 40–50 ms each after every logic frame, in the
+    Nanduhirion v2 battle. It now reuses the worker's hash, or hashes at most
+    every 50 logic frames.
+  - **Render cost per soldier.** Every render frame, each horde member's
+    model flags were merged with its horde's one bit at a time, 591 bits. That
+    was 13% of the render thread in the arena clash. It now merges whole
+    words, with the same result. The clash ran at 43 instead of 34 frames per
+    second, with 11% instead of 19% of frames over 40 ms.
+  - **Horde lookups.** `Object::getHordeObject`, asked for every unit by the
+    sound and HUD code, searched the object-type names for `HORDE` up to three
+    times per call. That was about 3 ms of each spike frame. It now looks the
+    type up once.
+  - **Fog refresh.** When the fog changed, about once per logic frame in a
+    battle, the fog texture was rebuilt and five shader parameters were set on
+    every terrain material. That took about 4 ms of the frame that already
+    carries the most work. The texture is now skipped while the fog isn't
+    drawn (`--no-shroud`, as `mw play` runs it), and the materials are only
+    updated when a parameter's value changes.
+  - **Computer players' scans.**
+    - When it plans a building, the skirmish AI counts enemies near the
+      site. That count walked every object and looked up five object types by
+      name for each one. It now tests the distance first and looks up each
+      type once.
+    - Special-power checks ask whether the player owns an object a filter
+      allows. They now evaluate the filter once per template instead of once
+      per object.
+    - Together with leaving out the replay hash, a logic frame of the v2
+      battle in the inn zoom dropped from a median of 147 ms to 86 ms.
+  - **Vision on several cores.** The shroud's update of a moving army is now
+    split in two:
+    - Each unit's vision (its template's values, the cells it covers, how
+      far it sees) is worked out on OpenBFME's logic job threads.
+    - The results are then applied to the shared grid one by one, in the
+      original order.
+
+    The 10,000- and 20,000-troop benchmarks give the same hash chains as
+    before. In the inn zoom, a logic frame dropped from a median of 86 ms to
+    79 ms, and freezes over 40 ms from 40 to 12 per 25 s.
+  - **Logic frame cost.** It no longer builds strings or looks them up for
+    every unit every frame. That saved about 6% of a logic frame in the
+    benchmark: about 149 to 140 ms, against run-to-run noise of about 10%.
+    Units still step while the logic takes longer than its 200 ms frame.
+  - **Pathfinding,** taken from the OpenBFME fork in `D:\LAN\openbfme-godot-fork`
+    (its lanes PATHPERF-2 and PATHPERF-4, in `engine/src/GameLogic/AI/`); none
+    of it has been benchmarked or hash-tested here.
+    - PATHPERF-2 makes path searches cheaper with the same results:
+      - a search remembers which straight lines between cells it has already
+        found passable or blocked;
+      - its open list keeps the cells' costs in one dense array;
+      - a cell's occupant cost is worked out from inputs gathered once per
+        unit.
+    - PATHPERF-4 lets the pathfinder's pool of cell records grow, up to
+      1,000,000 records (about 100 MB), instead of failing when it is full,
+      as retail's grows. In a battle that used to fill the pool, searches and
+      reservations that failed now succeed, so the results differ from before
+      exactly there.
+    - PATHPERF-4 also lengthens the path-request queues from 511 to 16,384
+      units and quadruples the cells searched per frame, but only in
+      OpenBFME's Uber profile; a normal game keeps retail's limits.
+    - In the Uber profile, the studio adds a rush rule: when more than 64
+      path requests are waiting (a mass order, such as a battle script's
+      charge), that logic frame may search 400,000 cells, retail's own
+      budget for a game's first 5 seconds. Units ordered together then get
+      their paths, and set off, in the same frame, at the cost of one heavy
+      logic frame. Without it, the 4 x 4,000 cells a frame serve a large
+      order over several frames, a few hordes at a time (worked out from the
+      code, not measured).
+  - **Named units belong to the scripts.** The skirmish AI no longer
+    recruits or sends off a unit that has a script name (a map object's
+    `objectName`, or a unit a script created by name). Units a map stages
+    for its scripts then wait for the scripts' orders. Before, a computer
+    player took over its own staged army once it was 10 seconds old: in the
+    Nanduhirion v2 film, 658 of Mordor's units moved before the 39-second
+    charge; with the rule, 23 (a few archers and catapults shifting in the
+    first seconds, for a reason not yet known). The AI's own trained units
+    have no names and stay its own. Unlike retail, so a map whose scripts
+    name player units behaves differently here.
+  - **Uber profile in `mw play --godot`.** OpenBFME's Uber performance mode
+    is the line `OpenBFMEUberPerformance = yes` in
+    `local/openbfme/appdata/Godot/app_userdata/OpenBFME/Options.ini` (`no`
+    or no line: the normal Faithful profile). Upstream, only the Skirmish
+    and LAN menus read it; the patch makes the game `mw play` hosts read it
+    too and carry it in its game message. The game's log then shows
+    `GAME simulation profile: uber (ok)`.
 - **Game files:** OpenBFME accepts only unmodified English ROTWK 2.01 and
   BFME2 1.06 archives (its policies are in the submodule's
   `engine/data/retail-archives/`). Mod, patch 2.02 and other-language archives
