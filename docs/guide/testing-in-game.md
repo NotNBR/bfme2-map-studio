@@ -183,7 +183,10 @@ skirmish is seated as `mw play`'s ([line-ups](#line-ups)).
   facing HEADING (0 north, 90 east), angles the game's own camera never
   takes. The game draws no sky near the horizon, so keep the pitch above
   about 20 degrees for views that reach far.
-- `--at FRAME` (one per `--shot`, rising) holds each shot until the game's
+- `--still NAME`: the frame as the game's own camera shows it, a map's
+  scripted camera say ([cinematics](../game/scripts.md#cinematics)); after the
+  `--view` shots.
+- `--at FRAME` (one per shot, rising) holds each shot until the game's
   logic reaches that frame, about 5 per second of game time, to photograph a
   scripted scenario as it plays out; `--timeout` (240 s) gives a long one
   time. Particle effects fill in over game time: a particle stream needs

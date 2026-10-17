@@ -206,6 +206,37 @@ eight-player skirmish:
 
 So the BFME2 1.06 catalogue's names resolved in ROTWK for these actions.
 
+## Cinematics
+
+ROTWK's own cinematic maps (`cin ...` and `camera_demo` among the game's
+maps, read 17 October 2026) film a scene like this:
+- **The interface:** a setup script hides it with `HIDE_UI` ("like letterbox
+  mode, but with no border"), turns off health bars and unit icons with
+  `OPTIONS_SET_DRAWICON_UI_MODE(false)`, and pushes the far plane ten times out
+  with `SET_CAMERA_CLIP_DEPTH_MULTIPLIER(10)`. Some open
+  `CAMERA_LETTERBOX_BEGIN` too.
+- **Shots:** they are `CameraAnimationList` "look" animations, keyed camera
+  positions and look-at points with Catmull-Rom interpolation
+  ([format](../format/presentation.md#cameraanimationlist-v1v3)), played by
+  `MOVE_CAMERA_BY_ANIMATION`. Simpler maps glide between `NamedCameras` with
+  `MOVE_CAMERA_TO`, whose first parameter (type 51) names the camera.
+- **Timing:** timers start the shots in turn.
+
+[mapkit.cinematics](../../src/mapworkshop/mapkit/cinematics.py) writes such
+films. In ROTWK, `mw capture --still` showed them playing in a skirmish
+(Battle of Nanduhirion (film),
+[maps/nanduhirion_battle_film](../../maps/nanduhirion_battle_film/map.py)):
+- The interface and the health bars were gone.
+- An animation runs at 30 frames per second: a still 7.5 s into a 14 s
+  orbit matched the renderer's view at that point, not the orbit's end.
+- The game draws no sky, so a camera looking near the level shows black
+  beyond the map's edge.
+
+OpenBFME reads `CameraAnimationList` and knows `MOVE_CAMERA_BY_ANIMATION`,
+`OPTIONS_SET_DRAWICON_UI_MODE` and `SET_CAMERA_CLIP_DEPTH_MULTIPLIER`, but does
+not play them. Its `ScriptCameraDirector` has `HIDE_UI`, `MOVE_CAMERA_TO`,
+the spline paths, follow, zoom, pitch and the letterbox.
+
 ## Remaining authoring work
 
 - Establish legal values, named references, mode restrictions and compatibility

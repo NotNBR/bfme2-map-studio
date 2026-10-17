@@ -29,6 +29,7 @@ searches both ([finding assets](finding-assets.md)).
 | [ambient](../../src/mapworkshop/mapkit/ambient.py) | a map's sound bed and emitters by kind of place (`ambient`, palettes per setting) |
 | [vegetation](../../src/mapworkshop/mapkit/vegetation.py) | keeps trees and shrubs past the game's 1,200 / 2,000 buffer limits visible as full models (crashes the game as it stands: see the Greywater Marches [README](../../maps/greywater_marches/README.md#checks)) |
 | [weather](../../src/mapworkshop/mapkit/weather.py) | weather presets with the map's own sun and fill (`apply_weather`), sky domes (`add_sky`) and the map.ini Weather block (`ini_block`) |
+| [cinematics](../../src/mapworkshop/mapkit/cinematics.py) | films a map's scripts play: camera shots (`Film.shot`, `orbit`, `move`) as the game's camera animations, the interface hidden, each shot on a timer (`Film.install`) ([cinematics](../game/scripts.md#cinematics)) |
 | [script_writer](../../src/mapworkshop/mapkit/script_writer.py) | map scripts from the game's own catalogue of conditions and actions (`Writer(m).operation`, `.script`, `.install`), each checked against its argument signature ([map scripts](../game/scripts.md)) |
 | [properties](../../src/mapworkshop/mapkit/properties.py) | the map-wide settings a `map.toml` `[properties]` table and the viewer's Properties window set ([projects](projects-and-builds.md#map-properties)) |
 | [cache](../../src/mapworkshop/mapkit/cache.py) | checks a build's player starts (2 to 8, consecutive) the way the game's map cache counts them |

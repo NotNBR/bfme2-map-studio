@@ -16,8 +16,9 @@ reaches that frame first, so a run can photograph a scripted scenario as it
 plays out. A shot given as a dict may also set `pitch` (degrees below the
 horizon), `heading` (degrees, 0 north, 90 east) and `distance` from the
 point: ingame.dll then replaces the game's camera with that one, for low
-cinematic views the game's own camera never takes. The game is ended after
-the last shot.
+cinematic views the game's own camera never takes. A shot with `still` set
+leaves the camera to the game: the frame as its own camera shows it, a map's
+scripted camera say. The game is ended after the last shot.
 """
 import json
 import math
@@ -41,9 +42,10 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
     out.mkdir(parents=True, exist_ok=True)
     def shot(s):
         if isinstance(s, dict):
-            return dict(dict(frame=None, height=300., pitch=0., heading=0., distance=0.), **s)
+            return dict(dict(frame=None, height=300., pitch=0., heading=0., distance=0., still=False), **s)
         name, x, y, height, *at = s
-        return dict(name=name, x=x, y=y, height=height, frame=at[0] if at else None, pitch=0., heading=0., distance=0.)
+        return dict(name=name, x=x, y=y, height=height, frame=at[0] if at else None, pitch=0., heading=0., distance=0.,
+                    still=False)
     shots = [shot(s) for s in shots]
     game = runtime.start(project, graphics, headless=headless, progress=progress)
     state = dict(shot=0, step='load', done=[])
@@ -63,8 +65,8 @@ def capture(project, shots, out, graphics='Medium', settle=30, progress=print, t
             s = shots[state['shot']]
             if s['frame'] is not None and frame < s['frame']:
                 return None                       # not yet: the shot waits for its logic frame
-            game.write(photo, struct.pack('<I6f', 1, s['x'], s['y'], s['height'], math.radians(s['pitch']),
-                                          math.radians(s['heading']), s['distance']))
+            game.write(photo, struct.pack('<I6f', 0 if s['still'] else 1, s['x'], s['y'], s['height'],
+                                          math.radians(s['pitch']), math.radians(s['heading']), s['distance']))
             state.update(step='settle', since=frames, moved=time.time())
         elif (state['step'] == 'settle' and frames >= state['since'] + settle
               and time.time() >= state['moved'] + delay/1000):   # `delay` ms at least

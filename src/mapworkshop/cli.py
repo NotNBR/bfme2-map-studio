@@ -41,6 +41,14 @@ USAGE = """
 """
 
 
+DETAIL = ('Low', 'Medium', 'High', 'UltraHigh')
+
+
+def detail(value):
+    """A detail level in any case: high is High."""
+    return {d.lower(): d for d in DETAIL}.get(value.lower(), value)
+
+
 def parser():
     p = argparse.ArgumentParser(prog='mw', description=__doc__, usage=USAGE,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -71,7 +79,7 @@ def parser():
     s.add_argument('--check', action='store_true', help='Run a hidden skirmish to ten logic frames, then close it and save a report')
     s.add_argument('--normal-game', action='store_true',
                    help="Install into the game's user maps and open its menu (isolated runtime for ROTWK)")
-    s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
+    s.add_argument('--graphics', type=detail, choices=DETAIL, default='Medium',
                    help='Detail level of the test game (default Medium)')
     s.add_argument('--fog', action='store_true',
                    help='Keep the shroud and fog of war (by default BFME2 and OpenBFME test games reveal the map)')
@@ -101,10 +109,12 @@ def parser():
                         'horizon, facing HEADING degrees (0 north, 90 east); after the --shot views')
     s.add_argument('--shot', nargs=4, action='append', default=[], metavar=('NAME', 'X', 'Y', 'HEIGHT'),
                    help='A view: the camera looks at the ground at X, Y (map units) from HEIGHT (the game camera; 300 is its usual zoom)')
+    s.add_argument('--still', action='append', default=[], metavar='NAME',
+                   help="A frame as the game's own camera shows it (a map's scripted camera, say); after the --view views")
     s.add_argument('--at', type=int, action='append', metavar='FRAME',
-                   help='With one value per --shot, in order: take that shot once the game reaches this logic frame')
+                   help='With one value per --shot, --view and --still, in order: take that shot once the game reaches this logic frame')
     s.add_argument('--timeout', type=int, default=240, help='Seconds before the run gives up (240)')
-    s.add_argument('--graphics', choices=['Low', 'Medium', 'High', 'UltraHigh'], default='Medium',
+    s.add_argument('--graphics', type=detail, choices=DETAIL, default='Medium',
                    help='Detail level (default Medium)')
     s.add_argument('--out', type=Path, help='Folder for the PNGs (default local/renders/game/<map>)')
     s.add_argument('--settle', type=int, default=30, help='Rendered frames to wait after moving the camera (30)')
@@ -428,16 +438,17 @@ def cmd_capture(args):
         shots = [(name, float(x), float(y), float(height)) for name, x, y, height in args.shot]
         shots += [dict(name=name, x=float(x), y=float(y), height=300., distance=float(d), pitch=float(p), heading=float(h))
                   for name, x, y, d, p, h in args.view or []]
+        shots += [dict(name=name, still=True, x=0., y=0., height=0.) for name in args.still]
     except ValueError:
         raise LookupError('--shot takes NAME X Y HEIGHT, --view NAME X Y DISTANCE PITCH HEADING: numbers after the name') from None
     if not shots:
-        raise LookupError('Give at least one --shot or --view')
+        raise LookupError('Give at least one --shot, --view or --still')
     names = [s['name'] if isinstance(s, dict) else s[0] for s in shots]
     if len(set(names)) != len(shots):
         raise LookupError('Shot names must be unique')
     if args.at:
         if len(args.at) != len(shots) or args.at != sorted(args.at):
-            raise LookupError('--at takes one rising logic frame per --shot and --view')
+            raise LookupError('--at takes one rising logic frame per --shot, --view and --still')
         shots = [dict(s, frame=f) if isinstance(s, dict) else s+(f,) for s, f in zip(shots, args.at)]
     native.ready(progress=say)
     out = args.out or RENDERS/'game'/p.id

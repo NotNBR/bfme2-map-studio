@@ -32,6 +32,7 @@ globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
 |---|---|---|
 | [Battle of the Sirannon Bridge](bridge_battle/map.py) | `bridge-battle` | the Hollin Dales with two armies drawn up at the bridge of Ost-in-Edhil, scripted to clash: a film set, for `mw capture --at`; it starts from the latest `hollin-dales` build, so build that first |
 | [Battle of Nanduhirion](nanduhirion_battle/map.py) | `nanduhirion-battle` | Nanduhirion v1 in the thick of a 4 vs 4 that stands for 8 vs 8 (two bases and a double army per player), seated by its `[play]` line-up: you and seven AI; it starts from the latest `nanduhirion-v1` build, so build that first |
+| [Battle of Nanduhirion (film)](nanduhirion_battle_film/map.py) | `nanduhirion-battle-film` | the Battle of Nanduhirion with a scripted camera and the interface hidden, for recording; it starts from the latest `nanduhirion-battle` build |
 
 ## Labs
 

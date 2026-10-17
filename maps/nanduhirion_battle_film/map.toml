@@ -1,0 +1,17 @@
+id = "nanduhirion-battle-film"
+title = "Battle of Nanduhirion (film)"
+native_name = "map mp nanduhirion battle film"
+players = 8
+description = "The Battle of Nanduhirion filmed: scripted camera shots over the armies, the clash and the waves, the interface hidden."
+
+[play]
+slots = [                               # the battle's line-up (maps/nanduhirion_battle/map.toml)
+    {faction = "Men", team = 1},
+    {faction = "Elves", team = 1, ai = "hard"},
+    {faction = "Dwarves", team = 1, ai = "hard"},
+    {faction = "Men", team = 1, ai = "hard"},
+    {faction = "Mordor", team = 2, ai = "hard"},
+    {faction = "Isengard", team = 2, ai = "hard"},
+    {faction = "Wild", team = 2, ai = "hard"},
+    {faction = "Angmar", team = 2, ai = "hard"},
+]
