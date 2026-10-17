@@ -22,6 +22,7 @@ docstring at the top of its `map.py`.
 | [Nanduhirion](nanduhirion/map.py) | `nanduhirion` | 8 | `map.py` | the community 2.02 patch's Nanduhirion, unchanged, beside its enlarged copy |
 | [Nanduhirion Enlarged](nanduhirion_enlarged/map.py) | `nanduhirion-enlarged` | 8 | `map.py` | the terrain of the 2.02 patch's Nanduhirion stretched to 14,250 x 14,250; terrain and player starts only |
 | [Nanduhirion v1](nanduhirion_v1/map.py) | `nanduhirion-v1` | 8 (16 sites) | `map.py`, `scenery.py`, `blends.py` | Nanduhirion Enlarged laid out for 8 vs 8: sixteen base sites, eight with starts while the game seats eight, wider ramps into the basins, the original's objects at its density, its neutral sites in the middle with a second outpost in each basin lane, soft texture changes through in-between textures chosen per pair |
+| [Nanduhirion v2](nanduhirion_v2/map.py) | `nanduhirion-v2` | 8 (16 sites) | `map.py`, `scenery.py`, `blends.py` | Nanduhirion v1 at the original's proportions: the 2.02 patch's Nanduhirion scaled 2.5 times each way and in height to 13,750 x 11,250, instead of stretched to a square; v1's sites, ramps and lane outposts carried onto this scale |
 
 The `build.py` projects are older: their `main()` reads output folders from
 globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
