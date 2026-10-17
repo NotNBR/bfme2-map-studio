@@ -4,37 +4,23 @@ by `mw play --godot`: straight in a skirmish, through its LAN host, seated
 by the project's line-up (play()).
 
 The engine's source is the submodule native/openbfme-godot (`update = none`
-in .gitmodules: it is checked out on first use, not by every `mw setup`).
-openbfme.patch, applied to it before building, adds one thing upstream
-lacks: OPENBFME_EXTRA_ARCHIVES, .big files mounted over the retail archives.
-openbfme-no-shroud.patch adds game.gd's --no-shroud: the live game drawn
-without its shroud and fog (GameWorld.set_shroud_drawn(false), a view setting;
-the logic keeps its shroud), as mw play reveals the map in BFME2; a script
-change, so it needs no rebuild. openbfme-cinematics.patch plays what ROTWK's
-cinematic maps set a shot up with (docs/game/scripts.md#cinematics): the
-script engine hands MOVE_CAMERA_BY_ANIMATION, OPTIONS_SET_DRAWICON_UI_MODE
-and SET_CAMERA_CLIP_DEPTH_MULTIPLIER to the client, GameWorld gives the map's
-camera animations to the scripts, and a skirmish or LAN game presents its
-map's script requests (campaign_cine.gd) as a campaign mission does.
-openbfme-perf.patch makes big battles smoother without changing what the
-logic computes (the state hash stays the same). GameWorld.net_status(), which
-game.gd calls every render frame of a network game (mw play's LAN host),
-hashed the whole game state on the render thread whenever the logic was idle,
-stalling two or three render frames after each logic frame: it now takes the
-worker's hash, or hashes at most every 50 logic frames. A horde member's
-model flags merge with its horde's a word at a time, not bit by bit, in every
-render frame's sync. The shroud texture is not rebuilt while it is not drawn
-(--no-shroud), and the terrain's materials get its parameters only when one
-changes. Object::getHordeObject looks the HORDE kind up once, not by name on
-every call. The skirmish AI's enemy count near a building site tests the range first
-and looks its KindOf bits up once; Economy's scans of a player's objects ask
-the object filter once per template. The shroud prepares a long dirty list's
-records on the logic job pool (JobSystem::logic: the template's vision, the
-covered cells, the look's inputs) and applies them in the list's order. In
-the logic, stop
-notes and module lookups no longer build strings for every unit every frame,
-and the target index, the emotion scan and the client's dirty list keep their
-storage.
+in .gitmodules: it is checked out on first use, not by every `mw setup`):
+NotNBR/openbfme-godot, a fork of Open-BFME/openbfme-godot whose commits carry
+the workshop's engine changes (they were patch files applied here before):
+OPENBFME_EXTRA_ARCHIVES (.big files mounted over the retail archives);
+game.gd's --no-shroud (the live game drawn without its shroud and fog, a view
+setting: the logic keeps its shroud, as mw play reveals the map in BFME2);
+the cinematics a map's scripts set a shot up with (docs/game/scripts.md
+#cinematics: MOVE_CAMERA_BY_ANIMATION, OPTIONS_SET_DRAWICON_UI_MODE and
+SET_CAMERA_CLIP_DEPTH_MULTIPLIER handed to the client, the map's camera
+animations with their field of view and roll, campaign_cine.gd presenting
+them in a skirmish or LAN game, a sky and a light haze where the world was
+drawn on black); staged armies (the skirmish AI leaves the units a map's
+scripts name to the scripts); and the performance work for big battles (the
+fork's docs/UBER.md and patches/openbfme-uber-performance.patch: faster
+pathfinding, spatial scans and per-unit work, and the Uber profile's rules).
+A change to the engine is made in the fork (in the submodule) and committed
+there; the studio then points the submodule at that commit.
 OpenBFME reads maps only from verified archives and ignores loose map files,
 so each installed map goes into a .big of its own, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
@@ -77,10 +63,6 @@ from pathlib import Path
 from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
 
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
-PATCH = Path(__file__).resolve().parent/'openbfme.patch'                  # the engine's: the build depends on it
-CINEMATICS = Path(__file__).resolve().parent/'openbfme-cinematics.patch'  # the engine's and the scripts': the build depends on it
-PERF = Path(__file__).resolve().parent/'openbfme-perf.patch'              # the engine's: the build depends on it
-PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch', CINEMATICS, PERF)   # each applied on its own, in this order
 HOME = LOCAL/'openbfme'
 TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
@@ -118,21 +100,12 @@ def _git(*args, cwd=ROOT):
 
 
 def source(progress=print):
-    """The submodule checked out (with its godot-cpp) and PATCHES applied."""
+    """The submodule checked out (with its godot-cpp): the fork's commit, the workshop's engine changes included."""
     if not (SOURCE/'engine'/'CMakeLists.txt').exists():
         progress('Fetching the OpenBFME submodule (about 90 MB, once)...')
         _git('submodule', 'update', '--init', '--checkout', '--', SOURCE.relative_to(ROOT).as_posix())
     if not (SOURCE/'engine/thirdparty/godot-cpp/CMakeLists.txt').exists():
         _git('submodule', 'update', '--init', cwd=SOURCE)
-    for patch in PATCHES:
-        try:
-            _git('apply', '--reverse', '--check', str(patch), cwd=SOURCE)   # already applied
-        except RuntimeError:
-            try:
-                _git('apply', str(patch), cwd=SOURCE)
-            except RuntimeError as error:
-                raise RuntimeError(f'{patch.name} does not apply to OpenBFME {_git("rev-parse", "--short", "HEAD", cwd=SOURCE)}; '
-                                   f'update it for it ({error})') from None
     return SOURCE
 
 
@@ -181,15 +154,15 @@ def _program(name):
 
 
 def _stamp():
-    """What the build depends on: the submodule's commit, the engine patches, the toolchain."""
+    """What the build depends on: the submodule's commit and any uncommitted change to its engine or scripts, the toolchain."""
     head = _git('rev-parse', 'HEAD', cwd=SOURCE)
-    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes() + CINEMATICS.read_bytes()
-                          + PERF.read_bytes()).hexdigest()
+    local = _git('diff', 'HEAD', '--', 'engine', 'godot', cwd=SOURCE)   # an engine edit not committed yet rebuilds too
+    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + local.encode('utf-8')).hexdigest()
 
 
 def build(progress=print):
     """Build the GDExtension and import the Godot project, unless already done for
-    this commit, its engine patches and toolchain. Returns Godot's (window, console) executables."""
+    this commit (and its uncommitted engine changes) and toolchain. Returns Godot's (window, console) executables."""
     source(progress)
     llvm, gui, console = toolchain(progress)
     stamp = BUILD/'stamp.txt'

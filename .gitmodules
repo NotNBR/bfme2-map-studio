@@ -3,6 +3,6 @@
 	url = https://github.com/NotNBR/bfme2-map-quickload.git
 [submodule "src/mapworkshop/native/openbfme-godot"]
 	path = src/mapworkshop/native/openbfme-godot
-	url = https://github.com/Open-BFME/openbfme-godot
+	url = https://github.com/NotNBR/openbfme-godot
 	update = none
 	ignore = dirty

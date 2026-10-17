@@ -239,13 +239,21 @@ Upstream OpenBFME reads `CameraAnimationList` and knows
 `MOVE_CAMERA_BY_ANIMATION`, `OPTIONS_SET_DRAWICON_UI_MODE` and
 `SET_CAMERA_CLIP_DEPTH_MULTIPLIER`, but does not play them. It presents script
 camera requests (`campaign_cine.gd`) in campaign missions only.
-`native/openbfme-cinematics.patch` adds the rest for `mw play --godot`:
+The studio's fork of OpenBFME (the `native/openbfme-godot` submodule) adds the rest for `mw play --godot`:
 - The script engine passes the three actions on to the client.
 - `GameWorld.get_camera_animation` gives the map's animations to the
   presentation, which plays "look" animations at 30 frames per second.
 - The icons and the far plane follow those actions.
 - Skirmish and LAN games present their maps' requests too.
 - A `HIDE_UI` in the first frame holds after the HUD movie appears.
+- Each camera key's field of view (horizontal) and roll are interpolated
+  as its position is, so a shot can zoom or bank; the stock maps keep
+  both constant, and ROTWK has not been checked for either.
+- A skirmish or LAN game, and a campaign mission while it plays an
+  animation, gets a procedural sky behind the world and a light haze,
+  where OpenBFME drew black. The cin maps' skybox model is drawn but
+  covers only part of a view: a camera high or far out looked past its
+  rim into the black (the v2 battle film, 17 October 2026).
 
 Seen in OpenBFME (the film's frames from `--capture-dir`, 17 October 2026):
 the shots match the ROTWK captures, and the interface and health bars are

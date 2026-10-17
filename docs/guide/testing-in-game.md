@@ -112,14 +112,14 @@ skirmish on the map, as `mw play` does: you against an easy AI, or the
 project's [line-up](#line-ups). OpenBFME's LAN host (`--net-host`,
 `--net-slots`) seats the slots without the lobby screens and, with every other
 slot a computer, starts at once. The game is drawn without its shroud and fog
-of war, as BFME2's test games reveal the map: `openbfme-no-shroud.patch` gives
-OpenBFME a `--no-shroud` option (its viewers' debug view: only the drawing
+of war, as BFME2's test games reveal the map: the studio's OpenBFME has a
+`--no-shroud` option (its viewers' debug view: only the drawing
 changes, the players and the AI keep their shroud); `--fog` keeps them.
 The game is not recorded as a replay unless you add `--record`. OpenBFME
 records every LAN game by default. A replay also stores the full game state's
 hash for every logic frame, and in the Nanduhirion v2 battle that hashing was
 a third of the simulation's time.
-`openbfme-cinematics.patch` lets OpenBFME play a map's
+The studio's OpenBFME plays a map's
 [cinematics](../game/scripts.md#cinematics), as a film made with
 `mapkit.cinematics` sets them up. In the viewer, choose **OpenBFME (Godot)** in the
 dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
@@ -134,18 +134,21 @@ The first run sets up everything in `local/openbfme/`, in about three
 minutes plus the time to check the game files:
 
 - **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
-  `mw setup`). It also downloads llvm-mingw and Godot 4.7.2, pinned to their
+  `mw setup`): [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot),
+  a fork of OpenBFME whose commits carry the studio's engine changes. An
+  engine change is made and committed in the fork, and the submodule then
+  points at it. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
   releases' SHA-256, then builds the engine. CMake and Ninja must be on PATH
   or in the studio's environment (`pip install cmake ninja`). Windows only.
-  A later run rebuilds only when the submodule's commit or an engine patch
-  changes.
-- **Engine patch:** `native/openbfme.patch` adds one thing upstream lacks:
+  A later run rebuilds only when the submodule's commit changes or its
+  engine files have changes not committed yet.
+- **Extra archives:** the fork adds one thing upstream lacks:
   the `OPENBFME_EXTRA_ARCHIVES` variable, which mounts extra `.big` files.
   OpenBFME reads maps only from verified archives and ignores loose map files.
   So each map is packed into `local/openbfme/maps/<name>.big`, and
   `local/openbfme/mapcache.big` carries the Skirmish list (retail's
   `maps\mapcache.ini` plus every packed map).
-- **Performance patch:** `native/openbfme-perf.patch` makes big battles
+- **Performance:** the fork makes big battles
   smoother without changing what the logic computes. Its first changes, the
   ones under "Logic frame cost", were checked with OpenBFME's 10,000-troop
   benchmark, which gives the same state hash every frame with and without
