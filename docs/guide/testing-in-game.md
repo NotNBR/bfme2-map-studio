@@ -114,7 +114,10 @@ project's [line-up](#line-ups). OpenBFME's LAN host (`--net-host`,
 slot a computer, starts at once. The game is drawn without its shroud and fog
 of war, as BFME2's test games reveal the map: `openbfme-no-shroud.patch` gives
 OpenBFME a `--no-shroud` option (its viewers' debug view: only the drawing
-changes, the players and the AI keep their shroud); `--fog` keeps them. In the viewer, choose **OpenBFME (Godot)** in the
+changes, the players and the AI keep their shroud); `--fog` keeps them.
+`openbfme-cinematics.patch` lets OpenBFME play a map's
+[cinematics](../game/scripts.md#cinematics), as a film made with
+`mapkit.cinematics` sets them up. In the viewer, choose **OpenBFME (Godot)** in the
 dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
 skirmish instead: OpenBFME clicks through its menus, starts the map against an
 AI, plays five seconds of game time and closes. The report goes to

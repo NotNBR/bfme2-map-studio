@@ -10,7 +10,12 @@ lacks: OPENBFME_EXTRA_ARCHIVES, .big files mounted over the retail archives.
 openbfme-no-shroud.patch adds game.gd's --no-shroud: the live game drawn
 without its shroud and fog (GameWorld.set_shroud_drawn(false), a view setting;
 the logic keeps its shroud), as mw play reveals the map in BFME2; a script
-change, so it needs no rebuild.
+change, so it needs no rebuild. openbfme-cinematics.patch plays what ROTWK's
+cinematic maps set a shot up with (docs/game/scripts.md#cinematics): the
+script engine hands MOVE_CAMERA_BY_ANIMATION, OPTIONS_SET_DRAWICON_UI_MODE
+and SET_CAMERA_CLIP_DEPTH_MULTIPLIER to the client, GameWorld gives the map's
+camera animations to the scripts, and a skirmish or LAN game presents its
+map's script requests (campaign_cine.gd) as a campaign mission does.
 OpenBFME reads maps only from verified archives and ignores loose map files,
 so each installed map goes into a .big of its own, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
@@ -54,7 +59,8 @@ from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
 
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
 PATCH = Path(__file__).resolve().parent/'openbfme.patch'                  # the engine's: the build depends on it
-PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch')   # each applied on its own
+CINEMATICS = Path(__file__).resolve().parent/'openbfme-cinematics.patch'  # the engine's and the scripts': the build depends on it
+PATCHES = (PATCH, Path(__file__).resolve().parent/'openbfme-no-shroud.patch', CINEMATICS)   # each applied on its own, in this order
 HOME = LOCAL/'openbfme'
 TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
@@ -157,7 +163,7 @@ def _program(name):
 def _stamp():
     """What the build depends on: the submodule's commit, the patch, the toolchain."""
     head = _git('rev-parse', 'HEAD', cwd=SOURCE)
-    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes()).hexdigest()
+    return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + PATCH.read_bytes() + CINEMATICS.read_bytes()).hexdigest()
 
 
 def build(progress=print):

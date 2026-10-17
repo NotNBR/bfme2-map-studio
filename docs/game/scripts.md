@@ -232,10 +232,22 @@ films. In ROTWK, `mw capture --still` showed them playing in a skirmish
 - The game draws no sky, so a camera looking near the level shows black
   beyond the map's edge.
 
-OpenBFME reads `CameraAnimationList` and knows `MOVE_CAMERA_BY_ANIMATION`,
-`OPTIONS_SET_DRAWICON_UI_MODE` and `SET_CAMERA_CLIP_DEPTH_MULTIPLIER`, but does
-not play them. Its `ScriptCameraDirector` has `HIDE_UI`, `MOVE_CAMERA_TO`,
-the spline paths, follow, zoom, pitch and the letterbox.
+Upstream OpenBFME reads `CameraAnimationList` and knows
+`MOVE_CAMERA_BY_ANIMATION`, `OPTIONS_SET_DRAWICON_UI_MODE` and
+`SET_CAMERA_CLIP_DEPTH_MULTIPLIER`, but does not play them. It presents script
+camera requests (`campaign_cine.gd`) in campaign missions only.
+`native/openbfme-cinematics.patch` adds the rest for `mw play --godot`:
+- The script engine passes the three actions on to the client.
+- `GameWorld.get_camera_animation` gives the map's animations to the
+  presentation, which plays "look" animations at 30 frames per second.
+- The icons and the far plane follow those actions.
+- Skirmish and LAN games present their maps' requests too.
+- A `HIDE_UI` in the first frame holds after the HUD movie appears.
+
+Seen in OpenBFME (the film's frames from `--capture-dir`, 17 October 2026):
+the shots match the ROTWK captures, and the interface and health bars are
+hidden. "Free" animations are not played: their rotation's convention is not
+decoded.
 
 ## Remaining authoring work
 
