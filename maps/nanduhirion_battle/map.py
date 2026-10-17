@@ -12,13 +12,18 @@ Angmar), seven of them hard AI. The game is joined well on:
 - Armies: each player's, both bases' together, stands by job (ARENA,
   STRIP, RESERVE): the Elves face the goblins on the north strip, the
   Dwarves Isengard on the south strip, your Men Angmar and the other Men
-  Mordor in the arena. In the arena: a battle line with four heroes
-  (HEROES), cavalry and beasts in the arena's mouth on the enemy's flank,
-  siege behind the line, archers on the forward terrace above it. On a
-  strip: a battle line in its basin lane, a vanguard at the strip's foot by
-  its signal fire, guards at the lane's two outposts. At each base: a
-  reserve. The lines, flanks, siege and vanguards advance at the clash; the
-  archers on the heights, the outpost guards and the reserves hold. The
+  Mordor in the arena. In the arena and in each strip's basin lane: a
+  battle line (formation()) of battalions with lanes between them, the
+  phalanx in front and the melee behind, four heroes (HEROES) behind the
+  middle, the archers in a line behind the infantry, the riders and beasts
+  in columns in the lanes and on both flanks, the siege at the back. Good
+  armies stand in order, evil ones ragged (ORDER). In the arena also
+  archers on the forward terrace above the line; on a strip guards at the
+  lane's two outposts. At each base: a reserve. At the clash the lines
+  advance, the riders charging through the lanes into the enemy's front,
+  and the siege moves up to its battery (BATTERY short of the middle, in
+  range of the clash); the archers on the heights, the outpost guards and
+  the reserves hold. The
   armies are drawn up for players 1 and 2; 4 and 3 stand as their mirrors
   across the map's middle and the east players as the west's half-turn
   twins, so every pairing meets on the same ground.
@@ -26,7 +31,8 @@ Angmar), seven of them hard AI. The game is joined well on:
   players their own; the signal fires and the inn are still to fight for.
   The creep lairs are cleared.
 - Scripts (on PlyrCivilian, the side a skirmish keeps): the map is revealed
-  to you, every player gets START_MONEY, after CLASH seconds the advancing
+  to you, every player gets START_MONEY, after CLASH seconds (a copy may set
+  its own: Field's clash) the advancing
   groups attack-move on their opponent's line, and every WAVE seconds from
   FIRST_WAVE each player's reinforcements (WAVES) march from both its bases'
   rally points to the same line. You have no AI: your advancing groups and
@@ -47,12 +53,21 @@ The battle stands on any Nanduhirion copy laid out like v1 (the same
 sixteen sites, starts and half-turn): stage_battle() takes the copy's layout
 module and its scale over the original Nanduhirion, and the points drawn up
 here (ARENA, STRIP) are in the original's map units, 5,500 x 4,500. Its
-strength thins every army row and every wave to that share of its units,
-the heroes kept. maps/nanduhirion_v2_battle/ stages it on Nanduhirion v2.
+strength scales every army row and every wave to that share of its units,
+the heroes kept; a row grown wider than WIDEST stands as two or more. Every
+other row stands STAGGER of a unit's spacing aside, so each rank shows
+between the units in front, and each unit stands a little off its place and
+its facing (JITTER, the same every build): drawn up, not on a grid.
+maps/nanduhirion_v2_battle/ stages it on Nanduhirion v2.
 
     mw build nanduhirion-v1; mw build nanduhirion-battle; mw play nanduhirion-battle
+
+plan.py draws a build's battle plan: the armies as map symbols by role on
+the map's top view, the routes and the timeline (python -m
+maps.nanduhirion_battle.plan <project>).
 """
 import math
+import random
 
 import numpy as np
 from PIL import Image
@@ -144,25 +159,44 @@ WAVES = {
 # Where each army stands, by job, drawn up for player 1 (the arena's north
 # half) and player 2 (the north strip), in the original Nanduhirion's map
 # units: per group its job, where the middle of its front row stands, its
-# rows (an ARMY row and how many times over, or the heroes) and whether it
-# advances at the clash or holds its ground. Every group faces its
+# rows (an ARMY row and how many times over, or the heroes) and when it
+# advances: True at the clash, a number that many seconds into the game (0:
+# at once), False never, holding its ground. Every group faces its
 # opponent's line and stands on its own spot's level. Players 4 and 3 stand
 # as the mirrors of 1 and 2 across the map's middle, the east players as the
 # half-turn twins of the west, facing them: 1 and 8, 4 and 5 in the arena, 2
 # and 7 on the north strip, 3 and 6 on the south one.
-ARENA = [('line', (2451, 2384), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
-         ('flank', (2412, 2668), [(3, 2)], True),        # the arena's north-west mouth: on the enemy's flank
-         ('siege', (2297, 2305), [(4, 2)], True),        # behind the line
+# A battle line's spec is a formation (formation()): per part the ARMY row
+# and how many times over; the line's riders, beasts and siege come from rows
+# 3 and 4, sorted by what they are (SIEGE).
+LINE = dict(front=(0, 3), melee=(1, 2), archers=(2, 2), charge=(3, 2), siege=(4, 2))
+ARENA = [('line', (2451, 2384), dict(LINE, width=900), True),   # two armies abreast in the arena: each this wide at most
          ('overwatch', (2065, 2400), [(2, 1)], False)]   # archers on the forward terrace above the arena
-STRIP = [('line', (2277, 3600), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
-         ('vanguard', (2451, 3442), [(3, 2), (4, 1)], True),     # the strip's foot, by its signal fire
+STRIP = [('line', (2277, 3600), dict(LINE, siege=(4, 1), width=1500), True),
          ('inner outpost', (2181, 3174), [(0, 1), (2, 1)], False),
          ('corner outpost', (1988, 3932), [(1, 1), (2, 1)], False)]
 RESERVE = [(0, 1), (1, 1), (2, 1)]   # at each base's rally point, holding
 THEATRE = {1: ARENA, 4: ARENA, 2: STRIP, 3: STRIP}
+THEATRE_NAME = {1: 'arena', 4: 'arena', 2: 'strip', 3: 'strip'}   # Field anchors name a theatre's groups by these
 MIRRORED = (3, 4)
 OPPONENT = {1: 8, 8: 1, 4: 5, 5: 4, 2: 7, 7: 2, 3: 6, 6: 3}
 ACROSS, BACK = 190, 175         # spacing of an army's units along a row, and between rows
+WIDEST = 9                      # units in a row at most: a wider one splits into rows behind each other
+STAGGER = .5                    # every other row stands this share of ACROSS aside: each rank shows between the units in front
+JITTER = 22, 16, 6              # each unit off its place by up to this along the row, back and in facing (degrees), by its name
+# A battle line (formation()): battalions FILE abreast, their phalanx in front and their melee in ranks behind, with LANEs between
+# them through which the riders and beasts, waiting in columns there and on both flanks, charge into the enemy's front; the heroes
+# behind the middle, the archers in a line behind the infantry (open where the lanes run), the siege at the back.
+GOOD = ('Men', 'Elves', 'Dwarves')
+SIEGE = ('Trebuchet', 'Catapult', 'Ballista')   # in a template's name: a siege engine (it fires from the back, not in the lanes)
+FILE, FILE_GAP, RANK_GAP = 3, 150, 150          # a battalion's front, the spacing along it and between its ranks
+LANE, COLUMN_GAP = 320, 170                     # a lane's width, and the spacing of the riders down it
+HEROES_BACK, ARCHERS_BACK, SIEGE_BACK = 2.4, 3.6, 5.8   # in RANK_GAPs behind the front
+BATTERY = 420                   # at the clash the siege moves up to this short of the middle between the lines (their range: 300 to 500)
+# Good armies stand in order, evil ones in a horde: each unit off its place by up to (along, back, facing in degrees), a battalion's
+# own step forward or back, and how much the spacing varies
+ORDER = {True: dict(jitter=(4, 4, 1.5), step=0, spread=0),
+         False: dict(jitter=(45, 35, 14), step=80, spread=.18)}
 RALLY = 650                     # the rally point (waves spawn there): this far from the start towards the line
 LEVEL = 50                      # an army stands on its line's level, within this: not up a terrace behind it
 
@@ -170,9 +204,18 @@ LEVEL = 50                      # an army stands on its line's level, within thi
 class Field:
     """The Nanduhirion copy the battle stands on: its layout module (SITES,
     STARTS, CENTRE, twin and BORDER, as maps/nanduhirion_v1/map.py has them)
-    and its scale over the original Nanduhirion, east and north."""
-    def __init__(self, layout, scale):
-        self.layout, self.scale = layout, scale
+    and its scale over the original Nanduhirion, east and north. `anchors`
+    places groups where this copy's ground wants them instead: per
+    (theatre, job) the point for player 1 or 2 in this copy's map units
+    (THEATRE_NAME; the other players mirror and turn it as at() does).
+    `theatres` replaces a theatre's groups altogether: per theatre name its
+    groups as THEATRE has them, their points in this copy's map units.
+    `reserve` is when the bases' reserves (RESERVE) advance, as a group's
+    advances (False: they hold; None: there are none). `clash` is the
+    seconds into the game a group that advances at the clash (True) goes."""
+    def __init__(self, layout, scale, anchors=None, theatres=None, reserve=False, clash=CLASH):
+        self.layout, self.scale, self.anchors, self.theatres = layout, scale, anchors or {}, theatres or {}
+        self.reserve, self.clash = reserve, clash
 
     def start(self, n):
         return self.layout.SITES[self.layout.STARTS[n - 1] - 1]
@@ -182,18 +225,22 @@ class Field:
         and its second site, where this map does."""
         return [self.start(n), self.layout.SITES[SECOND_SITE[n] - 1]]
 
-    def at(self, n, p):
+    def at(self, n, p, anchor=None):
         """Where a point drawn up for player 1 or 2, in the original's map
-        units, is for player n on this copy."""
+        units (or `anchor`, in this copy's), is for player n on this copy."""
         west = n if n <= 4 else n - 4
-        x, y = p[0]*self.scale[0], p[1]*self.scale[1]
+        x, y = anchor if anchor else (p[0]*self.scale[0], p[1]*self.scale[1])
         if west in MIRRORED:
             y = 2*self.layout.CENTRE[1] - y
         return (x, y) if n <= 4 else self.layout.twin((x, y))
 
     def groups(self, n):
         """Player n's army groups: (job, front middle, rows spec, advances)."""
-        return [(job, self.at(n, p), rows, advances) for job, p, rows, advances in THEATRE[n if n <= 4 else n - 4]]
+        west = n if n <= 4 else n - 4
+        if THEATRE_NAME[west] in self.theatres:
+            return [(job, self.at(n, None, p), rows, advances) for job, p, rows, advances in self.theatres[THEATRE_NAME[west]]]
+        return [(job, self.at(n, p, self.anchors.get((THEATRE_NAME[west], job))), rows, advances)
+                for job, p, rows, advances in THEATRE[west]]
 
     def line(self, n):
         return next(p for job, p, _, _ in self.groups(n) if job == 'line')
@@ -242,11 +289,67 @@ class Ground:
         raise ValueError(f'No room for a radius {radius} object near ({x:.0f}, {y:.0f})')
 
 
-def thin(units, strength, turn=0):
-    """`strength` of units (at least one), the first of them from `turn`
-    places in, so thinned waves leave out a different unit in turn."""
+def scaled(units, strength, turn=0):
+    """`strength` times units (at least one), taken round them from `turn`
+    places in, so scaled waves leave out or add a different unit in turn."""
     keep = max(1, round(len(units)*strength))
-    return units if keep >= len(units) else [units[(turn + i) % len(units)] for i in range(keep)]
+    return units if keep == len(units) else [units[(turn + i) % len(units)] for i in range(keep)]
+
+
+def split(row):
+    """A row as rows of at most WIDEST units, as even as they come."""
+    n = -(-len(row)//WIDEST)
+    return [row[len(row)*k//n:len(row)*(k + 1)//n] for k in range(n)]
+
+
+def formation(faction, spec, strength, heroes, rnd):
+    """A battle line's units as (template, forward, across, role) from the
+    middle of its front, forward towards the enemy (see LANE): `spec` names
+    per part (front, melee, archers, charge, siege) an ARMY row and how many
+    times over, each scaled to `strength`, and its `width` at most (as many
+    battalions as fit, deeper the more they hold); the role is line,
+    archers or siege; the riders, beasts and siege of
+    the charge and siege rows are sorted by what they are (SIEGE). A good
+    faction (GOOD) stands in order, an evil one ragged (ORDER)."""
+    order = ORDER[faction in GOOD]
+    rows = ARMY[faction]
+    take = lambda part: (scaled(rows[spec[part][0]]*spec[part][1], strength)
+                         if part in spec and spec[part][0] < len(rows) else [])
+    front, melee, archers = take('front'), take('melee'), take('archers')
+    pool = take('charge') + take('siege')
+    siege = [t for t in pool if any(w in t for w in SIEGE)]
+    charge = [t for t in pool if not any(w in t for w in SIEGE)]
+    spread = lambda: 1 + rnd.uniform(-order['spread'], order['spread'])
+    width = (FILE - 1)*FILE_GAP
+    # battalions: as many as the line's width takes (at least two, a lane between them), deeper the more they hold
+    count = max(2, min(-(-len(front)//FILE), int((spec.get('width', 10**6) + LANE)//(width + LANE))))
+    fronts = [front[len(front)*k//count:len(front)*(k + 1)//count] for k in range(count)]
+    melees = [melee[len(melee)*k//count:len(melee)*(k + 1)//count] for k in range(count)]
+    total = count*width + (count - 1)*LANE
+    middles = [-total/2 + width/2 + k*(width + LANE) for k in range(count)]
+    out = []
+    for k in range(count):
+        step = rnd.uniform(-order['step'], order['step'])
+        ranks = [part[i:i + FILE] for part in (fronts[k], melees[k]) for i in range(0, len(part), FILE)]   # the phalanx's ranks first
+        for r, rank in enumerate(ranks):
+            for i, t in enumerate(rank):
+                out.append((t, step - r*RANK_GAP*spread(), middles[k] + (i - (len(rank) - 1)/2)*FILE_GAP*spread(), 'line'))
+    deepest = max(-(-len(fronts[k])//FILE) - (-len(melees[k])//FILE) for k in range(count))   # a battalion's ranks
+    for i, t in enumerate(heroes):
+        out.append((t, -max(HEROES_BACK, deepest + .4)*RANK_GAP, (i - (len(heroes) - 1)/2)*110*spread(), 'line'))
+    # the lanes between the battalions and on both flanks: the riders' and beasts' columns
+    lanes = [m + width/2 + LANE/2 for m in middles[:-1]] + [-total/2 - LANE/2, total/2 + LANE/2]
+    for i, t in enumerate(charge):
+        out.append((t, -.6*RANK_GAP - (i//len(lanes))*COLUMN_GAP*spread(), lanes[i % len(lanes)], 'line'))
+    # the archers in a line behind the infantry, open where the lanes run; a second line behind if they are more
+    slots = [x for x in (-total/2 + j*FILE_GAP for j in range(int(total//FILE_GAP) + 1))
+             if all(abs(x - lane) > LANE*.4 for lane in lanes)]
+    for i, t in enumerate(archers):
+        r = i//len(slots)
+        out.append((t, -(max(ARCHERS_BACK, deepest + 1.6) + r*.9)*RANK_GAP, slots[i % len(slots)] + (FILE_GAP/2 if r % 2 else 0), 'archers'))
+    for i, t in enumerate(siege):
+        out.append((t, -max(SIEGE_BACK, deepest + 3.8)*RANK_GAP*spread(), (i - (len(siege) - 1)/2)*total*.8/max(1, len(siege) - 1), 'siege'))
+    return out
 
 
 def owner(n):
@@ -277,9 +380,9 @@ def add_angmar_side(m):
 
 def stage(m, factions, ground, field, strength=1):
     """Clear the lairs, give the basin outposts to their lanes' players, and
-    lay out bases, armies (each row thinned to `strength`) and waypoints on
+    lay out bases, armies (each row scaled to `strength`) and waypoints on
     `field`. Returns the armies' units
-    by player (name, template, job, advances), the waypoints by name and
+    by player (name, template, role, advances, job), the waypoints by name and
     what was placed."""
     objs = []
     for o in m.objects():
@@ -331,23 +434,36 @@ def stage(m, factions, ground, field, strength=1):
         # The army, by group (groups(), RESERVE at each base's rally point):
         # rows back from the group's front, facing the opponent's line, on
         # the group's own level.
-        army = field.groups(n) + [('reserve', waypoints[f'NB_Rally_{n}{tag}'], RESERVE, False) for tag in ('', 'b')]
+        army = field.groups(n) + [('reserve', waypoints[f'NB_Rally_{n}{tag}'], RESERVE, field.reserve) for tag in ('', 'b')
+                                  if field.reserve is not None]
         armies[n] = []
         for job, (gx, gy), spec, advances in army:
             d = math.dist((gx, gy), (ox, oy))
             fx, fy = (ox - gx)/d, (oy - gy)/d
-            rows = [HEROES[n] if s == 'heroes' else thin(ARMY[faction][s[0]]*s[1], strength) for s in spec
-                    if s == 'heroes' or s[0] < len(ARMY[faction])]
             level = ground.height(gx, gy)
-            for r, row in enumerate(rows):
-                for c, template in enumerate(row):
-                    across = (c - (len(row) - 1)/2)*ACROSS
-                    x, y = gx - fx*r*BACK - fy*across, gy - fy*r*BACK + fx*across
-                    x, y = ground.spot(x, y, 70, 60, reach=1200, level=level)
-                    name = f'NB_P{n}_A{len(armies[n]):02d}'
-                    put(template, x, y, math.atan2(fy, fx), n, name, 'Armies')
-                    armies[n].append((name, template, job, advances))
+            if isinstance(spec, dict):                     # a battle line: its formation (the heroes with the line)
+                spots = formation(faction, spec, strength, HEROES[n] if job == 'line' else [], random.Random(f'NB_P{n}_{job}'))
+                jitter = ORDER[faction in GOOD]['jitter']
+            else:                                          # rows, the front row first, every other one staggered
+                rows = [r for s in spec if s[0] < len(ARMY[faction]) for r in split(scaled(ARMY[faction][s[0]]*s[1], strength))]
+                spots = [(t, -r*BACK, (c - (len(row) - 1)/2 + (STAGGER if r % 2 else 0))*ACROSS, job)
+                         for r, row in enumerate(rows) for c, t in enumerate(row)]
+                jitter = JITTER
+            for template, forward, across, role in spots:
+                name = f'NB_P{n}_A{len(armies[n]):02d}'
+                rnd = random.Random(name)                  # the same small offsets every build
+                forward += rnd.uniform(-1, 1)*jitter[1]
+                across += rnd.uniform(-1, 1)*jitter[0]
+                x, y = gx + fx*forward - fy*across, gy + fy*forward + fx*across
+                # the archers and the siege may stand on higher ground behind the line (a terrace above an arena); the rest on its level
+                x, y = ground.spot(x, y, 70, 60, reach=1200, level=None if role in ('archers', 'siege') else level)
+                put(template, x, y, math.atan2(fy, fx) + math.radians(rnd.uniform(-1, 1)*jitter[2]), n, name, 'Armies')
+                armies[n].append((name, template, role, field.clash if advances is True else advances, job))
         waypoints[f'NB_Line_{n}'] = (lx, ly)
+        # the siege's firing position: BATTERY short of the middle between the two lines (in range of the clash, behind it;
+        # behind its own line when the lines stand closer)
+        d = math.dist((lx, ly), (ox, oy))
+        waypoints[f'NB_Battery_{n}'] = (lx + (ox - lx)*(d/2 - BATTERY)/d, ly + (oy - ly)*(d/2 - BATTERY)/d)
     waypoints['NB_Push_1'] = field.start(8)
     waypoints['NB_Push_2'] = field.start(5)
     # Clear the scenery under what was placed.
@@ -371,7 +487,7 @@ def stage(m, factions, ground, field, strength=1):
 
 def scripts(m, factions, armies, strength=1):
     """The scenario's scripts, on PlyrCivilian (see the module docstring),
-    each wave thinned to `strength`."""
+    each wave scaled to `strength`."""
     w = Writer(m)
     text = lambda kind, value: arg(kind, text=value)
     team = lambda n: text(3, f'Player_{n}/teamPlayer_{n}')
@@ -381,13 +497,19 @@ def scripts(m, factions, armies, strength=1):
     setup = [w.operation('action', 'MAP_REVEAL_ALL_PERM', [text(11, f'Player_{YOU}')])]
     setup += [w.operation('action', 'PLAYER_GIVE_MONEY', [text(11, f'Player_{n}'), arg(0, integer=START_MONEY)])
               for n in range(1, 9)]
-    setup += [timer('NB_Clash', CLASH)] + [timer(f'NB_Wave{k:02d}', FIRST_WAVE + (k - 1)*WAVE)
-                                           for k in range(1, WAVE_COUNT + 1)]
+    # the advancing groups, by when they go (THEATRE): the siege to its battery, the rest on the opponent's line
+    moves = {}
+    for n in range(1, 9):
+        for name, _, role, advances, _ in armies[n]:
+            if advances is not False:
+                moves.setdefault(advances, []).append(
+                    move(name, f'NB_Battery_{n}' if role == 'siege' else f'NB_Line_{OPPONENT[n]}'))
+    timers = {t: 'NB_Clash' if t == CLASH else f'NB_Advance_{t:g}' for t in moves}
+    setup += [timer(timers[t], t) for t in sorted(moves)] + [timer(f'NB_Wave{k:02d}', FIRST_WAVE + (k - 1)*WAVE)
+                                                             for k in range(1, WAVE_COUNT + 1)]
     out = [w.script('NB_Setup', [[w.operation('condition', 'CONDITION_TRUE')]], setup)]
-    out.append(w.script('NB_Clash', expired('NB_Clash'),
-                        [move(name, f'NB_Line_{OPPONENT[n]}') for n in range(1, 9)
-                         for name, _, _, advances in armies[n] if advances]))
-    yours = [name for name, _, _, advances in armies[YOU] if advances]    # the guards and reserves stay put
+    out += [w.script(timers[t], expired(timers[t]), moves[t]) for t in sorted(moves)]
+    yours = [name for name, _, _, advances, _ in armies[YOU] if advances is not False]    # the guards and reserves stay put
     target = f'NB_Line_{OPPONENT[YOU]}'
     for k in range(1, WAVE_COUNT + 1):
         target = PUSH.get(k, target)
@@ -395,7 +517,7 @@ def scripts(m, factions, armies, strength=1):
         for n in range(1, 9):
             goal = target if n == YOU else f'NB_Line_{OPPONENT[n]}'
             for tag in ('', 'b'):                          # a wave from each of the player's bases
-                for i, template in enumerate(thin(WAVES[factions[n - 1]][k % 2], strength, k//2)):
+                for i, template in enumerate(scaled(WAVES[factions[n - 1]][k % 2], strength, k//2)):
                     name = f'NB_P{n}{tag}_W{k:02d}_{i}'
                     actions.append(w.operation('action', 'CREATE_NAMED_ON_TEAM_AT_WAYPOINT',
                                                [text(14, name), text(15, template), team(n), text(7, f'NB_Rally_{n}{tag}')]))
@@ -437,6 +559,8 @@ def stage_battle(b, source, field, strength=1):
                                      buildings=sum(1 for p in placed if p[5] == 'Bases' and
                                                                         p[4][0][2].startswith(f'Player_{n}/')))
                              for n in range(1, 9)},
+                    units={name: dict(job=job, advances=advances)
+                           for n in range(1, 9) for name, _, _, advances, job in armies[n]},
                     waypoints={k: [round(v) for v in p] for k, p in waypoints.items()}, scripts=count,
                     waves=dict(first=FIRST_WAVE, every=WAVE, count=WAVE_COUNT))
     ini = (base.build_dir/'map.ini').read_text(encoding='ascii', errors='replace')

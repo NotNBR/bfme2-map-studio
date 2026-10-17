@@ -230,7 +230,10 @@ films. In ROTWK, `mw capture --still` showed them playing in a skirmish
 - An animation runs at 30 frames per second: a still 7.5 s into a 14 s
   orbit matched the renderer's view at that point, not the orbit's end.
 - The game draws no sky, so a camera looking near the level shows black
-  beyond the map's edge.
+  beyond the map's edge, unless the map has a skybox: the cin maps place
+  one `CINE_skybox_*` model in the middle of the map at ground level, scaled
+  with `objectPrototypeScale` (0.2 to 0.64 on maps of 4,000 to 5,600 units),
+  as [the v2 battle film](../../maps/nanduhirion_v2_battle_film/map.py) does.
 
 Upstream OpenBFME reads `CameraAnimationList` and knows
 `MOVE_CAMERA_BY_ANIMATION`, `OPTIONS_SET_DRAWICON_UI_MODE` and

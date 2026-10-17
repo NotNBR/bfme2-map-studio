@@ -74,8 +74,9 @@ def animation(name, keys, fov=FOV):
 class Film:
     """Shots and the interface settings of a film (see the module docstring)."""
 
-    def __init__(self, prefix='Film', letterbox=False, icons=False, clip_depth=10.0):
-        self.prefix, self.letterbox, self.icons, self.clip_depth = prefix, letterbox, icons, clip_depth
+    def __init__(self, prefix='Film', letterbox=False, icons=False, clip_depth=10.0, ui=False):
+        """`ui`: keep the interface (no HIDE_UI), as for a test view of play rather than a film."""
+        self.prefix, self.letterbox, self.icons, self.clip_depth, self.ui = prefix, letterbox, icons, clip_depth, ui
         self.shots = []                                   # (name, start or None, keys, fov)
 
     def shot(self, name, keys, start=None, fov=FOV):
@@ -109,8 +110,9 @@ class Film:
         from mapworkshop.mapkit.script_writer import arg
         op = writer.operation
         text = lambda kind, value: arg(kind, text=value)
-        setup = [op('action', 'HIDE_UI'), op('action', 'OPTIONS_SET_DRAWICON_UI_MODE', [arg(8, integer=int(self.icons))]),
-                 op('action', 'SET_CAMERA_CLIP_DEPTH_MULTIPLIER', [arg(1, real=float(self.clip_depth))])]
+        setup = ([] if self.ui else [op('action', 'HIDE_UI')]) + [
+            op('action', 'OPTIONS_SET_DRAWICON_UI_MODE', [arg(8, integer=int(self.icons))]),
+            op('action', 'SET_CAMERA_CLIP_DEPTH_MULTIPLIER', [arg(1, real=float(self.clip_depth))])]
         if self.letterbox:
             setup.append(op('action', 'CAMERA_LETTERBOX_BEGIN'))
         scripts = []
