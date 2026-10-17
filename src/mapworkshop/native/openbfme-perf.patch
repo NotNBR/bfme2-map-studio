@@ -501,7 +501,7 @@ index 535afd4..01d471c 100644
  	for (size_t i = 0; i < m_queue1.size(); ++i)
  	{
 diff --git a/engine/src/GameLogic/AI/AIPathfind.h b/engine/src/GameLogic/AI/AIPathfind.h
-index 5d46f0d..2d27750 100644
+index 5d46f0d..8e65869 100644
 --- a/engine/src/GameLogic/AI/AIPathfind.h
 +++ b/engine/src/GameLogic/AI/AIPathfind.h
 @@ -238,15 +238,22 @@ public:
@@ -617,7 +617,7 @@ index 5d46f0d..2d27750 100644
  };
  
  // RW checkForMovement info (the ZH TCheckMovementInfo). Mode flags (RW info+0x14): 0x02 allies block, 0x04 count terrain
-@@ -778,6 +813,21 @@ public:
+@@ -778,6 +813,17 @@ public:
  
  	// ---- queue ----
  	bool queueForPath(PathfindObjectID id);
@@ -627,10 +627,6 @@ index 5d46f0d..2d27750 100644
 +	// battle's repaths keep 60-90 waiting (10,000 troops): they get retail's budget, which a larger one would only spend on the same steady trickle
 +	// (+34 ms a frame at 4x). A Faithful game never turns the limits on
 +	enum { kUberQueueLength = 16384, kUberBudgetScale = 4, kUberBurstQueue = 120, kUberBurstEnd = 40 };
-+	// studio (Uber only): a rush of requests (more than kUberRushQueued queued at a call, a mass order such as a script's charge) is served at once: that
-+	// call's budget is kUberRushBudget cells (retail's own budget for the first 25 frames, MaxPathfindCellsPerFrame 4000 x 100), so the units ordered
-+	// together set off together instead of over many frames; one heavy logic frame instead. It depends on the queue alone (logic state)
-+	enum { kUberRushQueued = 64, kUberRushBudget = 400000 };
 +	void setUberLimits(bool on);
 +	bool uberLimits() const { return m_uberLimits; }
 +	// lane PATHPERF-4: the cell-info pool grows past PathfindConfig::cellInfoPoolSize up to this many records (about 100 MB), as retail's grows; the
@@ -639,7 +635,7 @@ index 5d46f0d..2d27750 100644
  	// RW processPathfindQueue 0x6F2364: the counter of allocated cells is reset once; the blocked repaths run while it is below half the
  	// budget, then the path requests while it is below the budget (one counter for both); what is not reached stays queued
  	void processPathfindQueue(PathfindRequestHandler &handler);
-@@ -817,6 +867,22 @@ public:
+@@ -817,6 +863,22 @@ public:
  	// lane PATHPERF-1 (tests): false switches the search memo (occupantFacts) and the unit index (findUnit) off, every answer then asked afresh / looked up in
  	// the map; test_pathperf1_hier.cpp compares the searches both ways. Not part of the state (it changes no result)
  	void setSearchShortcuts(bool on) { m_searchShortcuts = on; }
@@ -662,7 +658,7 @@ index 5d46f0d..2d27750 100644
  private:
  	enum { kUnitIndexMax = 1 << 20 };
  	void releaseSlot(PathfindObjectID id, Slot &slot);
-@@ -846,9 +912,17 @@ private:
+@@ -846,9 +908,17 @@ private:
  	// lane PATHPERF-1: what checkForMovement and occupantCost ask of an occupant `id` and of the searching unit `obj` (only side-effect-free getters, all
  	// asked at once). While internalFindPath runs for `obj` nothing they read can change, so the answers are kept per search (generation counted) and an
  	// occupant met in many cells is resolved once; elsewhere they are asked afresh. Null when the occupant's object is gone
@@ -680,7 +676,7 @@ index 5d46f0d..2d27750 100644
  		const PathfindObject *o = nullptr;
  		PathfindRelationship rel = PATHFIND_ENEMIES; // obj's relationship to o
  		bool parked = false, hasAI = false, hasLocomotor = false, infantry = false, largeRect = false, throughEachOther = false;
-@@ -906,9 +980,29 @@ private:
+@@ -906,9 +976,29 @@ private:
  	std::vector<OccupantFacts> m_memo;
  	OccupantFacts m_memoScratch;
  	SearcherFacts m_memoSelf;
@@ -1280,7 +1276,7 @@ index cd0e32b..75170f3 100644
  		if (approx && d2 > slack && (!hierarchical || cellCount > 2000) && d2 >= 100)
  		{
 diff --git a/engine/src/GameLogic/AI/AIPathfindUnits.cpp b/engine/src/GameLogic/AI/AIPathfindUnits.cpp
-index cc25acb..82f78b7 100644
+index cc25acb..1304701 100644
 --- a/engine/src/GameLogic/AI/AIPathfindUnits.cpp
 +++ b/engine/src/GameLogic/AI/AIPathfindUnits.cpp
 @@ -293,6 +293,7 @@ const Pathfinder::OccupantFacts *Pathfinder::occupantFacts(const PathfindObject
@@ -1334,7 +1330,7 @@ index cc25acb..82f78b7 100644
  bool Pathfinder::queueForPath(PathfindObjectID id)
  {
  	// TARGET RW 0x6ED0FB: a linear duplicate scan (a duplicate returns true), a full ring returns false
-@@ -1432,6 +1462,21 @@ void Pathfinder::processPathfindQueue(PathfindRequestHandler &handler)
+@@ -1432,6 +1462,17 @@ void Pathfinder::processPathfindQueue(PathfindRequestHandler &handler)
  	setLogicalExtentFromTerrain();
  	m_cumulativeCellsAllocated = 0;
  	int budget = m_config.cellsPerFrame;
@@ -1347,10 +1343,6 @@ index cc25acb..82f78b7 100644
 +		if (m_uberBurst)
 +		{
 +			budget *= kUberBudgetScale;
-+		}
-+		if (queued > (size_t)kUberRushQueued && budget < (int)kUberRushBudget)
-+		{
-+			budget = kUberRushBudget; // studio: a rush is served at once (kUberRushQueued), on top of the burst rule
 +		}
 +	}
  	if (m_world && m_world->getFrame() < 25u)
