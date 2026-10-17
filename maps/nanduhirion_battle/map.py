@@ -43,6 +43,13 @@ a computer player's AI takes over the units on its default team. The map
 also gets ROTWK's SkirmishAngmar side, which v1 (made from blank.create's
 BFME2 sides) lacks: an AI takes its faction's AI scripts from that side.
 
+The battle stands on any Nanduhirion copy laid out like v1 (the same
+sixteen sites, starts and half-turn): stage_battle() takes the copy's layout
+module and its scale over the original Nanduhirion, and the points drawn up
+here (ARENA, STRIP) are in the original's map units, 5,500 x 4,500. Its
+strength thins every army row and every wave to that share of its units,
+the heroes kept. maps/nanduhirion_v2_battle/ stages it on Nanduhirion v2.
+
     mw build nanduhirion-v1; mw build nanduhirion-battle; mw play nanduhirion-battle
 """
 import math
@@ -55,7 +62,7 @@ from mapworkshop.formats import sections
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.blank import add_object
 from mapworkshop.mapkit.script_writer import Writer, arg
-from maps.nanduhirion_v1.map import BORDER, CENTRE, SITES, STARTS, twin
+import maps.nanduhirion_v1.map as v1
 
 YOU = 1
 START_MONEY = 4000
@@ -135,21 +142,22 @@ WAVES = {
                ['AngmarOrcWarriors_Placed', 'AngmarDarkRangerHorde', 'AngmarDireWolfHorde']],
 }
 # Where each army stands, by job, drawn up for player 1 (the arena's north
-# half) and player 2 (the north strip): per group its job, where the middle
-# of its front row stands, its rows (an ARMY row and how many times over, or
-# the heroes) and whether it advances at the clash or holds its ground. Every
-# group faces its opponent's line and stands on its own spot's level.
-# Players 4 and 3 stand as the mirrors of 1 and 2 across the map's middle,
-# the east players as the half-turn twins of the west, facing them: 1 and 8,
-# 4 and 5 in the arena, 2 and 7 on the north strip, 3 and 6 on the south one.
-ARENA = [('line', (6350, 7550), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
-         ('flank', (6250, 8450), [(3, 2)], True),        # the arena's north-west mouth: on the enemy's flank
-         ('siege', (5950, 7300), [(4, 2)], True),        # behind the line
-         ('overwatch', (5350, 7600), [(2, 1)], False)]   # archers on the forward terrace above the arena
-STRIP = [('line', (5900, 11400), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
-         ('vanguard', (6350, 10900), [(3, 2), (4, 1)], True),     # the strip's foot, by its signal fire
-         ('inner outpost', (5650, 10050), [(0, 1), (2, 1)], False),
-         ('corner outpost', (5150, 12450), [(1, 1), (2, 1)], False)]
+# half) and player 2 (the north strip), in the original Nanduhirion's map
+# units: per group its job, where the middle of its front row stands, its
+# rows (an ARMY row and how many times over, or the heroes) and whether it
+# advances at the clash or holds its ground. Every group faces its
+# opponent's line and stands on its own spot's level. Players 4 and 3 stand
+# as the mirrors of 1 and 2 across the map's middle, the east players as the
+# half-turn twins of the west, facing them: 1 and 8, 4 and 5 in the arena, 2
+# and 7 on the north strip, 3 and 6 on the south one.
+ARENA = [('line', (2451, 2384), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
+         ('flank', (2412, 2668), [(3, 2)], True),        # the arena's north-west mouth: on the enemy's flank
+         ('siege', (2297, 2305), [(4, 2)], True),        # behind the line
+         ('overwatch', (2065, 2400), [(2, 1)], False)]   # archers on the forward terrace above the arena
+STRIP = [('line', (2277, 3600), [(0, 3), (1, 2), 'heroes', (2, 2)], True),
+         ('vanguard', (2451, 3442), [(3, 2), (4, 1)], True),     # the strip's foot, by its signal fire
+         ('inner outpost', (2181, 3174), [(0, 1), (2, 1)], False),
+         ('corner outpost', (1988, 3932), [(1, 1), (2, 1)], False)]
 RESERVE = [(0, 1), (1, 1), (2, 1)]   # at each base's rally point, holding
 THEATRE = {1: ARENA, 4: ARENA, 2: STRIP, 3: STRIP}
 MIRRORED = (3, 4)
@@ -159,49 +167,63 @@ RALLY = 650                     # the rally point (waves spawn there): this far 
 LEVEL = 50                      # an army stands on its line's level, within this: not up a terrace behind it
 
 
-def start(n):
-    return SITES[STARTS[n - 1] - 1]
+class Field:
+    """The Nanduhirion copy the battle stands on: its layout module (SITES,
+    STARTS, CENTRE, twin and BORDER, as maps/nanduhirion_v1/map.py has them)
+    and its scale over the original Nanduhirion, east and north."""
+    def __init__(self, layout, scale):
+        self.layout, self.scale = layout, scale
+
+    def start(self, n):
+        return self.layout.SITES[self.layout.STARTS[n - 1] - 1]
+
+    def bases(self, n):
+        """Player n's two bases: its start, where the game puts its fortress,
+        and its second site, where this map does."""
+        return [self.start(n), self.layout.SITES[SECOND_SITE[n] - 1]]
+
+    def at(self, n, p):
+        """Where a point drawn up for player 1 or 2, in the original's map
+        units, is for player n on this copy."""
+        west = n if n <= 4 else n - 4
+        x, y = p[0]*self.scale[0], p[1]*self.scale[1]
+        if west in MIRRORED:
+            y = 2*self.layout.CENTRE[1] - y
+        return (x, y) if n <= 4 else self.layout.twin((x, y))
+
+    def groups(self, n):
+        """Player n's army groups: (job, front middle, rows spec, advances)."""
+        return [(job, self.at(n, p), rows, advances) for job, p, rows, advances in THEATRE[n if n <= 4 else n - 4]]
+
+    def line(self, n):
+        return next(p for job, p, _, _ in self.groups(n) if job == 'line')
+
+    def lane(self, x, y):
+        """The player whose basin lane holds x, y."""
+        cx, cy = self.layout.CENTRE
+        return (2 if y > cy else 3) if x < cx else (7 if y > cy else 6)
 
 
-def bases(n):
-    """Player n's two bases: its start, where the game puts its fortress, and
-    its second site, where this map does."""
-    return [start(n), SITES[SECOND_SITE[n] - 1]]
-
-
-def at(n, p):
-    """Where a point drawn up for player 1 or 2 is for player n."""
-    west = n if n <= 4 else n - 4
-    x, y = p
-    if west in MIRRORED:
-        y = 2*CENTRE[1] - y
-    return (x, y) if n <= 4 else twin((x, y))
-
-
-def groups(n):
-    """Player n's army groups: (job, front middle, rows spec, advances)."""
-    return [(job, at(n, p), rows, advances) for job, p, rows, advances in THEATRE[n if n <= 4 else n - 4]]
-
-
-def line(n):
-    return next(p for job, p, _, _ in groups(n) if job == 'line')
+# Nanduhirion v1: the original stretched to 14,250 x 14,250.
+V1 = Field(v1, (14250/5500, 14250/4500))
 
 
 class Ground:
     """The terrain's heights and passability, for finding level, open spots."""
-    def __init__(self, m):
+    def __init__(self, m, border):
+        self.border = border
         hm = m.heightmap()
         self.z = hm['elevations']*.0390625
         self.blocked = m.blend(inspection=True)['arrays']['impassable'].astype(bool)
         self.taken = []                                   # (x, y, radius) of what this build placed
 
     def height(self, x, y):
-        return float(self.z[int(y//10) + BORDER, int(x//10) + BORDER])
+        return float(self.z[int(y//10) + self.border, int(x//10) + self.border])
 
     def fits(self, x, y, radius, relief, level=None):
         """Open, walkable ground within `relief` of level over `radius`, clear
         of what was taken, and at `level` (within LEVEL) when given."""
-        i, j, r = int(y//10) + BORDER, int(x//10) + BORDER, max(1, int(radius//10))
+        i, j, r = int(y//10) + self.border, int(x//10) + self.border, max(1, int(radius//10))
         box = (slice(i - r, i + r + 1), slice(j - r, j + r + 1))
         return (0 <= i - r and i + r < self.z.shape[0] and 0 <= j - r and j + r < self.z.shape[1]
                 and not self.blocked[box].any() and np.ptp(self.z[box]) <= relief
@@ -218,6 +240,13 @@ class Ground:
                     self.taken.append((*p, radius))
                     return p
         raise ValueError(f'No room for a radius {radius} object near ({x:.0f}, {y:.0f})')
+
+
+def thin(units, strength, turn=0):
+    """`strength` of units (at least one), the first of them from `turn`
+    places in, so thinned waves leave out a different unit in turn."""
+    keep = max(1, round(len(units)*strength))
+    return units if keep >= len(units) else [units[(turn + i) % len(units)] for i in range(keep)]
 
 
 def owner(n):
@@ -246,22 +275,23 @@ def add_angmar_side(m):
                    + [dict(chunk='LibraryMaps', version=1, maps=[])])
 
 
-def stage(m, factions, ground):
+def stage(m, factions, ground, field, strength=1):
     """Clear the lairs, give the basin outposts to their lanes' players, and
-    lay out bases, armies and waypoints. Returns the armies' units by player
-    (name, template) and the waypoints by name."""
+    lay out bases, armies (each row thinned to `strength`) and waypoints on
+    `field`. Returns the armies' units
+    by player (name, template, job, advances), the waypoints by name and
+    what was placed."""
     objs = []
     for o in m.objects():
         if o['template'] in LAIRS:
             continue
         objs.append(o)
     # The basin outposts and their flags: each to its lane's player.
-    lane = lambda x, y: (2 if y > 6975 else 3) if x < 7140 else (7 if y > 6975 else 6)
     for o in objs:
         if o['template'] in ('Outpost', 'CaptureFlag'):
             near = min((p for p in objs if p['template'] == 'Outpost'), key=lambda p: math.dist((p['x'], p['y']), (o['x'], o['y'])))
             if o['template'] == 'Outpost' or math.dist((near['x'], near['y']), (o['x'], o['y'])) < 200:
-                n = lane(near['x'], near['y'])
+                n = field.lane(near['x'], near['y'])
                 o['properties'] = [p for p in o['properties'] if p[0] != 'originalOwner'] + [owner(n)]
     # Everything already standing keeps its room (outposts, inns, columns...).
     for o in objs:
@@ -274,13 +304,13 @@ def stage(m, factions, ground):
         placed.append((template, x, y, angle, [owner(n), ('uniqueID', 3, name), ('objectName', 3, name)], layer))
 
     for n in range(1, 9):                                  # the fortresses' ground first
-        for x, y in bases(n):
+        for x, y in field.bases(n):
             ground.taken.append((x, y, 330))
     for n in range(1, 9):
         faction = factions[n - 1]
-        lx, ly = line(n)
-        ox, oy = line(OPPONENT[n])
-        for b, (sx, sy) in enumerate(bases(n)):
+        lx, ly = field.line(n)
+        ox, oy = field.line(OPPONENT[n])
+        for b, (sx, sy) in enumerate(field.bases(n)):
             tag = '' if b == 0 else 'b'
             if b:                                          # the game builds the start's fortress; this map the second
                 put(FORTRESS[faction], sx, sy, math.atan2(ly - sy, lx - sx), n, f'NB_B{n}b_F', 'Bases')
@@ -301,12 +331,12 @@ def stage(m, factions, ground):
         # The army, by group (groups(), RESERVE at each base's rally point):
         # rows back from the group's front, facing the opponent's line, on
         # the group's own level.
-        army = groups(n) + [('reserve', waypoints[f'NB_Rally_{n}{tag}'], RESERVE, False) for tag in ('', 'b')]
+        army = field.groups(n) + [('reserve', waypoints[f'NB_Rally_{n}{tag}'], RESERVE, False) for tag in ('', 'b')]
         armies[n] = []
         for job, (gx, gy), spec, advances in army:
             d = math.dist((gx, gy), (ox, oy))
             fx, fy = (ox - gx)/d, (oy - gy)/d
-            rows = [HEROES[n] if s == 'heroes' else ARMY[faction][s[0]]*s[1] for s in spec
+            rows = [HEROES[n] if s == 'heroes' else thin(ARMY[faction][s[0]]*s[1], strength) for s in spec
                     if s == 'heroes' or s[0] < len(ARMY[faction])]
             level = ground.height(gx, gy)
             for r, row in enumerate(rows):
@@ -318,8 +348,8 @@ def stage(m, factions, ground):
                     put(template, x, y, math.atan2(fy, fx), n, name, 'Armies')
                     armies[n].append((name, template, job, advances))
         waypoints[f'NB_Line_{n}'] = (lx, ly)
-    waypoints['NB_Push_1'] = start(8)
-    waypoints['NB_Push_2'] = start(5)
+    waypoints['NB_Push_1'] = field.start(8)
+    waypoints['NB_Push_2'] = field.start(5)
     # Clear the scenery under what was placed.
     keep = []
     for o in objs:
@@ -339,8 +369,9 @@ def stage(m, factions, ground):
     return armies, waypoints, placed
 
 
-def scripts(m, factions, armies):
-    """The scenario's scripts, on PlyrCivilian (see the module docstring)."""
+def scripts(m, factions, armies, strength=1):
+    """The scenario's scripts, on PlyrCivilian (see the module docstring),
+    each wave thinned to `strength`."""
     w = Writer(m)
     text = lambda kind, value: arg(kind, text=value)
     team = lambda n: text(3, f'Player_{n}/teamPlayer_{n}')
@@ -364,7 +395,7 @@ def scripts(m, factions, armies):
         for n in range(1, 9):
             goal = target if n == YOU else f'NB_Line_{OPPONENT[n]}'
             for tag in ('', 'b'):                          # a wave from each of the player's bases
-                for i, template in enumerate(WAVES[factions[n - 1]][k % 2]):
+                for i, template in enumerate(thin(WAVES[factions[n - 1]][k % 2], strength, k//2)):
                     name = f'NB_P{n}{tag}_W{k:02d}_{i}'
                     actions.append(w.operation('action', 'CREATE_NAMED_ON_TEAM_AT_WAYPOINT',
                                                [text(14, name), text(15, template), team(n), text(7, f'NB_Rally_{n}{tag}')]))
@@ -382,18 +413,25 @@ def scripts(m, factions, armies):
 
 
 def build(b):
-    v1 = project.find('nanduhirion-v1')
-    if not v1.map_file.exists():
-        raise RuntimeError('Build Nanduhirion v1 first: mw build nanduhirion-v1')
+    stage_battle(b, 'nanduhirion-v1', V1)
+
+
+def stage_battle(b, source, field, strength=1):
+    """The battle on the latest build of the project `source`, a Nanduhirion
+    copy laid out as `field` describes it, seated by b.project's line-up,
+    its armies and waves at `strength` (1: in full)."""
+    base = project.find(source)
+    if not base.map_file.exists():
+        raise RuntimeError(f'Build {base.title} first: mw build {base.id}')
     factions = [slot['faction'] for slot in b.project.config['play']['slots']]
     names = [t for f in factions for t in BASES[f] + [u for row in ARMY[f] for u in row] + [u for w in WAVES[f] for u in w]]
     check_templates(b.assets, names + [FORTRESS[f] for f in factions] + [h for hs in HEROES.values() for h in hs])
-    m = Map(v1.map_file.read_bytes())
+    m = Map(base.map_file.read_bytes())
     add_angmar_side(m)
-    ground = Ground(m)
-    armies, waypoints, placed = stage(m, factions, ground)
-    count, _ = scripts(m, factions, armies)
-    b.report.update(players={n: dict(faction=factions[n - 1], start=start(n), line=line(n), opponent=OPPONENT[n],
+    ground = Ground(m, field.layout.BORDER)
+    armies, waypoints, placed = stage(m, factions, ground, field, strength)
+    count, _ = scripts(m, factions, armies, strength)
+    b.report.update(players={n: dict(faction=factions[n - 1], start=field.start(n), line=field.line(n), opponent=OPPONENT[n],
                                      army=len(armies[n]), groups={job: sum(1 for u in armies[n] if u[2] == job)
                                                                    for job in dict.fromkeys(u[2] for u in armies[n])},
                                      buildings=sum(1 for p in placed if p[5] == 'Bases' and
@@ -401,5 +439,5 @@ def build(b):
                              for n in range(1, 9)},
                     waypoints={k: [round(v) for v in p] for k, p in waypoints.items()}, scripts=count,
                     waves=dict(first=FIRST_WAVE, every=WAVE, count=WAVE_COUNT))
-    ini = (v1.build_dir/'map.ini').read_text(encoding='ascii', errors='replace')
-    b.save(m, ini=ini.split('\n', 1)[1] if ini.startswith(';') else ini, minimap=Image.open(v1.build_dir/'preview.png'))
+    ini = (base.build_dir/'map.ini').read_text(encoding='ascii', errors='replace')
+    b.save(m, ini=ini.split('\n', 1)[1] if ini.startswith(';') else ini, minimap=Image.open(base.build_dir/'preview.png'))

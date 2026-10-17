@@ -1,0 +1,17 @@
+id = "nanduhirion-v2-battle"
+title = "Battle of Nanduhirion v2"
+native_name = "map mp nanduhirion v2 battle"
+players = 8
+description = "Nanduhirion v2 in the thick of a 4 vs 4: bases built, armies at the fronts, outposts held and reinforcements marching."
+
+[play]
+slots = [                               # the battle's line-up (maps/nanduhirion_battle/map.toml)
+    {faction = "Men", team = 1},        # you: your army follows the scripts
+    {faction = "Elves", team = 1, ai = "hard"},
+    {faction = "Dwarves", team = 1, ai = "hard"},
+    {faction = "Men", team = 1, ai = "hard"},
+    {faction = "Mordor", team = 2, ai = "hard"},
+    {faction = "Isengard", team = 2, ai = "hard"},
+    {faction = "Wild", team = 2, ai = "hard"},
+    {faction = "Angmar", team = 2, ai = "hard"},
+]
