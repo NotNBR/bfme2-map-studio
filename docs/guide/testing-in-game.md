@@ -89,6 +89,9 @@ its `players`, and at most 8; an observer would take a slot too.
 BFME2 and ROTWK test games have a free camera, to look at the map from any
 distance and angle. It is enabled by `mw play` and **Test In-Game**; the
 normal-game menu and the installed loading patch keep the game's own camera.
+`mw play --godot` starts OpenBFME with its own free camera on
+(`--free-camera`), which in the studio's fork steers the same way (Ctrl+Z
+turns it off and on).
 
 | Input | Does |
 | --- | --- |
