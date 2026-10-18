@@ -3,7 +3,7 @@ title = "Battle of Helm's Deep"
 native_name = "map mp helms deep battle"
 players = 2
 weather = "rain"                        # the night of the battle: rain, fog and lightning over the map's own night
-description = "The Hornburg and the Deeping Wall held by Men and Elves against 25,000 command points of Uruk-hai drawn up in the Deeping Coomb."
+description = "The Hornburg and the Deeping Wall held by Men and Elves against 40,000 command points of Uruk-hai drawn up in the Deeping Coomb."
 
 [play]
 slots = [                               # slot k takes start k

@@ -38,19 +38,21 @@ night of the battle:
   Rohirrim in the keep's courtyard for the last ride, the women and children
   at the back of the keep by the caves' arcade (the film puts the Glittering
   Caves' entrance inside the Hornburg).
-- Attackers, owned by Player_2: about 25,000 command points of Uruk-hai,
-  pikemen and swordsmen 3 to 1 (HOST), facing north on an even grid: the
-  same gap between neighbours along a row and between rows (a battalion is
-  BATTALION), as wide as still holds them all in the northern TOP of the
-  Deeping Coomb, no nearer the walls than FRONT (out of bowshot: Men's
+- Attackers, owned by Player_2: about 40,100 command points of Uruk-hai,
+  pikemen and swordsmen (HOST), facing north on an even grid: the
+  gaps GAP between neighbours along a row and ROW_GAP between rows (a battalion
+  is BATTALION), at most as wide as still holds HOST in the northern TOP of
+  the Deeping Coomb, no nearer the walls than FRONT (out of bowshot: Men's
   archers reach 300), off the causeway (CAUSEWAY) and Isengard's base
-  (BASE_CLEAR). The film's order of battle (TESTUDO): at the causeway's foot
+  (BASE_CLEAR); behind them REAR_ROWS more rows of pikes on the same grid.
+  Each battalion stands a little off its spot and off north (JITTER).
+  The film's order of battle (TESTUDO): at the causeway's foot
   the battering rams inside a column of shield-bearing swordsmen; before the
   Deeping Wall the rest of the swordsmen in the front rows, a siege ladder
   one row before every LADDER_EVERY column; before the culvert, instead of a
   ladder, the bomb: a mine carrier (MINE) and the torch-bearing berserker
   (BERSERKER); the pikes the mass behind them and before the Hornburg. About
-  25,200 command points in all. None is recruitable by the AI, so the
+  40,100 command points in all. None is recruitable by the AI, so the
   scripts alone move them.
 - Scripts, on PlyrCivilian: at CHARGE seconds each battalion attacks the
   piece of the defences straight ahead of it (TARGETS: the main gate, the
@@ -133,7 +135,10 @@ POST_ACROSS, POST_BACK = 100, 80
 
 PIKE, SWORD = 'IsengardPikemanHorde', 'IsengardFighterHorde'
 HOST = {PIKE: 294, SWORD: 98}   # 3 to 1; 24,990 command points at 60 and 75
+REAR_ROWS = 9                   # and this many more rows of pikes behind the rear row, past the field's TOP
 BATTALION = 90, 50              # a battalion's frontage and depth (5 abreast 20 apart, 3 ranks)
+GAP, ROW_GAP = 15, 25           # between neighbouring battalions along a row, and between rows (at most what fits HOST)
+JITTER = 6, 3                   # each battalion up to this far off its grid spot (map units) and off north (degrees)
 FRONT = 480                     # the host stands no nearer the walls than this: out of bowshot (Men's archers reach 300)
 TOP = 2/3                       # and in the field's northern two thirds, from its southern edge (SOUTH) to the walls
 SOUTH = 100
@@ -372,7 +377,7 @@ def defenders(m, assets, ground):
 def host(m, ground, walls):
     """The Uruk host (HOST) and its siege: (template, x, y, angle, target, role) per unit, the role pike, sword, ladder
     or ram; and the grid's (column spacing, row spacing, gap). The battalions stand on an even grid, the same gap between
-    neighbours along a row and between rows, as wide as still holds the host in the open field (open_at)."""
+    neighbours along a row and between rows: GAP, or less if the host would not fit the open field (open_at)."""
     W = walls[::2]
     x0, y0, x1, y1 = CAUSEWAY
 
@@ -398,18 +403,20 @@ def host(m, ground, walls):
         return [(CAUSEWAY_FOOT[0] + (f - (files - 1)/2)*dx, CAUSEWAY_FOOT[1] - r*dy, f, r)
                 for r in range(ranks) for f in range(files)]
 
-    def open_at(x, y, dx, dy):
+    def open_at(x, y, dx, dy, field=True):
+        """`field`: within the field's northern TOP."""
         column = testudo(dx, dy)
-        return (ahead(x, y) and y >= ymin and math.dist((x, y), ISENGARD_START) > BASE_CLEAR
+        return (ahead(x, y) and (y >= ymin or not field) and math.dist((x, y), ISENGARD_START) > BASE_CLEAR
                 and not (x0 < x < x1 and y0 < y < y1) and ground.fits(x, y, ROOM, 40)
                 and not any(abs(x - cx) < dx*.9 and abs(y - cy) < dy*.9 for cx, cy, *_ in column)
                 and math.sqrt(((W - (x, y))**2).sum(1).min()) >= FRONT)
 
     ymin = SOUTH + (1 - TOP)*(max(south(x) for x in range(200, 3800, 100)) - SOUTH)
 
-    def grid(gap):
-        """Every open spot of the grid with `gap` between battalions, by row (north first) and column."""
-        dx, dy = BATTALION[0] + gap, BATTALION[1] + gap
+    def grid(gap, row_gap=None):
+        """Every open spot of the grid with `gap` between battalions in a row and `row_gap` (default `gap`)
+        between rows, by row (north first) and column."""
+        dx, dy = BATTALION[0] + gap, BATTALION[1] + (gap if row_gap is None else row_gap)
         top = max(south(x) for x in np.arange(100, 3900, dx))
         return [(x, y) for y in np.arange(top, ymin - 1, -dy) for x in np.arange(2000 - dx*(1900//dx), 3900, dx)
                 if open_at(x, y, dx, dy)], dx, dy
@@ -420,18 +427,24 @@ def host(m, ground, walls):
     for _ in range(30):
         mid = (lo + hi)/2
         lo, hi = (mid, hi) if len(grid(mid)[0]) >= total else (lo, mid)
-    spots, dx, dy = grid(lo)
+    spots, dx, dy = grid(min(lo, GAP), min(lo, ROW_GAP))
     while len(spots) > total:                              # the rear row's surplus, from its ends in turn
         rear = [k for k, p in enumerate(spots) if p[1] == spots[-1][1]]
         spots.pop(rear[-1] if len(spots) % 2 else rear[0])
+    rear = min(p[1] for p in spots)                        # REAR_ROWS more rows behind, on the same grid
+    for k in range(1, REAR_ROWS + 1):
+        spots += [(x, rear - k*dy) for x in np.arange(2000 - dx*(1900//dx), 3900, dx)
+                  if open_at(x, rear - k*dy, dx, dy, field=False)]
     # the swordsmen not in the ram column: the front rows of the Deeping Wall's columns, row by row; the rest pikes
     depth = {}                                             # each spot's place in its column, the front 0
     for x, y in spots:
         depth[(x, y)] = sum(1 for px, py in spots if px == x and py > y)
     deep = sorted((p for p in spots if ahead_of(p[0]) != 'Main Gate'), key=lambda p: (depth[p], p[0]))
     assault = set(deep[:HOST[SWORD] - shields])
-    out = [(SWORD if (x, y) in assault else PIKE, float(x), float(y), math.pi/2, ahead_of(x),
-            'sword' if (x, y) in assault else 'pike') for x, y in spots]
+    # the grid a little uneven (JITTER), the same on every build
+    shake = np.random.default_rng(1).uniform(-1, 1, (len(spots), 3))*[JITTER[0], JITTER[0], math.radians(JITTER[1])]
+    out = [(SWORD if (x, y) in assault else PIKE, float(x+jx), float(y+jy), math.pi/2+ja, ahead_of(x),
+            'sword' if (x, y) in assault else 'pike') for (x, y), (jx, jy, ja) in zip(spots, shake)]
     gx, gy = targets['Main Gate']
     for x, y, f, r in testudo(dx, dy):                     # the ram column, facing up the causeway to the gate
         x, y = ground.spot(x, y, 25, 60, reach=60)
@@ -449,7 +462,7 @@ def host(m, ground, walls):
             out.append((BERSERKER, float(x + dx/4), float(y), math.pi/2, 'Culvert', 'berserker'))
         elif c % LADDER_EVERY == 0:
             out.append((LADDER, float(x), float(y), math.pi/2, ahead_of(x, DEEP_TARGETS), 'ladder'))
-    return out, (round(dx), round(dy), round(lo))
+    return out, (round(dx), round(dy), round(dx - BATTALION[0]), round(dy - BATTALION[1]))
 
 
 def scripts(m, side, units, riders):
@@ -540,7 +553,7 @@ def build(b):
                               command_points=sum(command_points(b.assets.templates, t)*n for t, n in DAWN_FORCE)),
                     scripts=count, waypoints=WAYPOINTS)
     print(f'Defenders: {len(people)} ({cp(people)} command points); host: {len(uruks)} units '
-          f'({cp(uruks)} command points), columns, rows and gap {spacing}; {count} scripts')
+          f'({cp(uruks)} command points), column and row spacing, gap and row gap {spacing}; {count} scripts')
     # the night of the battle in map.toml's weather (rain and lightning over the map's own night, no fog) under SKY
     m.set_objects([o for o in m.objects() if not o['template'].startswith('WaterReflectionSkydome')])
     terrain, border = TerrainData(m), m.heightmap()['border']*10
