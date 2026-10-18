@@ -826,7 +826,7 @@ class Viewer:
         if photo and active(self.fly.settings()):
             post = Post(ctx, samples)
             self.renderer.draw(cam, (w, h), post.target((w, h)), **options)
-            post.finish(cam, self.fly.settings(), resolve, taps=96)
+            post.finish(cam, self.fly.settings(), resolve, taps=256)
             post.release()
             items = (resolve,)
         else:
@@ -1083,7 +1083,7 @@ class Viewer:
                 if self.post is None:
                     self.post = Post(self.ctx, self.args.samples)
                 r.draw(cam, size, self.post.target(size), **options)
-                self.post.finish(cam, self.fly.settings(), self.ctx.screen, taps=40)
+                self.post.finish(cam, self.fly.settings(), self.ctx.screen, taps=128)
             else:
                 r.draw(cam, size, self.ctx.screen, **options)
             if self.pending_save is not None:

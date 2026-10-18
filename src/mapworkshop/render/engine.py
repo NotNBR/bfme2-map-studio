@@ -1918,7 +1918,7 @@ class MapRenderer:
             # Exposure and depth of field (render.photo) over the scene.
             post = Post(ctx, self.samples)
             self.draw(camera, size, post.target(size), grid=grid, border=border, bounds=bounds, time=time, **extra)
-            post.finish(camera, photo, resolve, taps=96)
+            post.finish(camera, photo, resolve, taps=256)
             post.release()
             items = (resolve,)
         else:

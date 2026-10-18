@@ -18,10 +18,18 @@ highlights that were white.
 
 Post draws a scene rendered into its multisampled target (target()) to a
 framebuffer with both effects (finish()): the colour is resolved into a
-texture with its depth, each pixel's blur circle is worked out from its depth,
-and the blur gathers the samples whose circles cover the pixel (a sample
-behind the pixel blurs no more than the pixel itself, so a sharp foreground
-keeps its edge).
+texture with its depth, and each pixel's blur circle is worked out from its
+depth. Two small passes find how far blur reaches around each pixel: the
+largest blur in each TILE x TILE tile, then the largest of the tiles it can
+reach (MAX_BLUR, 6% of the width, is the most). The blur is Dennis
+Gustafsson's single pass ("Bokeh depth of field in a single pass", 2018):
+over a disc as large as that reach, every sample
+whose own circle reaches the pixel joins a running average with equal weight,
+and one that does not adds the average so far. So a blurred foreground spreads
+over a sharp background, its outline soft, while a sample behind the pixel
+counts with at most twice the pixel's own circle, so a sharp foreground keeps
+its edge. The disc's sample pattern turns per pixel, which trades the repeated
+copies a fixed pattern gives in large blur for fine grain.
 """
 
 import math
@@ -31,7 +39,7 @@ import numpy as np
 SENSOR_WIDTH = 36.0                 # mm
 UNITS_PER_METRE = 10.0
 FOCAL_RANGE = 10.0, 600.0           # mm
-MAX_BLUR = 0.02                     # the largest blur circle, as a share of the image width
+MAX_BLUR = 0.06                     # the largest blur circle's diameter, as a share of the image width
 
 
 def fov_from_focal(focal):
@@ -59,57 +67,99 @@ def active(settings):
     return bool(settings.get('aperture')) or abs(settings.get('ev') or 0.0) > 1e-6
 
 
+TILE = 16                           # pixels per side of a tile of the blur's reach
+
 VS = """
 #version 430
 in vec2 in_pos;
 void main() { gl_Position = vec4(in_pos*2.0-1.0, 0.0, 1.0); }
 """
 
-FS = """
+# The depth and the blur circle, for all three passes.
+COMMON = """
 #version 430
-uniform sampler2D color_tex;
 uniform sampler2D depth_tex;
 uniform vec2 size;
 uniform float near_z, far_z;
-uniform float exposure;          // 2^ev
-uniform int use_dof;
 uniform float focus_mm, focal_mm, aperture_mm, px_per_mm, max_blur;
-uniform int taps;
-out vec4 frag;
 
-float view_z(vec2 uv) {
-    float z = texture(depth_tex, uv).r*2.0-1.0;
+float view_z(float depth) {
+    float z = depth*2.0-1.0;
     return 2.0*near_z*far_z/(far_z+near_z-z*(far_z-near_z));
 }
-float blur(float units) {
+// The blur circle's radius in pixels of a point `units` map units away.
+float radius(float units) {
     float d = max(units*100.0, 1e-3);                 // map units to mm (UNITS_PER_METRE 10)
     float s = max(focus_mm, focal_mm*1.001);
-    return min(aperture_mm*focal_mm/(s-focal_mm)*abs(d-s)/d*px_per_mm, max_blur);
+    return min(aperture_mm*focal_mm/(s-focal_mm)*abs(d-s)/d*px_per_mm, max_blur)*0.5;
 }
+"""
+
+# Pass 1: each tile's largest blur radius.
+TILE_FS = COMMON + """
+uniform int tile;
+out float reach;
+void main() {
+    ivec2 base = ivec2(gl_FragCoord.xy)*tile;
+    ivec2 last = ivec2(size)-1;
+    float m = 0.0;
+    for (int y = 0; y < tile; y++)
+        for (int x = 0; x < tile; x++)
+            m = max(m, radius(view_z(texelFetch(depth_tex, min(base+ivec2(x, y), last), 0).r)));
+    reach = m;
+}
+"""
+
+# Pass 2: the largest of the tiles around, as far as the largest blur reaches.
+SPREAD_FS = """
+#version 430
+uniform sampler2D tile_tex;
+uniform int spread;
+out float reach;
+void main() {
+    ivec2 t = ivec2(gl_FragCoord.xy);
+    ivec2 last = textureSize(tile_tex, 0)-1;
+    float m = 0.0;
+    for (int y = -spread; y <= spread; y++)
+        for (int x = -spread; x <= spread; x++)
+            m = max(m, texelFetch(tile_tex, clamp(t+ivec2(x, y), ivec2(0), last), 0).r);
+    reach = m;
+}
+"""
+
+# Pass 3: the blur over the reach around each pixel, then the exposure.
+FS = COMMON + """
+uniform sampler2D color_tex;
+uniform sampler2D reach_tex;
+uniform float exposure;          // 2^ev
+uniform int use_dof;
+uniform int taps;
+uniform int tile;
+out vec4 frag;
+
 void main() {
     vec2 uv = gl_FragCoord.xy/size;
     vec3 c = texture(color_tex, uv).rgb;
-    if (use_dof == 1) {
-        float z0 = view_z(uv);
-        float b0 = blur(z0);
-        float w0 = 1.0/max(b0*b0, 1.0);
-        vec3 sum = c*w0;
-        float weight = w0;
+    float reach = use_dof == 1 ? texelFetch(reach_tex, ivec2(gl_FragCoord.xy)/tile, 0).r : 0.0;
+    if (reach >= 0.5) {
+        float z0 = view_z(texture(depth_tex, uv).r);
+        float s0 = radius(z0);
         float golden = 2.39996323;
+        // Interleaved gradient noise: the pattern's turn for this pixel.
+        float turn = 6.2831853*fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        float total = 1.0;
         for (int i = 0; i < taps; i++) {
-            float r = sqrt((float(i)+0.5)/float(taps))*max_blur*0.5;
-            vec2 o = vec2(cos(float(i)*golden), sin(float(i)*golden))*r;
-            vec2 suv = uv + o/size;
-            float z = view_z(suv);
-            float b = blur(z);
-            if (z > z0) b = min(b, b0);             // behind the pixel: no more blurred than it
-            if (b*0.5 >= r) {
-                float w = 1.0/max(b*b, 1.0);
-                sum += texture(color_tex, suv).rgb*w;
-                weight += w;
-            }
+            float r = sqrt((float(i)+0.5)/float(taps))*reach;
+            float a = float(i)*golden + turn;
+            vec2 suv = uv + vec2(cos(a), sin(a))*r/size;
+            float z = view_z(texture(depth_tex, suv).r);
+            float s = radius(z);
+            if (z > z0) s = min(s, s0*2.0);         // behind the pixel: it cannot spread over a sharper pixel
+            float m = smoothstep(r-0.5, r+0.5, s);  // does its circle reach this pixel?
+            c += mix(c/total, texture(color_tex, suv).rgb, m);
+            total += 1.0;
         }
-        c = sum/weight;
+        c /= total;
     }
     vec3 linear = pow(max(c, 0.0), vec3(2.2))*exposure;
     frag = vec4(pow(clamp(linear, 0.0, 1.0), vec3(1.0/2.2)), 1.0);
@@ -123,9 +173,12 @@ class Post:
     def __init__(self, ctx, samples=4):
         import moderngl
         self.ctx, self.mgl, self.samples = ctx, moderngl, samples
-        self.program = ctx.program(vertex_shader=VS, fragment_shader=FS)
         quad = ctx.buffer(np.array([0, 0, 1, 0, 0, 1, 1, 1], 'f4').tobytes())
-        self.vao = ctx.vertex_array(self.program, [(quad, '2f', 'in_pos')])
+        self.programs, self.vaos = {}, {}
+        for name, fs in (('tile', TILE_FS), ('spread', SPREAD_FS), ('blur', FS)):
+            program = ctx.program(vertex_shader=VS, fragment_shader=fs)
+            self.programs[name] = program
+            self.vaos[name] = ctx.vertex_array(program, [(quad, '2f', 'in_pos')])
         self.size = None
         self.items = []
 
@@ -140,41 +193,55 @@ class Post:
             self.fbo = ctx.framebuffer([self.color], self.depth)
             self.color_tex = ctx.texture(size, 4)
             self.depth_tex = ctx.depth_texture(size)
-            for texture in (self.color_tex, self.depth_tex):
+            tiles = (-(-size[0]//TILE), -(-size[1]//TILE))
+            self.tile_tex = ctx.texture(tiles, 1, dtype='f4')
+            self.reach_tex = ctx.texture(tiles, 1, dtype='f4')
+            for texture in (self.color_tex, self.depth_tex, self.tile_tex, self.reach_tex):
                 texture.filter = (self.mgl.NEAREST, self.mgl.NEAREST)
                 texture.repeat_x = texture.repeat_y = False
             self.resolved = ctx.framebuffer([self.color_tex], self.depth_tex)
-            self.items = [self.fbo, self.resolved, self.color, self.depth, self.color_tex, self.depth_tex]
-            self.size = size
+            self.tile_fbo = ctx.framebuffer([self.tile_tex])
+            self.reach_fbo = ctx.framebuffer([self.reach_tex])
+            self.items = [self.fbo, self.resolved, self.tile_fbo, self.reach_fbo, self.color, self.depth,
+                          self.color_tex, self.depth_tex, self.tile_tex, self.reach_tex]
+            self.size, self.tiles = size, tiles
         return self.fbo
 
-    def finish(self, camera, settings, framebuffer, taps=48):
+    def finish(self, camera, settings, framebuffer, taps=128):
         """Draw the scene in target() to `framebuffer` with the photo
         `settings` (focal, aperture, focus, ev); `camera` is the resolved
         camera it was drawn with (its near and far)."""
-        ctx, p = self.ctx, self.program
+        ctx, mgl = self.ctx, self.mgl
         ctx.copy_framebuffer(self.resolved, self.fbo)
         width, height = self.size
-        framebuffer.use()
-        ctx.viewport = (0, 0, width, height)
-        ctx.disable(self.mgl.DEPTH_TEST)
-        ctx.disable(self.mgl.BLEND)
-        self.color_tex.use(0)
-        self.depth_tex.use(1)
-        p['color_tex'].value, p['depth_tex'].value = 0, 1
-        p['size'].value = (float(width), float(height))
-        p['near_z'].value, p['far_z'].value = float(camera['near']), float(camera['far'])
-        p['exposure'].value = 2.0**float(settings.get('ev') or 0.0)
         aperture = settings.get('aperture')
         focal = float(settings.get('focal') or 39.0)
-        p['use_dof'].value = int(bool(aperture))
-        p['focus_mm'].value = float(settings.get('focus') or 1500.0)/UNITS_PER_METRE*1000
-        p['focal_mm'].value = focal
-        p['aperture_mm'].value = focal/float(aperture or 1.0)
-        p['px_per_mm'].value = width/SENSOR_WIDTH
-        p['max_blur'].value = max(2.0, MAX_BLUR*width)
-        p['taps'].value = int(taps)
-        self.vao.render(self.mgl.TRIANGLE_STRIP)
+        max_blur = max(2.0, MAX_BLUR*width)
+        values = dict(size=(float(width), float(height)), near_z=float(camera['near']), far_z=float(camera['far']),
+                      focus_mm=float(settings.get('focus') or 1500.0)/UNITS_PER_METRE*1000, focal_mm=focal,
+                      aperture_mm=focal/float(aperture or 1.0), px_per_mm=width/SENSOR_WIDTH, max_blur=max_blur,
+                      tile=TILE, spread=int(math.ceil(max_blur/2/TILE)), exposure=2.0**float(settings.get('ev') or 0.0),
+                      use_dof=int(bool(aperture)), taps=int(taps), color_tex=0, depth_tex=1, tile_tex=2, reach_tex=3)
+        for program in self.programs.values():
+            for name, value in values.items():
+                if name in program:
+                    program[name].value = value
+        ctx.disable(mgl.DEPTH_TEST)
+        ctx.disable(mgl.BLEND)
+        self.color_tex.use(0)
+        self.depth_tex.use(1)
+        if aperture:
+            # Each tile's largest blur, then spread to the tiles it reaches.
+            self.tile_fbo.use()
+            ctx.viewport = (0, 0, *self.tiles)
+            self.vaos['tile'].render(mgl.TRIANGLE_STRIP)
+            self.tile_tex.use(2)
+            self.reach_fbo.use()
+            self.vaos['spread'].render(mgl.TRIANGLE_STRIP)
+        self.reach_tex.use(3)
+        framebuffer.use()
+        ctx.viewport = (0, 0, width, height)
+        self.vaos['blur'].render(mgl.TRIANGLE_STRIP)
 
     def release(self):
         for item in self.items:
