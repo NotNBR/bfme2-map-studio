@@ -845,7 +845,8 @@ class Viewer:
         kind = '-photo' if photo else ''
         path = RENDERS/f'{self.session.source.stem}{kind}-{time.strftime("%Y%m%d-%H%M%S")}.png'
         self.renderer.save(np.ascontiguousarray(pixels), path)
-        self.status.set(f'saved {path.name} in {RENDERS}', 5)
+        self.session.toast = dict(kind='done', title='Screenshot saved', detail=f'{path.name}  ·  {RENDERS}',
+                                  until=time.perf_counter()+4.0)
         print('Saved', path)
 
     # The world, for MarkEditor ------------------------------------------------------

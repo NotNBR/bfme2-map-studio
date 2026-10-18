@@ -31,7 +31,7 @@ FRAMES = (('free', 'Free', None), ('16:9', '16:9', 16/9), ('21:9', '21:9', 21/9)
           ('4:3', '4:3', 4/3), ('1:1', '1:1', 1.0))
 # The lens fields' presets.
 FOCALS = (14, 18, 24, 28, 35, 50, 85, 135, 200, 400)
-APERTURES = (None, 1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22)
+APERTURES = (None, 0.5, 0.7, 0.95, 1.2, 1.4, 2, 2.8, 4, 5.6, 8, 11, 16, 22)   # f/0.5: the limit of a lens in air
 FOCUS_DISTANCES = (50, 100, 200, 500, 1000, 2000, 5000)
 EXPOSURES = (-2, -1, -0.5, 0, 0.5, 1, 2)
 # Photo mode's controls, shown above the bar (draw_help): key, what it does.
