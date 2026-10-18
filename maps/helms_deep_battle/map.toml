@@ -1,0 +1,11 @@
+id = "helms-deep-battle"
+title = "Battle of Helm's Deep"
+native_name = "map mp helms deep battle"
+players = 2
+description = "The Hornburg and the Deeping Wall held by Men and Elves against 25,000 command points of Uruk-hai drawn up in the Deeping Coomb."
+
+[play]
+slots = [                               # slot k takes start k
+    {faction = "Men", team = 1},        # you: the fortress, its walls and every defender
+    {faction = "Isengard", team = 2, ai = "hard"},   # the Uruk host; the scripts drive it at the walls
+]
