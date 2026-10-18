@@ -614,16 +614,68 @@ def _object_names(assets):
     return set(assets.templates) | {n.lower() for n in _named(assets.ini_text('crate.ini'), '(?:Object|ChildObject|ObjectReskin)')}
 
 
+MODULE = re.compile(r'(?i)^(Draw|Behavior|Body|ClientUpdate|ClientBehavior)\s*=\s*(\w+)\s+(\w+)')
+
+
+def _override_problems(name, body):
+    """What an `Object` block overriding one of the game's objects does that
+    the game refuses (ThingTemplate::parseModuleName in the OpenBFME fork,
+    from the retail code): a module declared outside AddModule, ReplaceModule
+    or InheritableModule, and a ReplaceModule whose module keeps the old tag."""
+    out, depth, script, replacing = [], 0, False, []
+    for raw in body.splitlines():
+        line = raw.split(';', 1)[0].split('//', 1)[0].strip()
+        if not line or line.startswith('#'):
+            continue
+        if script:
+            script = not re.match(r'(?i)^EndScript\b', line)
+            continue
+        if re.match(r'(?i)^BeginScript\b', line):
+            script = True
+            continue
+        if re.match(r'(?i)^End\b', line):
+            depth = max(0, depth - 1)
+            if replacing and replacing[-1][0] == depth:
+                replacing.pop()
+            continue
+        edit = re.match(r'(?i)^(AddModule|ReplaceModule|InheritableModule)\b\s*(\w*)', line)
+        if edit:
+            if edit.group(1).lower() == 'replacemodule':
+                replacing.append((depth, edit.group(2)))
+            depth += 1
+            continue
+        module = MODULE.match(line)
+        if module:
+            if depth == 0:
+                out.append(f'Object {name}: {module.group(1)} {module.group(3)} outside AddModule or ReplaceModule; '
+                           'the game stops loading a map whose map.ini overrides an object so '
+                           '("You must use AddModule to add modules in override INI files")')
+            elif replacing and replacing[-1][0] == depth - 1 and module.group(3).lower() == replacing[-1][1].lower():
+                out.append(f'Object {name}: ReplaceModule {replacing[-1][1]} keeps the tag; the game needs a new one')
+            depth += 1
+            continue
+        if re.fullmatch(r'\w+', line) or re.match(
+                r'(?i)^(LocomotorSet|ArmorSet|WeaponSet|ModelConditionState|AnimationState|TransitionState|Animation)\s*=', line):
+            depth += 1
+    return out
+
+
 def check_ini(assets, ini):
     """Lines naming what a map's map.ini defines that the game will not take:
     an `Object` block adding an object type the game doesn't define (BFME2
     hangs loading a map whose map.ini does; changing the game's own objects
-    works, docs/game/water.md), and a particle system whose texture the
-    game doesn't have. `assets` are the game's, without the map's templates."""
+    works, docs/game/water.md), one overriding the game's object with a module
+    outside AddModule or ReplaceModule (_override_problems), and a particle
+    system whose texture the game doesn't have. `assets` are the game's,
+    without the map's templates."""
+    from mapworkshop.render.assets import TEMPLATE
     known = _object_names(assets)
     out = [f'Object {name}: adds an object type; BFME2 hangs loading a map whose map.ini does '
            "(change one of the game's objects instead)"
            for name in sorted(set(_named(ini, 'Object')), key=str.lower) if name.lower() not in known]
+    for kind, name, _, body in TEMPLATE.findall(ini):
+        if kind == 'Object' and name.lower() in known:
+            out += _override_problems(name, body)
     for name, body in re.findall(r'(?ms)^FXParticleSystem[ \t]+(\S+)[^\n]*\n(.*?)^End\b', ini):
         texture = _field(body, 'ParticleName')
         if texture and assets.texture_key(texture) is None:

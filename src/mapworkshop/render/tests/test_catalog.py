@@ -172,6 +172,23 @@ class CheckIniTests(unittest.TestCase):
         self.assertTrue(lines[0].startswith('Object MW_NewThing: adds an object type'))
         self.assertEqual(lines[1], 'FXParticleSystem MWMissing: the game has no texture NoSuchTexture.tga')
 
+    def test_override_modules(self):
+        """An override of the game's object replaces a module with ReplaceModule and a new tag; declaring one
+        directly, or keeping the old tag, stops the game loading the map."""
+        assets = Assets(HALL)
+        draw = ('    Draw = W3DScriptedModelDraw {tag}\n      DefaultModelConditionState\n        Model = X\n      End\n'
+                '      IdleAnimationState\n        BeginScript\n          CurDrawableHideSubObject("A")\n'
+                '        EndScript\n      End\n    End\n')
+        good = 'Object RohanGoldenHall\n  ReplaceModule ModuleTag_01\n' + draw.format(tag='ModuleTag_New') + '  End\nEnd\n'
+        self.assertEqual(catalog.check_ini(assets, good), [])
+        same = 'Object RohanGoldenHall\n  ReplaceModule ModuleTag_01\n' + draw.format(tag='ModuleTag_01') + '  End\nEnd\n'
+        self.assertEqual(catalog.check_ini(assets, same),
+                         ['Object RohanGoldenHall: ReplaceModule ModuleTag_01 keeps the tag; the game needs a new one'])
+        bare = 'Object RohanGoldenHall\n' + draw.format(tag='ModuleTag_01') + '  EditorSorting = SYSTEM\nEnd\n'
+        lines = catalog.check_ini(assets, bare)
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith('Object RohanGoldenHall: Draw ModuleTag_01 outside AddModule or ReplaceModule'))
+
 
 class TemplatePatternTests(unittest.TestCase):
     def test_indented_definitions_and_assignments(self):
