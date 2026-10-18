@@ -19,9 +19,18 @@ the controls.
 
 ## Moving around
 
-The controls are those of a 3D editor, not the game's:
+The viewer has two cameras; **V** or the camera bar switches between them,
+and the view stays where it is.
 
-| Input | Action |
+- **Edit**, the default, orbits a point on the ground, as in a 3D editor. Use
+  it to work on the map: marks, the palette and the marks panel are shown.
+- **Photo** is a free camera with a lens, for looking at the map from anywhere
+  and for pictures ([Photo mode](#photo-mode-and-the-camera-bar)).
+
+Neither is the game's camera; [test games](guide/testing-in-game.md#camera)
+have the game's own, freed to zoom out and tilt.
+
+| Input (Edit) | Action |
 | --- | --- |
 | Left drag | Orbit around the focus point |
 | Right or middle drag | Grab and pan the ground |
@@ -30,15 +39,65 @@ The controls are those of a 3D editor, not the game's:
 | W A S D / arrows | Move (Shift faster, Ctrl slower) |
 | Q / E, R / F, Z / X | Rotate, tilt, zoom |
 | Space / Home, T | Reset to the whole map, toggle top-down |
+
+| Input (both) | Action |
+| --- | --- |
+| V | Edit or Photo |
+| Ctrl+1..9, Ctrl+Shift+1..9 | Go to saved view 1-9, save the view there |
+| Ctrl+C | Copy the view as a `mw render` command |
 | 1 2 3 4 5 6 7 8 9 | Objects, water, shadows, normal maps, clouds, weather, walkable, river flow arrows, editor markers |
 | U | Show or hide the units |
 | M | Show or hide the marks |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, reload, build, controls |
-| Del, Ctrl+Z | Delete the selected mark, undo a mark change |
-| Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); quit when nothing is left |
+| Del, Ctrl+Z | Delete the selected mark, undo a mark change (Edit) |
+| Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); in Photo free the mouse, then go back to Edit; quit when nothing is left |
 
-The camera is a preview camera, not the game's; [test games](guide/testing-in-game.md#camera)
-have the game's own, freed to zoom out and tilt.
+## Photo mode and the camera bar
+
+In Photo mode the mouse is captured, as in a first-person game: moving it
+looks around. Esc frees it to use the bars; a click in the view takes it back.
+The camera goes anywhere: nothing holds it above the ground, and it can look
+straight up at the sky or out past the map's edge. Marks, the palette and the
+marks panel are hidden; a short list of the controls below sits above the
+camera bar.
+
+| Input (Photo) | Action |
+| --- | --- |
+| Mouse | Look around (slower on a long lens) |
+| Right drag | Slide sideways and up |
+| Wheel | Move forward or back |
+| Alt+wheel, Shift+wheel | Focal length, focus distance |
+| Middle click | Focus on the centre of the view |
+| W A S D / arrows | Fly along the view (Shift faster, Ctrl slower; speed grows with the height above the ground) |
+| Space / C | Up / down |
+| Q / E, R | Roll left / right, level again |
+
+The **camera bar** at the bottom left holds, from the left:
+
+- **Edit / Photo**, the camera.
+- **Views**: the saved views with their thumbnails, Photo or Edit and their
+  key. Click one to go there; **…** renames it, **×** deletes it; **Save the
+  current view** puts it in the first free slot. Views are kept per map in
+  `local/views/<map file name>.json`, in the form `mw render --views` reads
+  ([rendering](guide/rendering.md#cameras)), with the thumbnails in a folder
+  beside it.
+- **Copy view**: the view as a `mw render --map ... --view view ...` command on
+  the clipboard, to render it at full quality or hand it to an agent.
+- In Photo mode, the lens ([render/photo.py](../src/mapworkshop/render/photo.py)):
+  **focal length** (mm on a full-frame sensor; 39 mm is Edit's 50 degrees),
+  **aperture** (f/ - is everything sharp; an f-number blurs what is nearer or
+  further than the focus), **focus** distance and exposure (**EV**). The wheel
+  or a sideways drag over a field changes it; a click opens its presets.
+  Depth of field follows a real lens with 10 map units to the metre: focused
+  across the map, little blurs; focused within a few hundred units, the
+  distance does. Depth of field and exposure are effects the game does not
+  have.
+- In Photo mode, the framing aids: **Thirds** lines and the **frame**'s
+  aspect (Free, 16:9, 21:9, 3:2, 4:3, 1:1), shown by darkening outside it.
+  Screenshots in Photo mode (P) include the lens and exposure, are cropped to
+  the frame and saved as `<map>-photo-<time>.png`.
+- The **readout**: in Edit the target, distance, heading and tilt; in Photo the
+  camera's position, heading, tilt, roll and field of view.
 
 ## Live reload
 

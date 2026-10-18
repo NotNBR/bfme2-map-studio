@@ -16,6 +16,14 @@ Orbit view (default):
     fov       = degrees   horizontal field of view                 (50)
     eye       = X,Y,Z     optional explicit eye; overrides distance,
                           elevation and heading
+    roll      = degrees   the camera turned about its view direction,
+                          positive to the right (0)
+
+Photo keys (render.photo; the viewer's Photo mode writes them):
+    focal     = mm        focal length on a full-frame sensor, in place of fov
+    aperture  = f-number  depth of field (none: everything sharp)
+    focus     = units     the distance in focus (default: to the target)
+    ev        = stops     exposure, brighter above 0 (0)
 
 Top view (orthographic, north up):
     region    = X0,Y0,X1,Y1   world rectangle; default is the playable map
@@ -81,9 +89,15 @@ class OrbitView:
     fov: float = 50.0
     eye: tuple = None
     near: float = None                 # near clip; default 1% of the distance
+    roll: float = 0.0
+    focal: float = None                # photo keys (render.photo)
+    aperture: float = None
+    focus: float = None
+    ev: float = 0.0
     kind: str = field(default='orbit', init=False)
 
     def resolve(self, terrain, aspect):
+        from mapworkshop.render.photo import fov_from_focal
         tx, ty = self.target[:2]
         tz = self.target[2] if len(self.target) > 2 else float(terrain.height_at(tx, ty))
         target = np.array([tx, ty, tz], float)
@@ -94,13 +108,29 @@ class OrbitView:
             back = np.array([-math.sin(h)*math.cos(e), -math.cos(h)*math.cos(e), math.sin(e)])
             eye = target + back*self.distance
         distance = float(np.linalg.norm(eye-target))
-        fov_y = 2*math.degrees(math.atan(math.tan(math.radians(self.fov)/2)/aspect))
+        fov = fov_from_focal(self.focal) if self.focal else self.fov
+        fov_y = 2*math.degrees(math.atan(math.tan(math.radians(fov)/2)/aspect))
         near = self.near if self.near is not None else max(2.0, distance*0.01)
-        proj = perspective(fov_y, aspect, near, distance*20+30000)
-        return dict(view_projection=proj @ look_at(eye, target), eye=eye, target=target)
+        far = distance*20+30000
+        proj = perspective(fov_y, aspect, near, far)
+        view = rolled(look_at(eye, target), self.roll)
+        return dict(view_projection=proj @ view, eye=eye, target=target, near=near, far=far,
+                    photo=dict(focal=self.focal or None, aperture=self.aperture, ev=self.ev,
+                               focus=self.focus if self.focus is not None else distance))
 
     def describe(self):
-        return {k: v for k, v in asdict(self).items() if v is not None}
+        return {k: v for k, v in asdict(self).items() if v is not None and not (k in ('roll', 'ev') and v == 0)}
+
+
+def rolled(view, roll):
+    """A view matrix turned `roll` degrees about the view direction, the camera
+    to the right for a positive roll (the picture turns to the left)."""
+    if not roll:
+        return view
+    a = math.radians(roll)
+    turn = np.eye(4)
+    turn[0, 0], turn[0, 1], turn[1, 0], turn[1, 1] = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
+    return turn @ view
 
 
 def _ini_float(text, key, default):
@@ -312,15 +342,18 @@ def view_from_dict(spec):
         return TopView(tuple(float(v) for v in region) if region is not None else None)
     if 'target' not in spec:
         raise ValueError('An orbit view needs target=X,Y[,Z]')
-    known = {'target', 'distance', 'elevation', 'heading', 'fov', 'eye', 'near'}
+    known = {'target', 'distance', 'elevation', 'heading', 'fov', 'eye', 'near', 'roll', 'focal', 'aperture', 'focus',
+             'ev'}
     unknown = set(spec) - known
     if unknown:
         raise ValueError('Unknown view keys: '+', '.join(sorted(unknown))+'; use '+', '.join(sorted(known)))
     as_list = lambda v, n, name: tuple(v) if isinstance(v, (list, tuple)) else tuple(_floats(v, n, name))
+    number = lambda key: float(spec[key]) if spec.get(key) not in (None, '', 'none', 'off') else None
     return OrbitView(target=as_list(spec['target'], (2, 3), 'target'),
                      distance=float(spec.get('distance', 1500)),
                      elevation=float(spec.get('elevation', 45)),
                      heading=float(spec.get('heading', 0)),
                      fov=float(spec.get('fov', 50)),
                      eye=as_list(spec['eye'], (3,), 'eye') if 'eye' in spec else None,
-                     near=float(spec['near']) if 'near' in spec else None)
+                     near=number('near'), roll=number('roll') or 0.0, focal=number('focal'),
+                     aperture=number('aperture'), focus=number('focus'), ev=number('ev') or 0.0)

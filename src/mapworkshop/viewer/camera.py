@@ -1,16 +1,21 @@
-"""The viewer's orbit camera: smooth motion towards a goal, picking the
-terrain under the cursor, and the moves the mouse and keyboard make.
+"""The viewer's cameras: the orbit camera of Edit mode and the free camera
+of Photo mode, the moves the mouse and keyboard make, and picking the
+terrain under the cursor.
 
-Navigation is in map units (x east, y north); heading and elevation are in
-degrees. Every move changes the goal and update() eases the camera towards
-it, except pan(), which keeps the grabbed point exactly under the cursor.
+Navigation is in map units (x east, y north); heading, elevation, pitch and
+roll are in degrees. Every move changes the goal and update() eases the
+camera towards it, except pan(), which keeps the grabbed point exactly under
+the cursor, and looking around in Photo mode, which follows the mouse 1:1.
+Both cameras' matrices() give what the renderer draws with: view_projection,
+eye, target, near and far.
 """
 
 import math
 
 import numpy as np
 
-from mapworkshop.render.camera import look_at, perspective
+from mapworkshop.render.camera import look_at, perspective, rolled
+from mapworkshop.render.photo import FOCAL_RANGE, focal_from_fov, fov_from_focal
 
 ORBIT_DEGREES_PER_PIXEL = 0.25
 SMOOTHING = 16.0          # 1/s; higher follows input faster
@@ -130,40 +135,17 @@ class Camera:
         if eye[2] < floor:
             eye[2] = floor
         fov_y = 2*math.degrees(math.atan(math.tan(math.radians(self.fov)/2)/aspect))
-        near = max(2.0, s['distance']*0.01)
-        proj = perspective(fov_y, aspect, near, s['distance']*20+30000)
-        return dict(view_projection=proj @ look_at(eye, target), eye=eye, target=target)
+        near, far = max(2.0, s['distance']*0.01), s['distance']*20+30000
+        proj = perspective(fov_y, aspect, near, far)
+        return dict(view_projection=proj @ look_at(eye, target), eye=eye, target=target, near=near, far=far)
 
     def ray(self, cursor, size):
         """World-space ray through a window position (pixels, origin top-left)."""
-        cam = self.matrices(size[0]/size[1])
-        inv = np.linalg.inv(cam['view_projection'])
-        nx = 2*cursor[0]/size[0]-1
-        ny = 1-2*cursor[1]/size[1]
-        near = inv @ np.array([nx, ny, -1, 1.0]); near = near[:3]/near[3]
-        far = inv @ np.array([nx, ny, 1, 1.0]); far = far[:3]/far[3]
-        return near, (far-near)/np.linalg.norm(far-near)
+        return screen_ray(self.matrices(size[0]/size[1]), cursor, size)
 
     def pick(self, cursor, size):
         """Terrain point under the cursor (ray march + bisection), or None."""
-        origin, direction = self.ray(cursor, size)
-        reach = self.cur['distance']*6+20000
-        t = np.linspace(0, reach, 1500)
-        points = origin+np.outer(t, direction)
-        below = points[:, 2] <= self.surface(points[:, 0], points[:, 1])
-        hits = np.nonzero(below)[0]
-        if not len(hits):
-            return None
-        i = hits[0]
-        lo, hi = t[max(i-1, 0)], t[i]
-        for _ in range(20):
-            mid = (lo+hi)/2
-            p = origin+direction*mid
-            if p[2] <= self.surface(p[0], p[1]):
-                hi = mid
-            else:
-                lo = mid
-        return origin+direction*hi
+        return march(*self.ray(cursor, size), self.surface, self.cur['distance']*6+20000)
 
     def plane_hit(self, cursor, size, z):
         origin, direction = self.ray(cursor, size)
@@ -171,3 +153,162 @@ class Camera:
             return None
         t = (z-origin[2])/direction[2]
         return origin+direction*t if t > 0 else None
+
+    # Edit and Photo ----------------------------------------------------------
+    def aim(self, eye, forward, surface_hit=None):
+        """Orbit the ground the free camera at `eye` looks at along `forward`:
+        `surface_hit`, or where its heading meets the ground ahead when it looks
+        above the horizon. Snaps there; the tilt keeps within its limits."""
+        heading = math.degrees(math.atan2(forward[0], forward[1]))
+        if surface_hit is None:
+            ahead = np.array([forward[0], forward[1]])
+            ahead = ahead/(np.linalg.norm(ahead) or 1.0)
+            reach = max(300.0, abs(eye[2]-self.ground(eye[0], eye[1]))*1.5)
+            x, y = eye[0]+ahead[0]*reach, eye[1]+ahead[1]*reach
+            surface_hit = np.array([x, y, self.ground(x, y)])
+        offset = np.asarray(eye, float)-surface_hit
+        distance = float(np.linalg.norm(offset))
+        elevation = math.degrees(math.asin(max(-1.0, min(1.0, offset[2]/(distance or 1.0)))))
+        self.goal = dict(x=float(surface_hit[0]), y=float(surface_hit[1]), distance=_clamp_distance(distance),
+                         heading=heading, elevation=_clamp_elevation(elevation))
+        self.top = None
+        self.snap()
+
+
+def screen_ray(camera, cursor, size):
+    """World-space ray (origin, unit direction) through a window position."""
+    inv = np.linalg.inv(camera['view_projection'])
+    nx = 2*cursor[0]/size[0]-1
+    ny = 1-2*cursor[1]/size[1]
+    near = inv @ np.array([nx, ny, -1, 1.0]); near = near[:3]/near[3]
+    far = inv @ np.array([nx, ny, 1, 1.0]); far = far[:3]/far[3]
+    return near, (far-near)/np.linalg.norm(far-near)
+
+
+def march(origin, direction, surface, reach):
+    """The first point along a ray at or below `surface` within `reach` (ray
+    march + bisection), or None."""
+    t = np.linspace(0, reach, 1500)
+    points = origin+np.outer(t, direction)
+    below = points[:, 2] <= surface(points[:, 0], points[:, 1])
+    hits = np.nonzero(below)[0]
+    if not len(hits):
+        return None
+    i = hits[0]
+    lo, hi = t[max(i-1, 0)], t[i]
+    for _ in range(20):
+        mid = (lo+hi)/2
+        p = origin+direction*mid
+        if p[2] <= surface(p[0], p[1]):
+            hi = mid
+        else:
+            lo = mid
+    return origin+direction*hi
+
+
+LOOK_DEGREES_PER_PIXEL = 0.08     # at a 50 degree field of view; narrower turns slower
+FOCAL_STEP = 1.12                  # focal length factor per wheel notch
+FOCUS_STEP = 1.15                  # focus distance factor per wheel notch
+
+
+class FlyCamera:
+    """Photo mode's free camera: an eye anywhere, turned by `heading` (0 north,
+    90 east), `pitch` (above the horizon, -90 to 90) and `roll` (to the
+    right), and a lens (render.photo): `focal` mm, `aperture` (an f-number,
+    None for everything sharp), `focus` (map units) and `ev`.
+
+    Moves ease the eye towards its goal; turns follow the mouse at once."""
+
+    def __init__(self, surface):
+        self.surface = surface
+        self.eye = np.array([0.0, 0.0, 1000.0])
+        self.goal = self.eye.copy()
+        self.heading, self.pitch, self.roll = 0.0, -30.0, 0.0
+        self.focal, self.aperture, self.focus, self.ev = focal_from_fov(50.0), None, 1500.0, 0.0
+
+    @property
+    def fov(self):
+        return fov_from_focal(self.focal)
+
+    def forward(self):
+        h, p = math.radians(self.heading), math.radians(self.pitch)
+        return np.array([math.sin(h)*math.cos(p), math.cos(h)*math.cos(p), math.sin(p)])
+
+    def right(self):
+        h = math.radians(self.heading)
+        return np.array([math.cos(h), -math.sin(h), 0.0])
+
+    def clearance(self):
+        """Height above the ground under the eye (negative below it)."""
+        return float(self.eye[2]-float(self.surface(self.eye[0], self.eye[1])))
+
+    def speed(self):
+        """Map units per second at speed 1: faster high up."""
+        return max(60.0, abs(self.clearance()))
+
+    def place(self, eye, forward, focus=None):
+        """Put the eye at `eye` looking along `forward` (roll 0)."""
+        f = np.asarray(forward, float)
+        f = f/(np.linalg.norm(f) or 1.0)
+        self.eye = np.asarray(eye, float).copy()
+        self.goal = self.eye.copy()
+        self.heading = math.degrees(math.atan2(f[0], f[1]))
+        self.pitch = math.degrees(math.asin(max(-1.0, min(1.0, f[2]))))
+        self.roll = 0.0
+        if focus is not None:
+            self.focus = float(focus)
+
+    def update(self, dt):
+        self.eye = self.eye + (self.goal-self.eye)*(1-math.exp(-12.0*dt))
+
+    def look(self, dx, dy):
+        """Turn by a mouse movement in pixels: right and down look right and down."""
+        k = LOOK_DEGREES_PER_PIXEL*self.fov/50.0
+        self.heading = (self.heading + dx*k) % 360
+        self.pitch = min(89.9, max(-89.9, self.pitch - dy*k))
+
+    def drive(self, dt, forward=0, right=0, up=0, roll=0, speed=1.0):
+        """Keyboard movement for dt seconds: forward along the view, right,
+        and up; roll turns about the view direction."""
+        step = self.speed()*speed*dt
+        self.goal = self.goal + (self.forward()*forward + self.right()*right + np.array([0, 0, 1.0])*up)*step
+        self.roll = max(-90.0, min(90.0, self.roll + roll*45*dt))
+
+    def slide(self, dx, dy):
+        """Move sideways and up by a mouse movement in pixels (a right drag)."""
+        k = self.speed()*0.003
+        self.goal = self.goal + self.right()*dx*k + np.array([0, 0, 1.0])*(-dy)*k
+
+    def dolly(self, notches):
+        """Move along the view by wheel notches (positive: forward)."""
+        self.goal = self.goal + self.forward()*notches*max(20.0, self.speed()*0.25)
+
+    def zoom(self, notches):
+        """Longer focal length by wheel notches (positive: in)."""
+        self.focal = min(FOCAL_RANGE[1], max(FOCAL_RANGE[0], self.focal*FOCAL_STEP**notches))
+
+    def refocus(self, notches):
+        """Focus further by wheel notches (positive: further)."""
+        self.focus = min(100000.0, max(5.0, self.focus*FOCUS_STEP**notches))
+
+    def matrices(self, aspect):
+        """The camera for the renderer; its target is the point in focus ahead."""
+        eye = self.eye
+        target = eye + self.forward()*self.focus
+        fov_y = 2*math.degrees(math.atan(math.tan(math.radians(self.fov)/2)/aspect))
+        near = min(40.0, max(1.0, abs(self.clearance())*0.02))
+        far = 80000.0
+        proj = perspective(fov_y, aspect, near, far)
+        view = rolled(look_at(eye, target), self.roll)
+        return dict(view_projection=proj @ view, eye=eye.copy(), target=target, near=near, far=far,
+                    photo=self.settings())
+
+    def settings(self):
+        return dict(focal=self.focal, aperture=self.aperture, focus=self.focus, ev=self.ev)
+
+    def ray(self, cursor, size):
+        return screen_ray(self.matrices(size[0]/size[1]), cursor, size)
+
+    def pick_ahead(self, size):
+        """The terrain point at the centre of the view, or None."""
+        return march(*self.ray((size[0]/2, size[1]/2), size), self.surface, 60000.0)

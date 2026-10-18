@@ -3,8 +3,9 @@ keys and its check mark. Keys, toolbar buttons and the View menu all run
 commands from one Commands registry.
 
 Keys are written as in the docs: 'G', '7', 'F5', 'Space', 'Esc', 'Del',
-'Ctrl+B'. A key without Ctrl also answers with Ctrl held, unless a Ctrl
-binding takes that key (Ctrl+B builds, B toggles the border).
+'Ctrl+B', 'Ctrl+Shift+1'. A key without Ctrl also answers with Ctrl held,
+unless a Ctrl binding takes that key (Ctrl+B builds, B toggles the border);
+Shift counts only for a binding that names it.
 """
 
 from dataclasses import dataclass
@@ -26,11 +27,12 @@ class Command:
 
 
 def parse_key(name):
-    """'Ctrl+B' -> ('B', True): the key's GLFW name and whether Ctrl is part of it."""
+    """'Ctrl+B' -> ('B', True, False): the key's GLFW name and whether Ctrl
+    and Shift are part of it."""
     *mods, key = name.split('+')
-    if any(m != 'Ctrl' for m in mods) or not key:
-        raise ValueError(f'unknown key {name!r}: only Ctrl+ is supported')
-    return GLFW_NAMES.get(key, key.upper()), bool(mods)
+    if any(m not in ('Ctrl', 'Shift') for m in mods) or not key or (mods and mods[0] != 'Ctrl'):
+        raise ValueError(f'unknown key {name!r}: only Ctrl+ and Ctrl+Shift+ are supported')
+    return GLFW_NAMES.get(key, key.upper()), 'Ctrl' in mods, 'Shift' in mods
 
 
 class Commands:
@@ -39,7 +41,7 @@ class Commands:
     def __init__(self, keycode):
         self.keycode = keycode
         self.by_id = {}
-        self.by_key = {}          # (key code, ctrl) -> Command
+        self.by_key = {}          # (key code, ctrl, shift) -> Command
 
     def add(self, *commands):
         for command in commands:
@@ -47,8 +49,8 @@ class Commands:
                 raise ValueError(f'two commands are called {command.id!r}')
             self.by_id[command.id] = command
             for name in command.keys:
-                key, ctrl = parse_key(name)
-                binding = (self.keycode(key), ctrl)
+                key, ctrl, shift = parse_key(name)
+                binding = (self.keycode(key), ctrl, shift)
                 if binding in self.by_key:
                     raise ValueError(f'{name} is bound to both {self.by_key[binding].id!r} and {command.id!r}')
                 self.by_key[binding] = command
@@ -56,11 +58,13 @@ class Commands:
     def __getitem__(self, command_id):
         return self.by_id[command_id]
 
-    def for_key(self, key, ctrl):
+    def for_key(self, key, ctrl, shift=False):
         """The command a key press runs, or None."""
-        command = self.by_key.get((key, ctrl))
+        command = self.by_key.get((key, ctrl, shift))
+        if command is None and shift:
+            command = self.by_key.get((key, ctrl, False))
         if command is None and ctrl:
-            command = self.by_key.get((key, False))
+            command = self.by_key.get((key, False, False))
         return command
 
     def run(self, command, scene):

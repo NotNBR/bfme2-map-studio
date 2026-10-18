@@ -16,6 +16,7 @@ from mapworkshop.render import shaders
 from mapworkshop.render.assets import GameAssets
 from mapworkshop.render.camera import OrbitView, TopView, parse_view, _normalize
 from mapworkshop.render.effects import QUAD_CORNERS, TRI_CORNERS, Effects
+from mapworkshop.render.photo import Post, active
 from mapworkshop.render.shadows import shadow_kind
 from mapworkshop.render.terrain import TerrainData
 from mapworkshop.render.w3d import ModelCache, chunks, fx_constants
@@ -1910,15 +1911,25 @@ class MapRenderer:
         bounds = view.bounds(self.terrain) if isinstance(view, TopView) else None
         ctx = self.ctx
         width, height = size
-        color = ctx.renderbuffer((width, height), 4, samples=self.samples)
-        depth = ctx.depth_renderbuffer((width, height), samples=self.samples)
-        fbo = ctx.framebuffer([color], depth)
-        resolve = ctx.framebuffer([ctx.renderbuffer((width, height), 4)])
         extra = {} if background is None else dict(clear=tuple(background))
-        self.draw(camera, size, fbo, grid=grid, border=border, bounds=bounds, time=time, **extra)
-        ctx.copy_framebuffer(resolve, fbo)
+        photo = camera.get('photo') or {}
+        resolve = ctx.framebuffer([ctx.renderbuffer((width, height), 4)])
+        if active(photo):
+            # Exposure and depth of field (render.photo) over the scene.
+            post = Post(ctx, self.samples)
+            self.draw(camera, size, post.target(size), grid=grid, border=border, bounds=bounds, time=time, **extra)
+            post.finish(camera, photo, resolve, taps=96)
+            post.release()
+            items = (resolve,)
+        else:
+            color = ctx.renderbuffer((width, height), 4, samples=self.samples)
+            depth = ctx.depth_renderbuffer((width, height), samples=self.samples)
+            fbo = ctx.framebuffer([color], depth)
+            self.draw(camera, size, fbo, grid=grid, border=border, bounds=bounds, time=time, **extra)
+            ctx.copy_framebuffer(resolve, fbo)
+            items = (fbo, resolve, color, depth)
         pixels = np.frombuffer(resolve.read(components=4), np.uint8).reshape(height, width, 4)
-        for item in (fbo, resolve, color, depth):
+        for item in items:
             item.release()
         return np.flipud(pixels)[..., :3].copy()
 

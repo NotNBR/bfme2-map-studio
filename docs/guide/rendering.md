@@ -37,6 +37,19 @@ cell.
 | `eye=X,Y,Z` | — | Explicit camera position instead of distance/elevation/heading |
 | `region=X0,Y0,X1,Y1` | — | Orthographic top view of a rectangle, north up |
 | `near=` | | Near clip |
+| `roll=` | 0 | Degrees the camera turns about its view direction, positive to the right |
+| `focal=` | — | Focal length in mm on a full-frame (36 mm wide) sensor, in place of `fov` (39 mm is 50 degrees) |
+| `aperture=` | — | f-number: depth of field around `focus` (none: everything sharp) |
+| `focus=` | the target's distance | Distance in focus, map units |
+| `ev=` | 0 | Exposure in stops: brighter above 0, darker below |
+
+The last four are photo effects the game does not have
+([render/photo.py](../../src/mapworkshop/render/photo.py)); the viewer's Photo
+mode writes them, and **Copy view** gives a `mw render` command with them
+([saved views](../viewer.md#photo-mode-and-the-camera-bar)). Depth of field
+counts 10 map units to the metre, so a real lens's blur: focused across the
+map (1,000 units and more), little blurs; focused within a few hundred units,
+the distance does.
 
 `--top` adds a top view of the whole map at `--top-scale` pixels per cell
 (default 2). `--size` sets the size of orbit views (default 1600x1200).

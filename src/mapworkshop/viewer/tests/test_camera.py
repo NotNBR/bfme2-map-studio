@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from mapworkshop.viewer.camera import MAX_DISTANCE, MIN_DISTANCE, Camera
+from mapworkshop.viewer.camera import MAX_DISTANCE, MIN_DISTANCE, Camera, FlyCamera
 
 
 def camera():
@@ -62,6 +62,60 @@ class CameraTests(unittest.TestCase):
         self.assertEqual(c.screen_angle(), 0.0)
         c.cur['heading'] = 30.0
         self.assertAlmostEqual(c.screen_angle(), -math.radians(30))
+
+
+def flat(x, y):
+    return np.zeros_like(np.asarray(x, float))
+
+
+class FlyCameraTests(unittest.TestCase):
+    def test_entering_photo_mode_keeps_the_view(self):
+        c = camera()
+        cam = c.matrices(1.6)
+        fly = FlyCamera(flat)
+        fly.place(cam['eye'], cam['target']-cam['eye'], focus=float(np.linalg.norm(cam['target']-cam['eye'])))
+        self.assertAlmostEqual(fly.heading, c.cur['heading'] % 360, places=6)
+        self.assertAlmostEqual(fly.pitch, -c.cur['elevation'], places=6)
+        np.testing.assert_allclose(fly.matrices(1.6)['view_projection'] @ np.array([*cam['target'], 1.0]),
+                                   cam['view_projection'] @ np.array([*cam['target'], 1.0]), atol=1e-3, rtol=0.02)
+
+    def test_back_to_edit_orbits_the_ground_photo_looked_at(self):
+        c = camera()
+        fly = FlyCamera(flat)
+        fly.place(np.array([100.0, 100.0, 500.0]), np.array([0.0, 1.0, -1.0]))
+        c.aim(fly.eye, fly.forward(), fly.pick_ahead((1600, 900)))
+        self.assertAlmostEqual(c.goal['x'], 100.0, places=3)
+        self.assertAlmostEqual(c.goal['y'], 600.0, places=1)
+        self.assertAlmostEqual(c.goal['elevation'], 45.0, places=3)
+        self.assertAlmostEqual(c.goal['heading'], 0.0, places=6)
+
+    def test_looking_at_the_sky_still_finds_ground_to_orbit(self):
+        c = camera()
+        fly = FlyCamera(flat)
+        fly.place(np.array([0.0, 0.0, 200.0]), np.array([1.0, 0.0, 0.5]))
+        self.assertIsNone(fly.pick_ahead((1600, 900)))
+        c.aim(fly.eye, fly.forward(), None)
+        self.assertGreater(c.goal['x'], 0.0)
+        self.assertEqual(c.goal['elevation'], max(5.0, c.goal['elevation']))
+        self.assertAlmostEqual(c.goal['heading'], 90.0)
+
+    def test_the_free_camera_has_no_ground_and_no_tilt_limit_but_vertical(self):
+        fly = FlyCamera(flat)
+        fly.place(np.array([0.0, 0.0, 50.0]), np.array([0.0, 1.0, 0.0]))
+        fly.look(0, 1e6)
+        self.assertAlmostEqual(fly.pitch, -89.9)
+        fly.drive(10.0, up=-1)
+        self.assertLess(fly.goal[2], 0.0)         # below the ground: allowed
+
+    def test_lens_moves_stay_in_range(self):
+        fly = FlyCamera(flat)
+        fly.zoom(100)
+        self.assertEqual(fly.focal, 600.0)
+        fly.zoom(-100)
+        self.assertEqual(fly.focal, 10.0)
+        before = fly.focus
+        fly.refocus(1)
+        self.assertGreater(fly.focus, before)
 
 
 if __name__ == '__main__':

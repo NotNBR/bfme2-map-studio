@@ -15,11 +15,24 @@ def registry(ran):
 
 class CommandTests(unittest.TestCase):
     def test_key_names_follow_the_docs(self):
-        self.assertEqual(parse_key('Ctrl+B'), ('B', True))
-        self.assertEqual(parse_key('Esc'), ('ESCAPE', False))
-        self.assertEqual(parse_key('7'), ('7', False))
+        self.assertEqual(parse_key('Ctrl+B'), ('B', True, False))
+        self.assertEqual(parse_key('Esc'), ('ESCAPE', False, False))
+        self.assertEqual(parse_key('7'), ('7', False, False))
+        self.assertEqual(parse_key('Ctrl+Shift+1'), ('1', True, True))
         with self.assertRaises(ValueError):
             parse_key('Shift+X')
+        with self.assertRaises(ValueError):
+            parse_key('Alt+X')
+
+    def test_shift_counts_only_where_a_binding_names_it(self):
+        ran = []
+        c = Commands(lambda name: name)
+        c.add(Command('layer', lambda: ran.append('layer'), keys=('1',)),
+              Command('recall', lambda: ran.append('recall'), keys=('Ctrl+1',)),
+              Command('save', lambda: ran.append('save'), keys=('Ctrl+Shift+1',)))
+        for ctrl, shift in ((False, False), (True, False), (True, True), (False, True)):
+            c.run(c.for_key('1', ctrl, shift), scene=True)
+        self.assertEqual(ran, ['layer', 'recall', 'save', 'layer'])
 
     def test_a_ctrl_binding_takes_its_key_from_the_plain_one(self):
         ran = []

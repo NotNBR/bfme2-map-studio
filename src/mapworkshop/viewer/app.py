@@ -3,25 +3,44 @@
     mw view [MAP]          a project (id or prefix), a stock map or a .map file;
                            by default the map you worked on last
 
-Mouse
+Two cameras: Edit (the orbit camera, for working on the map) and Photo (a
+free camera with a lens, for looking and pictures). V switches between them.
+
+Edit mouse
   Left drag            orbit around the focus point
   Right / middle drag  grab and pan the ground
   Wheel                zoom towards the cursor
   Double-click         fly to the clicked point
 
-Keyboard
+Edit keyboard
   W A S D / arrows     move (Shift faster, Ctrl slower)
   Q / E                rotate left / right
   R / F                tilt up / down
   Z / X                zoom in / out
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
+
+Photo (the mouse is captured: Esc frees it, a click in the view takes it back)
+  Mouse                look around
+  Right drag           slide sideways and up
+  Wheel                move forward / back;  Alt+wheel focal length;  Shift+wheel focus
+  Middle click         focus on the centre of the view
+  W A S D / arrows     fly (Shift faster, Ctrl slower);  Space / C  up / down
+  Q / E, R             roll left / right, level again
+  Nothing holds the camera above the ground. Marks are hidden; these controls
+  are listed above the camera bar.
+
+Both
+  V          Edit / Photo
+  Ctrl+1..9  go to saved view 1-9;  Ctrl+Shift+1..9  save the view there
+  Ctrl+C     copy the view as a `mw render` command
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
   8 river flow arrows  9 editor markers  U units  M marks
   G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
   Del        delete the selected mark;  Ctrl+Z  undo a mark change
-  Esc        steps back: closes a menu, cancels a drawing, drops the selection,
-             puts the mark tool away, then quits
+  Esc        steps back: closes a menu or list, cancels a drawing, drops the
+             selection, puts the mark tool away; in Photo frees the mouse, then
+             goes back to Edit; then quits
 
 Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
@@ -60,6 +79,14 @@ Marks palette (top left of the view)
   clipboard, to paste into an agent ("add a forest in mark 2"); `mw marks`
   prints the same.
 
+Camera bar (bottom left of the view)
+  Edit / Photo; Views (saved views with thumbnails: go to one, save, rename,
+  delete; kept per map in local/views/); Copy view; in Photo the lens: focal
+  length, aperture (depth of field), focus distance, exposure (EV) - wheel or
+  drag sideways over one, click for presets - and the framing aids: Thirds and
+  the frame's aspect (screenshots crop to it); then the camera readout.
+  Depth of field and exposure are photo effects the game does not have.
+
 Live reload: the viewer watches the map file and its map.ini. When either
 changes (a build, `mw dev`, an editor save) the scene reloads in place and the
 camera stays where it is. A failed reload keeps the previous scene.
@@ -82,8 +109,12 @@ import numpy as np
 from mapworkshop import game, project
 from mapworkshop.config import RENDERS, GAME_LABEL, save_setting, setting
 from mapworkshop.mapkit.weather import PRESETS, SUNS
+from mapworkshop.render.camera import view_from_dict
+from mapworkshop.render.photo import Post, active, focal_from_fov, fov_from_focal
 from mapworkshop.viewer import marks as marklib
-from mapworkshop.viewer.camera import Camera
+from mapworkshop.viewer import camerabar as bar
+from mapworkshop.viewer.camera import Camera, FlyCamera
+from mapworkshop.viewer.camerabar import CameraBar, Sampler
 from mapworkshop.viewer.commands import Command, Commands
 from mapworkshop.viewer.jobs import TEST_GAMES, Build, MarksSummary, Status, Walkability, play
 from mapworkshop.viewer.marking import CLICK_PIXELS, MarkEditor, summary_lines
@@ -91,6 +122,7 @@ from mapworkshop.viewer.overlay import MarkOverlay
 from mapworkshop.viewer.palette import Palette
 from mapworkshop.viewer.session import TOAST_DELAY, Session
 from mapworkshop.viewer.toolbar import Toolbar
+from mapworkshop.viewer.views import SLOTS, THUMBNAIL, Views, edit_spec, photo_spec, render_command
 
 FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')
 DOUBLE_CLICK = 0.3        # s between the clicks of a double-click
@@ -167,6 +199,17 @@ class Viewer:
         self.status = Status()
         self.session = Session(source, self.status, lod=args.lod, weather=args.weather, sun=args.sun)
         self.camera = Camera(lambda x, y: np.zeros_like(np.asarray(x, float)), (1000, 1000))
+        self.fly = FlyCamera(self.camera.surface)
+        self.mode = 'edit'                 # 'edit': the orbit camera; 'photo': the free camera (FlyCamera)
+        self.captured = False              # Photo mode has the mouse
+        self.look = None                   # the cursor position the last mouse look started from
+        self.framing = dict(thirds=False, frame='free')
+        self.camerabar = CameraBar(ctx)
+        self.readout = Sampler()
+        self.views = None                  # the map's saved views (viewer.views)
+        self.pending_save = None           # (slot, mode, spec): saved with a thumbnail of the next frame
+        self.scrub = None                  # a drag over a lens field: [field, last x, moved]
+        self.post = None                   # Photo mode's exposure and depth of field (render.photo)
         self.build = Build(self.status, lambda toast: setattr(self.session, 'toast', toast))
         self.walkability = Walkability(self.status)
         self.summary = MarksSummary()
@@ -180,7 +223,6 @@ class Viewer:
         self.press = None                  # where the last button press was
         self.last_click = 0.0
         self.cursor = None
-        self.focus_text, self.focus_sample = '', 0.0
         self.properties = None             # the Properties window (viewer.properties)
         self.properties_saved = None       # the project its Save wrote, for the frame loop to build
         self.test_game = setting('test_game', 'original')   # what Test In-Game starts: TEST_GAMES
@@ -250,15 +292,22 @@ class Viewer:
             Command('properties', self.open_properties, needs_scene=False),
             Command('reload', self.request_reload, keys=('F5',), needs_scene=False),
             Command('back', self.back, keys=('Esc',), needs_scene=False),
-            Command('top', self.camera.toggle_top, keys=('T',)),
-            Command('reset', self.camera.reset, keys=('Space', 'Home')),
+            Command('top', self.top_view, keys=('T',)),
+            Command('reset', self.reset_view, keys=('Space', 'Home')),
             Command('shot', self.screenshot, keys=('P',)),
             Command('help', lambda: print(__doc__), keys=('F1',)),
+            # The camera bar.
+            Command('mode', lambda: self.set_mode('edit' if self.mode == 'photo' else 'photo'), 'Photo mode', ('V',)),
+            Command('copy_view', self.copy_view, keys=('Ctrl+C',)),
             # Marks.
-            Command('delete', self.editor.delete_selected, keys=('Del', 'Backspace'), when=lambda: self.editor.visible),
-            Command('undo', self.editor.undo, keys=('Ctrl+Z',)),
+            Command('delete', self.editor.delete_selected, keys=('Del', 'Backspace'),
+                    when=lambda: self.editor.visible and self.mode == 'edit'),
+            Command('undo', self.editor.undo, keys=('Ctrl+Z',), when=lambda: self.mode == 'edit'),
             Command('clear', self.editor.clear),
             Command('copy', self.copy_for_agent))
+        for slot in SLOTS:
+            c.add(Command(f'view{slot}', lambda slot=slot: self.recall_view(slot), keys=(f'Ctrl+{slot}',)),
+                  Command(f'save{slot}', lambda slot=slot: self.save_view(slot), keys=(f'Ctrl+Shift+{slot}',)))
         return c
 
     def flip_visible(self, name):
@@ -294,10 +343,18 @@ class Viewer:
         self.session.reload = True
 
     def back(self):
-        """Esc steps back: close a menu, then the marking levels
-        (MarkEditor.escape); with nothing left to step back from it quits."""
+        """Esc steps back: close a menu or the camera bar's list, then the
+        marking levels (MarkEditor.escape); in Photo mode free the mouse, then
+        go back to Edit; with nothing left to step back from it quits."""
         if self.toolbar.open_menu:
             self.toolbar.open_menu = None
+        elif self.camerabar.open:
+            self.camerabar.open = None
+        elif self.mode == 'photo':
+            if self.captured:
+                self.set_capture(False)
+            else:
+                self.set_mode('edit')
         elif self.renderer is None or not self.editor.escape():
             glfw.set_window_should_close(self.window, True)
         if self.renderer is not None and self.editor.drag is None and self.nav is None:
@@ -348,14 +405,13 @@ class Viewer:
             status = message
         elif r is None:
             status = 'Choose a map to load'
+        elif self.mode == 'photo':
+            status = ('Photo: the mouse looks around - Esc frees it, V goes back to Edit' if self.captured
+                      else 'Photo: click the view to look around - Esc or V goes back to Edit')
         elif hint:
             status = hint
         else:
-            if time.perf_counter() >= self.focus_sample:
-                c = self.camera.cur
-                self.focus_text = f'focus {c["x"]:.0f}, {c["y"]:.0f}   distance {c["distance"]:.0f}'
-                self.focus_sample = time.perf_counter() + 0.15
-            status = self.focus_text
+            status = ''
         preview = [o['lod'].title(), "Map's own" if o['weather'] == 'map' else o['weather'].title()]
         if o['sun'] != 'own':
             preview.append(SUNS[o['sun']]['label'])
@@ -381,7 +437,9 @@ class Viewer:
         k = self.scale()
         target = self.toolbar.target_at(pos[0]*k, pos[1]*k)
         if target is None and self.renderer is not None:
-            target = self.palette.target_at(pos[0]*k, pos[1]*k)
+            target = self.camerabar.target_at(pos[0]*k, pos[1]*k)
+            if target is None and self.mode == 'edit':
+                target = self.palette.target_at(pos[0]*k, pos[1]*k)
         return target
 
     def toolbar_click(self, target):
@@ -398,11 +456,15 @@ class Viewer:
         toolbar = self.toolbar
         if target == 'menu':
             return
-        if target in ('bar', 'panel', 'palette'):
+        if target in ('bar', 'panel', 'palette', 'camerabar', 'popover'):
             toolbar.open_menu = None
             return
         kind = target[0]
-        if kind == 'menu_scroll':
+        if kind in ('mode', 'field', 'toggle', 'pick', 'rename', 'delete') or target in (
+                ('menu', 'views'), ('menu', 'frame'), ('button', 'copy_view')):
+            toolbar.open_menu = None
+            self.camera_click(target)
+        elif kind == 'menu_scroll':
             toolbar.scroll_menu(target[2]*5)
         elif kind == 'dropdown':
             menu = target[1]
@@ -504,23 +566,286 @@ class Viewer:
         glfw.set_clipboard_string(self.window, text)
         self.status.set(f'copied {len(marks.items)} marks for an agent - paste them into your request', 6)
 
+    # Cameras -------------------------------------------------------------------------
+    def current_camera(self, aspect):
+        return self.fly.matrices(aspect) if self.mode == 'photo' else self.camera.matrices(aspect)
+
+    def set_capture(self, on):
+        """Photo mode takes the mouse (hidden, turning the view) or frees it."""
+        self.captured = on
+        glfw.set_input_mode(self.window, glfw.CURSOR, glfw.CURSOR_DISABLED if on else glfw.CURSOR_NORMAL)
+        if glfw.raw_mouse_motion_supported():
+            glfw.set_input_mode(self.window, glfw.RAW_MOUSE_MOTION, glfw.TRUE if on else glfw.FALSE)
+        self.look = self.cursor_pos() if on else None
+        self.nav = None
+        if on:
+            self.camerabar.open = None
+            self.toolbar.open_menu = None
+
+    def set_mode(self, mode):
+        """Switch between Edit and Photo without moving the view: Photo starts
+        where the orbit camera is, with its lens as it was left; Edit orbits
+        the ground Photo looks at."""
+        if mode == self.mode or self.renderer is None:
+            return
+        if mode == 'photo':
+            w, h = self.window_size()
+            cam = self.camera.matrices(w/max(h, 1))
+            ahead = cam['target']-cam['eye']
+            self.fly.place(cam['eye'], ahead, focus=float(np.linalg.norm(ahead)))
+        else:
+            self.camera.aim(self.fly.eye, self.fly.forward(), self.fly.pick_ahead(self.window_size()))
+        self._enter(mode)
+
+    def _enter(self, mode):
+        self.mode = mode
+        self.camerabar.open = None
+        if mode == 'photo':
+            self.editor.set_tool(None)
+        self.set_capture(mode == 'photo')
+
+    def top_view(self):
+        if self.mode == 'photo':
+            self.set_mode('edit')
+        self.camera.toggle_top()
+
+    def reset_view(self):
+        if self.mode == 'photo':
+            self.set_mode('edit')
+        self.camera.reset()
+
+    def view_spec(self):
+        """(mode, render.camera spec) of the current view."""
+        if self.mode == 'photo':
+            return 'photo', photo_spec(self.fly)
+        return 'edit', edit_spec(self.camera)
+
+    def copy_view(self):
+        _, spec = self.view_spec()
+        owner = self.session.owner
+        glfw.set_clipboard_string(self.window, render_command(owner.id if owner else f'"{self.session.source}"',
+                                                              'view', spec))
+        self.status.set('copied the view as a mw render command', 5)
+
+    def save_view(self, slot=None):
+        """Save the view in `slot` (1-9; None: the first free one) with a
+        thumbnail of the next frame."""
+        if self.views is not None:
+            self.pending_save = (slot,) + self.view_spec()
+
+    def finish_save(self, size):
+        """The pending save, with the frame just drawn (before the bars) as its thumbnail."""
+        from PIL import Image, ImageOps
+        slot, mode, spec = self.pending_save
+        self.pending_save = None
+        w, h = size
+        pixels = np.frombuffer(self.ctx.screen.read(viewport=(0, 0, w, h), components=3), np.uint8).reshape(h, w, 3)
+        image = Image.fromarray(np.flipud(pixels))
+        if mode == 'photo':
+            image = image.crop(bar.frame_rect(size, bar.frame_ratio(self.framing['frame'])))
+        entry = self.views.save(mode, spec, slot, ImageOps.fit(image, THUMBNAIL, Image.LANCZOS))
+        where = f' - Ctrl+{entry["slot"]} goes back to it' if entry['slot'] else ''
+        self.status.set(f'saved {entry["name"]}{where}', 5)
+        if self.camerabar.open and self.camerabar.open[0] == 'views':
+            self.camerabar.refresh_list(self.view_entries())
+
+    def recall_view(self, slot):
+        entry = self.views.by_slot(slot) if self.views is not None else None
+        if entry is None:
+            self.status.set(f'no view saved as {slot} - Ctrl+Shift+{slot} saves the current one there', 4)
+            return
+        self.apply_view(entry)
+
+    def apply_view(self, entry):
+        """Go to a saved view, in its mode."""
+        try:
+            view = view_from_dict(entry['spec'])
+        except ValueError as error:
+            self.status.set(f'{entry["name"]}: {error}', 6)
+            return
+        if entry['mode'] == 'photo':
+            eye = np.array(view.eye, float)
+            target = np.array(view.target[:3], float) if len(view.target) > 2 else \
+                np.array([*view.target[:2], self.camera.ground(*view.target[:2])])
+            self.fly.place(eye, target-eye, focus=view.focus or float(np.linalg.norm(target-eye)))
+            self.fly.roll = view.roll or 0.0
+            self.fly.focal = view.focal or focal_from_fov(view.fov)
+            self.fly.aperture, self.fly.ev = view.aperture, view.ev or 0.0
+            if self.mode != 'photo':
+                self._enter('photo')
+        else:
+            g = self.camera.goal
+            g.update(x=float(view.target[0]), y=float(view.target[1]), distance=float(view.distance),
+                     elevation=float(view.elevation), heading=float(view.heading))
+            self.camera.top = None
+            if self.mode != 'edit':
+                self._enter('edit')
+        self.status.set(entry['name'], 2)
+
+    def view_entries(self):
+        """The Views list: save, then each saved view."""
+        views = self.views
+        free = views.free_slot()
+        out = [dict(target=('pick', 'views', 'save'), text='Save the current view',
+                    hint=f'Ctrl+Shift+{free}' if free else '')]
+        out.append(dict(target=None, text='Saved views' if views.items else 'No saved views yet'))
+        for v in views.items:
+            out.append(dict(target=('pick', 'views', v['name']), text=v['name'], name=v['name'],
+                            hint=v['mode'].title() + (f'   Ctrl+{v["slot"]}' if v['slot'] else ''),
+                            thumbnail=views.thumbnail_path(v['name']), actions=(('rename', '…'), ('delete', '×'))))
+        return out
+
+    def lens_entries(self, field):
+        """A lens field's presets."""
+        f = self.fly
+        if field == 'focal':
+            return [dict(target=None, text='Focal length (full frame)')] + [
+                dict(target=('pick', 'focal', v), text=f'{v} mm', hint=f'{fov_from_focal(v):.0f}° wide',
+                     checked=abs(f.focal-v) < 0.5) for v in bar.FOCALS]
+        if field == 'aperture':
+            return [dict(target=None, text='Aperture: depth of field')] + [
+                dict(target=('pick', 'aperture', v), text='Off: all sharp' if v is None else f'f/{v:g}',
+                     checked=f.aperture == v) for v in bar.APERTURES]
+        if field == 'focus':
+            return [dict(target=None, text='Focus distance'),
+                    dict(target=('pick', 'focus', 'centre'), text='On the centre of the view', hint='middle click')] + [
+                dict(target=('pick', 'focus', v), text=f'{v:,} units', hint=f'{v/10:g} m',
+                     checked=abs(f.focus-v) < 0.5) for v in bar.FOCUS_DISTANCES]
+        return [dict(target=None, text='Exposure')] + [
+            dict(target=('pick', 'ev', v), text=bar.ev_text(v), checked=abs(f.ev-v) < 1e-6) for v in bar.EXPOSURES]
+
+    def frame_entries(self):
+        return [dict(target=None, text='Frame (screenshots crop to it)')] + [
+            dict(target=('pick', 'frame', v), text=label, checked=self.framing['frame'] == v) for v, label, _ in bar.FRAMES]
+
+    def camera_click(self, target):
+        """A click on the camera bar or its list."""
+        kind, value = target[0], target[1]
+        cb = self.camerabar
+        if kind == 'mode':
+            self.set_mode(value)
+        elif target == ('menu', 'views'):
+            cb.toggle_list('views', self.view_entries())
+        elif target == ('menu', 'frame'):
+            cb.toggle_list('frame', self.frame_entries())
+        elif target == ('button', 'copy_view'):
+            self.copy_view()
+        elif kind == 'toggle':
+            self.framing[value] = not self.framing[value]
+        elif kind == 'field':
+            cb.toggle_list(value, self.lens_entries(value))
+        elif kind == 'pick':
+            self.pick(target[1], target[2])
+        elif kind == 'rename':
+            self.rename_view(value)
+        elif kind == 'delete' and self.views.delete(value):
+            self.status.set(f'deleted {value}', 4)
+            cb.refresh_list(self.view_entries())
+
+    def pick(self, menu, value):
+        """An entry of the camera bar's list was clicked."""
+        self.camerabar.open = None
+        f = self.fly
+        if menu == 'views':
+            if value == 'save':
+                self.save_view()
+            else:
+                self.apply_view(self.views.by_name(value))
+        elif menu == 'frame':
+            self.framing['frame'] = value
+        elif menu == 'focal':
+            f.focal = float(value)
+        elif menu == 'aperture':
+            f.aperture = value
+        elif menu == 'focus':
+            if value == 'centre':
+                self.focus_centre()
+            else:
+                f.focus = float(value)
+        elif menu == 'ev':
+            f.ev = float(value)
+
+    def rename_view(self, name):
+        import tkinter as tk
+        from tkinter import simpledialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        new = simpledialog.askstring('Rename view', 'Name of the view:', initialvalue=name, parent=root)
+        root.destroy()
+        if new:
+            try:
+                self.views.rename(name, new)
+            except ValueError as error:
+                self.status.set(str(error), 5)
+        self.camerabar.refresh_list(self.view_entries())
+
+    def focus_centre(self):
+        hit = self.fly.pick_ahead(self.window_size())
+        if hit is None:
+            self.status.set('no ground at the centre of the view to focus on', 3)
+            return
+        self.fly.focus = float(np.linalg.norm(hit-self.fly.eye))
+        self.status.set(f'focus {self.fly.focus:,.0f}', 2)
+
+    def adjust_field(self, field, notches):
+        """The wheel (or a sideways drag) over a lens field."""
+        f = self.fly
+        if field == 'focal':
+            f.zoom(notches)
+        elif field == 'aperture':
+            steps = list(bar.APERTURES)
+            i = steps.index(f.aperture) if f.aperture in steps else min(
+                range(1, len(steps)), key=lambda k: abs(steps[k]-f.aperture))
+            f.aperture = steps[min(len(steps)-1, max(0, i+int(math.copysign(1, notches))))]
+        elif field == 'focus':
+            f.refocus(notches)
+        elif field == 'ev':
+            f.ev = min(3.0, max(-3.0, round(f.ev+0.1*notches, 2)))
+        if self.camerabar.open and self.camerabar.open[0] == field:
+            self.camerabar.refresh_list(self.lens_entries(field))
+
+    def bar_state(self):
+        state = dict(mode=self.mode, readout=self.readout.get(lambda: bar.readout(self.mode, self.camera, self.fly)))
+        if self.mode == 'photo':
+            f = self.fly
+            state.update(focal=round(f.focal, 1), aperture=f.aperture, focus=round(f.focus), ev=round(f.ev, 2),
+                         thirds=self.framing['thirds'], frame=self.framing['frame'])
+        return state
+
     def screenshot(self):
+        """The view as a PNG in local/renders/; in Photo mode with the lens and
+        exposure, cropped to the frame."""
         RENDERS.mkdir(parents=True, exist_ok=True)
         ctx, samples = self.ctx, self.args.samples
         w, h = glfw.get_framebuffer_size(self.window)
-        cam = self.camera.matrices(w/h)
-        color = ctx.renderbuffer((w, h), 4, samples=samples)
-        depth = ctx.depth_renderbuffer((w, h), samples=samples)
-        fbo = ctx.framebuffer([color], depth)
+        cam = self.current_camera(w/h)
         resolve = ctx.framebuffer([ctx.renderbuffer((w, h), 4)])
-        self.renderer.draw(cam, (w, h), fbo, grid=self.view['grid'], border=self.view['border'], shadow_radius=6000,
-                           time=self.time)
-        ctx.copy_framebuffer(resolve, fbo)
+        options = dict(grid=self.view['grid'], border=self.view['border'], shadow_radius=6000, time=self.time)
+        photo = self.mode == 'photo'
+        if photo and active(self.fly.settings()):
+            post = Post(ctx, samples)
+            self.renderer.draw(cam, (w, h), post.target((w, h)), **options)
+            post.finish(cam, self.fly.settings(), resolve, taps=96)
+            post.release()
+            items = (resolve,)
+        else:
+            color = ctx.renderbuffer((w, h), 4, samples=samples)
+            depth = ctx.depth_renderbuffer((w, h), samples=samples)
+            fbo = ctx.framebuffer([color], depth)
+            self.renderer.draw(cam, (w, h), fbo, **options)
+            ctx.copy_framebuffer(resolve, fbo)
+            items = (fbo, resolve, color, depth)
         pixels = np.flipud(np.frombuffer(resolve.read(components=4), np.uint8).reshape(h, w, 4))[..., :3]
-        for item in (fbo, resolve, color, depth):
+        for item in items:
             item.release()
-        path = RENDERS/f'{self.session.source.stem}-{time.strftime("%Y%m%d-%H%M%S")}.png'
+        if photo:
+            x0, y0, x1, y1 = bar.frame_rect((w, h), bar.frame_ratio(self.framing['frame']))
+            pixels = pixels[y0:y1, x0:x1]
+        kind = '-photo' if photo else ''
+        path = RENDERS/f'{self.session.source.stem}{kind}-{time.strftime("%Y%m%d-%H%M%S")}.png'
         self.renderer.save(np.ascontiguousarray(pixels), path)
+        self.status.set(f'saved {path.name} in {RENDERS}', 5)
         print('Saved', path)
 
     # The world, for MarkEditor ------------------------------------------------------
@@ -562,6 +887,9 @@ class Viewer:
         return any(glfw.get_key(self.window, k) == glfw.PRESS for k in keys)
 
     def on_mouse_button(self, win, button, action, mods):
+        if self.mode == 'photo' and self.captured:
+            self.photo_button(button, action)
+            return
         pos = self.cursor_pos()
         target = self.toolbar_target(pos)
         if self.renderer is None:
@@ -569,13 +897,26 @@ class Viewer:
             if action == glfw.PRESS and button == glfw.MOUSE_BUTTON_LEFT and target is not None:
                 self.toolbar_click(target)
             return
+        if action == glfw.RELEASE and self.scrub is not None:
+            field, _, moved = self.scrub
+            self.scrub = None
+            if not moved:
+                self.toolbar_click(('field', field))
+            return
         if action == glfw.PRESS:
             if target is not None:
                 if button == glfw.MOUSE_BUTTON_LEFT:
-                    self.toolbar_click(target)
+                    if isinstance(target, tuple) and target[0] == 'field':
+                        self.scrub = [target[1], pos[0], False]     # a click opens its presets, a drag scrubs
+                    else:
+                        self.toolbar_click(target)
                 return
-            if self.toolbar.open_menu:
-                self.toolbar.open_menu = None
+            if self.toolbar.open_menu or self.camerabar.open:
+                self.toolbar.open_menu = self.camerabar.open = None
+                return
+            if self.mode == 'photo':
+                if button == glfw.MOUSE_BUTTON_LEFT:
+                    self.set_capture(True)
                 return
             self.press = pos
             if button == glfw.MOUSE_BUTTON_LEFT:
@@ -605,22 +946,48 @@ class Viewer:
                 self.editor.click((pos[0]*k, pos[1]*k), k)
             self.update_pointer(target, pos)
 
+    def photo_button(self, button, action):
+        """A button while Photo mode has the mouse: right drag slides, a
+        middle click focuses on the centre."""
+        if button == glfw.MOUSE_BUTTON_RIGHT:
+            self.nav = ('slide', None) if action == glfw.PRESS else None
+        elif button == glfw.MOUSE_BUTTON_MIDDLE and action == glfw.PRESS:
+            self.focus_centre()
+
     def update_pointer(self, target, pos):
         """Show with the cursor what a press here does (MarkEditor.pointer)."""
         k = self.scale()
-        active = target is None and self.renderer is not None and not self.toolbar.open_menu
+        active = (target is None and self.renderer is not None and not self.toolbar.open_menu
+                  and self.mode == 'edit')
         cursor = self.editor.pointer((pos[0]*k, pos[1]*k), k, active)
         if cursor != self.cursor:
             self.cursor = cursor
             glfw.set_cursor(self.window, self.cursors.get(cursor))
 
     def on_cursor(self, win, x, y):
+        if self.mode == 'photo' and self.captured:
+            last = self.look or (x, y)
+            self.look = (x, y)
+            dx, dy = x-last[0], y-last[1]
+            if self.nav and self.nav[0] == 'slide':
+                self.fly.slide(dx, dy)
+            else:
+                self.fly.look(dx, dy)
+            return
+        if self.scrub is not None:
+            field, last, _ = self.scrub
+            notches = int((x-last)/6)
+            if notches:
+                self.adjust_field(field, notches)
+                self.scrub = [field, last+notches*6, True]
+            return
         if self.editor.drag is not None:
             self.editor.move((x, y))
             return
         if self.nav is None:
             target = self.toolbar_target((x, y))
-            self.toolbar.hover = self.palette.hover = target if isinstance(target, tuple) else None
+            hover = target if isinstance(target, tuple) else None
+            self.toolbar.hover = self.palette.hover = self.camerabar.hover = hover
             self.update_pointer(target, (x, y))
             return
         kind, anchor = self.nav
@@ -633,17 +1000,36 @@ class Viewer:
                 self.camera.pan(anchor, hit)
 
     def on_scroll(self, win, dx, dy):
+        if self.mode == 'photo' and self.captured:
+            alt = self.key_down(glfw.KEY_LEFT_ALT, glfw.KEY_RIGHT_ALT)
+            if alt:
+                self.fly.zoom(dy)
+            elif self.shift_held():
+                self.fly.refocus(dy)
+            else:
+                self.fly.dolly(dy)
+            return
         target = self.toolbar_target(self.cursor_pos())
         if target is not None:
-            if target == 'menu' or (isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')):
+            if isinstance(target, tuple) and target[0] == 'field':
+                self.adjust_field(target[1], dy)
+            elif target == 'menu' or (isinstance(target, tuple) and target[0] in ('menu', 'menu_scroll')):
                 self.toolbar.scroll_menu(-dy*3)
             return
-        self.camera.zoom(dy, self.camera.pick(self.cursor_pos(), self.window_size()))
+        if self.mode == 'edit':
+            self.camera.zoom(dy, self.camera.pick(self.cursor_pos(), self.window_size()))
 
     def on_key(self, win, key, scancode, action, mods):
         if action != glfw.PRESS:
             return
-        command = self.commands.for_key(key, bool(mods & glfw.MOD_CONTROL))
+        ctrl, shift = bool(mods & glfw.MOD_CONTROL), bool(mods & glfw.MOD_SHIFT)
+        if self.mode == 'photo' and not ctrl:
+            if key == glfw.KEY_SPACE:
+                return                     # flies up (drive)
+            if key == glfw.KEY_R:
+                self.fly.roll = 0.0
+                return
+        command = self.commands.for_key(key, ctrl, shift)
         if command is not None:
             self.commands.run(command, self.renderer is not None)
 
@@ -656,16 +1042,28 @@ class Viewer:
             self.editor.marks = self.session.marks
         self.summary.invalidate()
         self.camera.surface, self.camera.playable = r.surface_at, r.playable
+        self.fly.surface = r.surface_at
         if event['changed_map'] or event['first']:
             self.camera.reset()
             self.camera.snap()
+            self.views = Views(self.session.source)
+            if self.mode == 'photo':
+                self._enter('edit')
         self.walkability.request(r)
 
     def drive(self, dt):
-        """Continuous keyboard movement, scaled by zoom level."""
+        """Continuous keyboard movement, scaled by zoom level (Edit) or the
+        height above the ground (Photo)."""
         down = self.key_down
         ctrl = down(glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL)
         speed = (3 if down(glfw.KEY_LEFT_SHIFT, glfw.KEY_RIGHT_SHIFT) else 1)*(0.3 if ctrl else 1)
+        if self.mode == 'photo':
+            # Ctrl+C copies the view instead of sinking.
+            self.fly.drive(dt, forward=down(glfw.KEY_W, glfw.KEY_UP)-down(glfw.KEY_S, glfw.KEY_DOWN),
+                           right=down(glfw.KEY_D, glfw.KEY_RIGHT)-down(glfw.KEY_A, glfw.KEY_LEFT),
+                           up=down(glfw.KEY_SPACE)-(0 if ctrl else down(glfw.KEY_C)),
+                           roll=down(glfw.KEY_E)-down(glfw.KEY_Q), speed=speed)
+            return
         self.camera.drive(dt, forward=down(glfw.KEY_W, glfw.KEY_UP)-down(glfw.KEY_S, glfw.KEY_DOWN),
                           right=down(glfw.KEY_D, glfw.KEY_RIGHT)-down(glfw.KEY_A, glfw.KEY_LEFT),
                           turn=down(glfw.KEY_E)-down(glfw.KEY_Q), tilt=down(glfw.KEY_R)-down(glfw.KEY_F),
@@ -675,14 +1073,28 @@ class Viewer:
     def draw(self, size):
         fw, fh = size
         r, k = self.renderer, self.scale()
-        cam = self.camera.matrices(fw/fh)
+        photo = self.mode == 'photo'
+        cam = self.current_camera(fw/fh)
         if r is not None:
-            r.draw(cam, size, self.ctx.screen, grid=self.view['grid'], border=self.view['border'],
-                   shadow_radius=4000.0, shadow_size=4096, time=self.time)
-            # Every frame, so picking never sees marks that are gone or hidden.
-            shown = self.session.marks.items if self.editor.visible else []
-            self.overlay.draw(shown, self.editor.drawing, self.editor.selected, cam,
+            options = dict(grid=self.view['grid'], border=self.view['border'], shadow_radius=4000.0, shadow_size=4096,
+                           time=self.time)
+            if photo and active(self.fly.settings()):
+                # Exposure and depth of field over the scene (render.photo).
+                if self.post is None:
+                    self.post = Post(self.ctx, self.args.samples)
+                r.draw(cam, size, self.post.target(size), **options)
+                self.post.finish(cam, self.fly.settings(), self.ctx.screen, taps=40)
+            else:
+                r.draw(cam, size, self.ctx.screen, **options)
+            if self.pending_save is not None:
+                self.finish_save(size)
+            # Every frame, so picking never sees marks that are gone or hidden. Photo mode shows none.
+            shown = self.session.marks.items if self.editor.visible and not photo else []
+            self.overlay.draw(shown, self.editor.drawing if not photo else None, self.editor.selected, cam,
                               r.surface_at, size, k, self.editor.hovered)
+            if photo:
+                self.camerabar.draw_frame(size, bar.frame_ratio(self.framing['frame']), self.framing['thirds'],
+                                          bool(self.fly.aperture) and self.captured)
         else:
             self.ctx.screen.use()
             self.ctx.viewport = (0, 0, fw, fh)
@@ -694,12 +1106,18 @@ class Viewer:
         toolbar.draw(size, k, self.toolbar_state())
         toolbar.panel_rect = self.palette.rect = None
         marks = self.session.marks
+        self.camerabar.rect = self.camerabar.pop_rect = None
         if r is not None:
-            self.palette.draw(size, k, self.editor.tool)
-            if marks.items and self.editor.visible:
-                self.summary.update(r, marks, self.session.source)
-                toolbar.draw_panel(size, k, 'Marks', summary_lines(marks.items, self.summary.get(r, marks)),
-                                   toolbar.height)
+            if not photo:
+                self.palette.draw(size, k, self.editor.tool)
+                if marks.items and self.editor.visible:
+                    self.summary.update(r, marks, self.session.source)
+                    toolbar.draw_panel(size, k, 'Marks', summary_lines(marks.items, self.summary.get(r, marks)),
+                                       toolbar.height)
+            self.camerabar.draw(size, k, self.bar_state())
+            if photo:
+                self.camerabar.draw_help(size, k, title='Photo mode' if self.captured
+                                         else 'Photo mode - click the view to look around')
         self.draw_toast(size)
         # Last, so the palette, the panel and the loading toast never cover it.
         toolbar.draw_menu(size, k)
@@ -768,7 +1186,10 @@ class Viewer:
             dt = min(now-previous, 0.1)
             previous = now
             self.drive(dt)
-            self.camera.update(dt)
+            if self.mode == 'photo':
+                self.fly.update(dt)
+            else:
+                self.camera.update(dt)
             if self.view['animate']:
                 self.time += dt
             fw, fh = glfw.get_framebuffer_size(window)
@@ -787,13 +1208,11 @@ class Viewer:
             if now-fps_time > 0.5:
                 self.fps = frames/(now-fps_time)
                 frames, fps_time = 0, now
-                c = self.camera.cur
                 message = self.status.current(now)
                 status = f'{message}  |  ' if message is not None else 'live  |  '
                 o = session.options
                 glfw.set_window_title(window, f'{session.source.stem}  |  {GAME_LABEL}  |  {status}{self.fps:.0f} fps  |  '
-                                      f'heading {c["heading"] % 360:.0f}  elevation {c["elevation"]:.0f}  |  '
-                                      f'lod {o["lod"]}  weather {o["weather"]}  |  F1 controls')
+                                      f'{self.mode.title()}  |  lod {o["lod"]}  weather {o["weather"]}  |  F1 controls')
 
     def close(self):
         self.session.close()
