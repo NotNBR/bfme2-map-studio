@@ -49,11 +49,12 @@ def _fog_lines(fog):
             f'  HardwareFogStart = {start}', f'  HardwareFogEnd = {end}']
 
 
-def ini_block(name):
-    """The map.ini Weather block for a preset."""
+def ini_block(name, fog='preset'):
+    """The map.ini Weather block for a preset; `fog` ((R, G, B), start, end,
+    or None for none) in place of the preset's."""
     p = PRESETS[name]
     lines = ['Weather']
-    lines += _fog_lines(p.get('fog'))
+    lines += _fog_lines(p.get('fog') if fog == 'preset' else fog)
     s = p.get('particles')
     if s:
         lines += ['  SnowEnabled = yes', '  IsSnowing = yes', f'  SnowTexture = {s["texture"]}',
