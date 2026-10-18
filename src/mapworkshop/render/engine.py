@@ -117,11 +117,11 @@ def bleed_alpha(image):
 class MapRenderer:
     def __init__(self, source, assets=None, ctx=None, objects=True, normal_maps=None,
                  clouds=True, macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
-                 progress=None, vegetation_limits=False, sun=None, editor_markers=False):
+                 progress=None, vegetation_limits=False, sun=None, editor_markers=False, units=True):
         """Synchronous entry point for CLI rendering; the viewer uses prepare/upload."""
         import moderngl
         self._prepare(source, assets, objects, normal_maps, clouds, macro, samples, lod,
-                      shadows, shared, weather, progress, vegetation_limits, sun, editor_markers)
+                      shadows, shared, weather, progress, vegetation_limits, sun, editor_markers, units)
         for _ in self.upload(ctx or moderngl.create_standalone_context(require=430), shared):
             pass
 
@@ -132,7 +132,7 @@ class MapRenderer:
 
     def _prepare(self, source, assets=None, objects=True, normal_maps=None, clouds=True,
                  macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
-                 progress=None, vegetation_limits=False, sun=None, editor_markers=False):
+                 progress=None, vegetation_limits=False, sun=None, editor_markers=False, units=True):
         report = progress or (lambda fraction, step: None)
         report(0.0, 'Indexing game assets' if assets is None else 'Reading map')
         base = assets or GameAssets()
@@ -157,7 +157,7 @@ class MapRenderer:
         self.weather_preset = weather if weather not in (None, '', 'map') else None
         self.sun = sun if sun not in (None, '', 'own') else None
         self.options = dict(objects=objects, clouds=clouds, macro=macro, lod=lod, vegetation_limits=vegetation_limits,
-                            editor_markers=editor_markers,
+                            editor_markers=editor_markers, units=units,
                             normal_maps=high if normal_maps is None else normal_maps,
                             # GameLOD.ini UseShadowDecals: Low and Medium.
                             decals=lod in ('low', 'medium') and shadows,
@@ -170,7 +170,8 @@ class MapRenderer:
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
                             walkable=False, effects=True, flow=False)
-        self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0)
+        self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0,
+                           units=dict(hidden=0, hordes=0, members=0, posed=0))
         self._progress = report
         self._effects = {}
         self._lighting()
@@ -869,6 +870,12 @@ class MapRenderer:
         them out as the game does (False). Rebuilds only the objects."""
         self._set_object_option('editor_markers', value)
 
+    def set_units(self, value):
+        """Draw the units (True): hordes as their members, every unit in the
+        pose of its idle animation; or leave every unit out (False). Rebuilds
+        only the objects."""
+        self._set_object_option('units', value)
+
     def _set_object_option(self, name, value):
         value = bool(value)
         changed = value != self.options[name]
@@ -883,7 +890,8 @@ class MapRenderer:
                 item.release()
             if hasattr(self, attr):
                 delattr(self, attr)
-        self.report.update(missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0)
+        self.report.update(missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0,
+                           units=dict(hidden=0, hordes=0, members=0, posed=0))
         self.batches = []
         self._objects_gpu()
 
@@ -898,7 +906,8 @@ class MapRenderer:
         add 0x000E91CE 2,000 shrubs and only with ShowProps; they are drawn
         with vegetation.fx.
         Everything else is a W3D render object: fixed-function materials or
-        FX materials (normalmapped.fx).
+        FX materials (normalmapped.fx). Units stand in the first frame of
+        their idle animation, hordes replaced by their members (_placed_units).
         """
         show_props = self._show_props()
         limits = self.options.get('vegetation_limits', False)
@@ -909,7 +918,7 @@ class MapRenderer:
         groups = {}
         volumes = {}
         objects = self.map.objects()
-        for o in objects:
+        for o in self._placed_units(objects):
             name = o['template']
             if o['flags'] & 0x30:
                 continue                     # bridge endpoints: _bridges_gpu
@@ -924,6 +933,17 @@ class MapRenderer:
                 self.report['editor_markers'] += 1
                 continue                     # WorldBuilder-only: the game draws nothing
             kinds = resolved['kinds']
+            model = resolved['model']
+            animation = self.assets.unit_animation(name) if resolved['unit'] and not resolved['tree'] else None
+            if animation:
+                model = f'{model}+{animation}'           # ModelCache.load: posed at its first frame
+                self.report['units']['posed'] += 1
+            hidden = self.assets.hidden_subobjects(name) if not resolved['tree'] else ()
+            if hidden:
+                # Hidden as the object is created (a unit's OnCreated script:
+                # the upgrades' forged blades, fire arrows, shields; an idle
+                # state's BeginScript).
+                model = f'{model}|{",".join(sorted(hidden))}'   # ModelCache.load: those meshes left out
             buffer = None
             if resolved['tree']:
                 buffer = 'tree' if 'TREE' in kinds else 'shrub' if 'SHRUB' in kinds else 'tree'
@@ -969,7 +989,7 @@ class MapRenderer:
             # KindOf OPTIMIZED_PROP map objects go to the terrain's prop buffer
             # (W3DTerrainVisual::addProp 0x0009257A), which casts no shadow.
             if kind in ('classic', 'v2') and not resolved['tree'] and not self._template_has(name, 'KindOf', 'OPTIMIZED_PROP'):
-                volumes.setdefault((resolved['model'], kind), []).append(
+                volumes.setdefault((model, kind), []).append(
                     dict(x=o['x'], y=o['y'], z=z, angle=angle, scale=scale, ground=z-o['z'],
                          length_scale=self._template_float(name, 'ShadowSizeX')))
             # Optimized trees and shrubs (W3DTreeDraw) draw the template's
@@ -990,18 +1010,49 @@ class MapRenderer:
             # shrub buffer, the terrain or other objects (Reflection Lab
             # game screenshots at High, 15 October 2026).
             reflects = buffer == 'tree' or 'CAN_CAST_REFLECTIONS' in kinds
-            key = (resolved['model'], resolved['texture'], caster, decal, buffer, bool(resolved.get('prop')), sky, reflects)
+            key = (model, resolved['texture'], caster, decal, buffer, bool(resolved.get('prop')), sky, reflects)
             groups.setdefault(key, []).append((o['x'], o['y'], z, angle, scale, sway))
             if buffer is None and not resolved.get('prop'):
                 # A drawable in the scene runs its emitters and particle
                 # systems; the prop buffer (W3DPropDraw) never adds its
                 # render objects to a scene, so their emitters stay idle.
-                self._effect_objects.append((name, resolved['model'], o['x'], o['y'], z, angle, scale, o['index']))
+                self._effect_objects.append((name, model, o['x'], o['y'], z, angle, scale, o['index']))
         self.report['vegetation'] = dict(trees=counts['tree'], shrubs=counts['shrub'],
                                          trees_dropped=dropped['tree'], shrubs_dropped=dropped['shrub'],
                                          props_hidden=dropped['prop'], show_props=show_props, limits=limits,
                                          technique='Default' if self.options['lod'] in ('high', 'ultrahigh') else 'Default_L')
         return groups, volumes, objects
+
+    def _placed_units(self, objects):
+        """The map's objects as a new game creates them: a horde replaced by
+        its members (GameAssets.horde_members), each at its RankInfo position
+        facing the horde's way, and a template with BuildVariations by one of
+        them (a hash of the object stands in for the game's random pick).
+        Members stand on the ground, or level with a horde raised above it
+        (on a wall). With the units option off, every unit is left out."""
+        show, report = self.options.get('units', True), self.report['units']
+        for o in objects:
+            name = o['template']
+            resolved = None if o['flags'] & 0x30 else self.assets.template_model(name)
+            if resolved is None or not resolved['unit']:
+                yield o
+                continue
+            if not show:
+                report['hidden'] += 1
+                continue
+            members = self.assets.horde_members(name)
+            if members:
+                report['hordes'] += 1
+                report['members'] += len(members)
+            c, s = math.cos(o['angle']), math.sin(o['angle'])
+            ground = float(self.terrain.height_at(o['x'], o['y']))
+            for k, (member, x, y) in enumerate(members or [(name, 0.0, 0.0)]):
+                variations = self.assets.build_variations(member)
+                if variations:
+                    member = variations[(o['index']*2654435761 + k*40503) % len(variations)]
+                mx, my = o['x'] + c*x - s*y, o['y'] + s*x + c*y
+                z = ground + o['z'] - float(self.terrain.height_at(mx, my)) if o['z'] else 0.0
+                yield dict(o, template=member, x=mx, y=my, z=z)
 
     def _objects_gpu(self):
         self._prepared_objects = self._object_groups()

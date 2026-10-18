@@ -17,7 +17,7 @@ Keyboard
   Space / Home         reset to the whole-map view
   T                    toggle top-down view
   1 objects  2 water  3 shadows  4 normal maps  5 clouds  6 weather  7 walkable
-  8 river flow arrows  9 editor markers  M marks
+  8 river flow arrows  9 editor markers  U units  M marks
   G grid  B border  P screenshot  F5 reload  Ctrl+B build  F1 controls
   Del        delete the selected mark;  Ctrl+Z  undo a mark change
   Esc        steps back: closes a menu, cancels a drawing, drops the selection,
@@ -38,10 +38,12 @@ Toolbar
   Preview    how the map is shown, without changing it: detail level (Low,
              Medium, High), the map's own weather or a preset (clear, haze, rain,
              snow, dusk), the weather's own sun or a light rig over it
-  View       layers: objects, water, shadows; cloud shadows, normal maps, fog and
-             rain/snow; grid, map border, walkable, river flow, marks; animate;
-             the game's object limits; editor markers (9: the WorldBuilder-only
-             models the game never draws, such as the AI's farm sites)
+  View       layers: objects, units, water, shadows; cloud shadows, normal maps,
+             fog and rain/snow; grid, map border, walkable, river flow, marks;
+             animate; the game's object limits; editor markers (9: the
+             WorldBuilder-only models the game never draws, such as the AI's
+             farm sites). Units (U): hordes as their members, each unit in the
+             first frame of its idle animation; off leaves every unit out
   Buttons    top view, reset view, screenshot
   FPS        the frame rate at the right; click it to cap it (30-144), follow the
              monitor (VSync) or run unlimited. Default 60 (--fps).
@@ -93,7 +95,7 @@ from mapworkshop.viewer.toolbar import Toolbar
 FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')
 DOUBLE_CLICK = 0.3        # s between the clicks of a double-click
 # The View menu: command ids in groups; None separates them.
-VIEW_MENU = ('objects', 'water', 'shadows', None, 'clouds', 'normal_maps', 'fx', None,
+VIEW_MENU = ('objects', 'units', 'water', 'shadows', None, 'clouds', 'normal_maps', 'fx', None,
              'grid', 'border', 'walkable', 'flow', 'marks', None, 'animate', 'limits', 'markers')
 
 
@@ -224,6 +226,7 @@ class Viewer:
         c.add(
             # The View menu's layers and options.
             Command('objects', lambda: self.flip_visible('objects'), 'Objects', ('1',), visible('objects')),
+            Command('units', self.flip_units, 'Units (in their idle pose)', ('U',), option('units')),
             Command('water', lambda: self.flip_visible('water'), 'Water', ('2',), visible('water')),
             Command('shadows', lambda: self.flip_visible('shadows'), 'Shadows', ('3',), visible('shadows')),
             Command('normal_maps', lambda: self.flip_option('normal_maps'), 'Normal maps', ('4',),
@@ -277,6 +280,11 @@ class Viewer:
     def flip_markers(self):
         """Show or hide the WorldBuilder-only models, which the game never draws."""
         self.session.options['markers'] = not self.session.options['markers']
+        self.session.reload = True
+
+    def flip_units(self):
+        """Show the units, hordes as their members in their idle pose, or hide them."""
+        self.session.options['units'] = not self.session.options['units']
         self.session.reload = True
 
     def flip_view(self, name):

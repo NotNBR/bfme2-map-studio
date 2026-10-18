@@ -1,9 +1,11 @@
 """Static W3D models for preview rendering (native Z-up coordinates).
 
-Meshes are placed in their bind pose using the HLOD's highest-detail LOD and
-its hierarchy (embedded or the referenced skeleton file). Skinned vertices are
-stored relative to their primary bone and are transformed by that bone.
-Animation is not applied; this is a still preview.
+Meshes are placed using the HLOD's highest-detail LOD and its hierarchy
+(embedded or the referenced skeleton file). Skinned vertices are stored
+relative to their primary bone and are transformed by that bone. A model is
+in its bind pose, or still at the first frame of an animation when loaded as
+'model+animation' (units, render.assets.unit_animation); animation is not
+played.
 
 Each part carries what the game's fixed-function path needs (vertex material,
 colour sources after MeshMatDescClass::Post_Load_Process, ShaderClass render
@@ -15,7 +17,7 @@ import struct
 
 import numpy as np
 
-from mapworkshop.formats.w3d import cstr, matrix
+from mapworkshop.formats.w3d import cstr, matrix, pose, skeleton
 
 MESH, VERTICES, NORMALS, INFLUENCES, TRIANGLES = 0x0, 0x2, 0x3, 0xe, 0x20
 SHADERS, TEXTURES, PASS, STAGE, FX_SHADERS = 0x29, 0x30, 0x38, 0x48, 0x50
@@ -287,17 +289,41 @@ class ModelCache:
         self.cache = {}
 
     def load(self, model):
+        """A model by name, or 'model+animation' for it posed at the
+        animation's first frame (in its bind pose if the animation can't be
+        read); a '|mesh,mesh' suffix leaves those meshes undrawn (a unit's
+        upgrade sub-objects)."""
         if model in self.cache:
             return self.cache[model]
-        key = self.assets.model_key(model)
+        name, _, hide = model.partition('|')
+        name, _, animation = name.partition('+')
+        key = self.assets.model_key(name)
         result = None
         if key is not None:
             try:
-                result = self._build(self.assets.read(key))
+                result = self._build(self.assets.read(key), self.pose(animation) if animation else None,
+                                     set(hide.split(',')) - {''})
             except (ValueError, KeyError, struct.error, IndexError):
                 result = None
         self.cache[model] = result
         return result
+
+    def pose(self, animation):
+        """{bone name: model-space matrix} at an animation's first frame, or None."""
+        key = self.assets.model_key(animation)
+        if key is None:
+            return None
+
+        def skeleton_of(hierarchy):
+            found = self.assets.model_key(hierarchy)
+            if found is None:
+                raise KeyError(hierarchy)
+            return skeleton(self.assets.read(found))
+        try:
+            bones, world = pose(self.assets.read(key), skeleton_of)
+        except (ValueError, KeyError, struct.error, IndexError):
+            return None
+        return {bone['name']: m for bone, m in zip(bones, world)}
 
     def load_tree(self, model):
         """Geometry as W3DTreeBuffer/W3DShrubBuffer take it (addTreeType
@@ -367,7 +393,9 @@ class ModelCache:
                     texture=mesh['textures'][0] if mesh['textures'] else '',
                     bounds=(positions.min(0), positions.max(0)), name=mesh['name'])
 
-    def _build(self, data):
+    def _build(self, data, posed=None, hide=()):
+        """`posed`: {bone name: model-space matrix} replacing the bind pose;
+        `hide`: lower-case names of meshes not to draw."""
         top = list(chunks(data))
         meshes = {}
         for kind, payload in top:
@@ -402,6 +430,8 @@ class ModelCache:
             for bone, name in (lods[-1] if lods else []):
                 placement[name.lower()] = bone
         bones = None if named is None else named[1]
+        if bones is not None and posed:
+            bones = [posed.get(name, m) for name, m in zip(named[0], bones)]
         parts = []
         shadow = []
         collision = []
@@ -443,7 +473,7 @@ class ModelCache:
                 shadow.append(dict(positions=positions.astype(np.float32), indices=mesh['triangles'],
                                    name=mesh['name'], skin=geometry == SKIN,
                                    hidden=bool(mesh['attributes'] & HIDDEN)))
-            if mesh['attributes'] & HIDDEN or 'shadow' in mesh['name']:
+            if mesh['attributes'] & HIDDEN or 'shadow' in mesh['name'] or mesh['name'].lower() in hide:
                 continue
             for (texture, shader), triangles in mesh['groups'].items():
                 if len(triangles) == 0:
@@ -471,5 +501,5 @@ class ModelCache:
         allpos = np.concatenate([p['positions'] + (p['pivot'] if p['camera'] else 0) for p in parts])
         bone_matrix = lambda i: bones[i] if bones is not None and i < len(bones) else np.eye(4)
         return dict(parts=parts, bounds=(allpos.min(0), allpos.max(0)), shadow=shadow, collision=collision,
-                    bones={} if named is None else {n: m for n, m in zip(*named)},
+                    bones={} if named is None else {n: m for n, m in zip(named[0], bones)},
                     aggregates=[(name, bone_matrix(bone)) for bone, name in aggregates])

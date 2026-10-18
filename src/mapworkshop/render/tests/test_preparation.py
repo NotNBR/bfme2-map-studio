@@ -102,6 +102,54 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual((horde['model'], horde['editor']), ('hordebanner', False))
         self.assertEqual((ruin['model'], ruin['editor']), ('ruinsnow', False))
 
+    def unit_assets(self, templates, files=None):
+        assets = GameAssets.__new__(GameAssets)
+        assets._templates = {k.lower(): dict(name=k, parent=parent, kind='ChildObject' if parent else 'Object', body=body,
+                                             file='object/units/units.ini', line=1)
+                             for k, (parent, body) in templates.items()}
+        assets._constants = {'HORDE_SIZE': '3'}
+        assets.basenames = {'sold_idla': ['art/w3d/so/sold_idla.w3d'], 'ride_idlb': ['art/w3d/ri/ride_idlb.w3d']}
+        assets.ini_text = lambda path: (files or {})[path]
+        return assets
+
+    def test_horde_members_fill_their_ranks(self):
+        contain = ('  Behavior = {kind} ModuleTag_Contain\n'
+                   '    InitialPayload = Soldier HORDE_SIZE ; three\n'
+                   '    MeleeBehavior = Amoeba\n    End\n'
+                   '    RankInfo = RankNumber:2 UnitType:Soldier Position:X:10 Y:0 Leader 1 0\n'
+                   '    RankInfo = RankNumber:1 UnitType:Soldier Position:X:50 Y:0  Position:X:50 Y:20 // front\n'
+                   '  End\n  Behavior = PhysicsBehavior ModuleTag_Physics\n  End\n')
+        assets = self.unit_assets({
+            'Horde': (None, 'EditorSorting = UNIT\nKindOf = HORDE\n' + contain.format(kind='HordeContain')),
+            'Riders': (None, contain.format(kind='HorseHordeContain').replace('HORDE_SIZE', '2')),
+            'BigHorde': ('horde', 'Side = Men\n'),
+            'Soldier': (None, 'EditorSorting = UNIT\n')})
+        self.assertEqual(assets.horde_members('Horde'), [('Soldier', 50, 0), ('Soldier', 50, 20), ('Soldier', 10, 0)])
+        self.assertEqual(assets.horde_members('Riders'), [('Soldier', 50, 0), ('Soldier', 50, 20)])
+        self.assertEqual(len(assets.horde_members('BigHorde')), 3)       # from its parent
+        self.assertEqual(assets.horde_members('Soldier'), [])
+
+    def test_unit_animation_is_the_first_idle_one(self):
+        draw = ('  Draw = W3DScriptedModelDraw ModuleTag_01\n'
+                '    DefaultModelConditionState\n      Model = Sold_SKN\n    End\n'
+                '{states}  End\n')
+        idle = ('    IdleAnimationState\n      Animation = IDLA\n        AnimationName = Sold_SKL.Sold_IDLA\n'
+                '      End\n    End\n')
+        assets = self.unit_assets({
+            'Soldier': (None, draw.format(states='    AnimationState = MOVING\n      Animation = Run\n'
+                                                 '        AnimationName = Sold_RUNA\n      End\n    End\n' + idle)),
+            'Rider': (None, draw.format(states='    #include "RiderAnims.inc"\n')),
+            'Statue': (None, draw.format(states=''))},
+            files={'object/units/RiderAnims.inc': idle.replace('Sold_SKL.Sold_IDLA', 'Ride_IDLB')})
+        self.assertEqual(assets.unit_animation('Soldier'), 'sold_idla')
+        self.assertEqual(assets.unit_animation('Rider'), 'ride_idlb')
+        self.assertIsNone(assets.unit_animation('Statue'))
+
+    def test_build_variations_name_known_templates(self):
+        assets = self.unit_assets({'Peasant': (None, 'BuildVariations = Peasant1 Peasant9\n'), 'Peasant1': (None, '')})
+        self.assertEqual(assets.build_variations('Peasant'), ['Peasant1'])
+        self.assertEqual(assets.build_variations('Peasant1'), [])
+
 
 if __name__ == '__main__':
     unittest.main()

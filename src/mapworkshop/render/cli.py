@@ -64,6 +64,8 @@ def main(argv=None):
                         help="Keep only the game's first 1,200 trees and 2,000 shrubs (default: draw every one)")
     parser.add_argument('--editor-markers', action='store_true',
                         help='Also draw the WorldBuilder-only models the game never shows, such as the AI farm sites')
+    parser.add_argument('--no-units', action='store_true',
+                        help='Leave out the units (default: hordes as their members, each unit in its idle pose)')
     parser.add_argument('--time', type=float, default=0.0,
                         help='Animation time in seconds (water ripples, clouds, falling rain and snow)')
     parser.add_argument('--weather', default=None,
@@ -109,7 +111,7 @@ def main(argv=None):
                            normal_maps={'auto': None, 'on': True, 'off': False}[args.normal_maps],
                            clouds=not args.no_clouds, shadows=not args.no_shadows, lod=args.lod,
                            vegetation_limits=args.vegetation_limits, weather=args.weather, sun=args.sun,
-                           editor_markers=args.editor_markers)
+                           editor_markers=args.editor_markers, units=not args.no_units)
     renderer.visible['weather'] = not args.no_weather
     if args.walkable:
         renderer.walkable_overlay()

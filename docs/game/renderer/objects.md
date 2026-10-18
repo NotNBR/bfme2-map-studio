@@ -4,7 +4,7 @@ How the game lights and draws map objects, trees and shrubs, and what the
 renderer reproduces ([how the game draws a map](README.md)).
 
 - Objects: W3D models in bind pose (HLOD, hierarchy, skins) with
-  `InstanceScaleFuzziness`. The light environment is the map's object
+  `InstanceScaleFuzziness`; units in a still pose ([units](#units)). The light environment is the map's object
   ambient and object lights as `LightEnvironmentClass::Add_Light`
   (0x00140770) keeps them: lights below 0.05 in every channel are dropped
   (Greywater's third light), the rest sorted by brightness. At Low and Medium
@@ -68,8 +68,51 @@ cinematic particle, fire and smoke proxies, and the summoning eggs
 (`render --editor-markers`, `MapRenderer(editor_markers=True)` and the
 viewer's **Editor markers** draw them, and the render report counts them
 under `editor_markers`). Hordes and castle centres also have only an editor
-model; the game shows their units or castle in its place, so the renderer
-keeps drawing the editor model for them as a stand-in.
+model; the game shows their units or castle in its place. The renderer draws
+a horde's members instead ([units](#units)) and keeps the editor model as the
+castle centre's stand-in.
+
+## Units
+
+Templates with `EditorSorting = UNIT` (faction units, heroes, hordes, creeps)
+are drawn as a new game creates them, still (`render.assets`,
+`MapRenderer._placed_units`):
+
+- A horde fills itself from its `HordeContain` (or `HorseHordeContain`):
+  `InitialPayload` members (sizes from `gamedata.ini`'s `#define`s), each at
+  the next `RankInfo` `Position` for its `UnitType`, rank by rank. Positions
+  are in the horde's frame, X forward, and members face the horde's way. They
+  stand on the ground, or level with a horde raised above it (on a wall).
+- A template with `BuildVariations` (`RohanPeasant`) becomes one of them; a
+  hash of the object stands in for the game's random pick.
+- Each unit is posed at the first frame of its idle animation: the first
+  `AnimationName` of the draw module's `IdleAnimationState`, else the
+  `DefaultModelConditionState`'s animation, `#include`d files read
+  (`GameAssets.unit_animation`). The animation's bones replace the bind pose
+  by name (`ModelCache.load('model+animation')`); uncompressed (0x200),
+  timecoded (0x282) and BFME motion channels (0x284) are decoded
+  (`formats.w3d.channels`). A unit without one stays in its bind pose.
+- Each unit leaves out the sub-objects its `OnCreated` script hides: the
+  `AILuaEventsList` of its AI module names an `EventList` in
+  `data/scripts/scriptevents.xml` (one without `OnCreated` takes its
+  `Inherit`'s), whose function in `data/scripts/scripts.lua` calls
+  `ObjectHideSubObject[Permanently](self, "Name", true)`
+  (`GameAssets.hidden_subobjects`, `ModelCache.load('model|mesh,mesh')`).
+  These are the upgrades' meshes, which the models carry unhidden: forged
+  blades, fire arrow tips, shields. A list with no `OnCreated` hides nothing,
+  so the Isengard berserker (`InfantryFunctions`) keeps its `Forged_Blade`
+  beside its sword. Any object also leaves out what its draw module's
+  `IdleAnimationState` `BeginScript` hides with
+  `CurDrawableHideSubObject("Name")` (or its `Permanently` form) when the script has no `if`
+  (`CINE_DwarvenCatapult` hides its crew so). BFME2 has no `HideSubObject`
+  field in a model condition state: no retail INI uses one and `game.dat`
+  holds no such name.
+
+Not reproduced: the game's random idle choice and start frame (members
+differ slightly in the game, all alike here), banner carriers and
+`RandomTexture` swaps. `render --no-units` and the viewer's
+**Units** leave every unit out; the render report counts them under `units`
+(hidden, hordes, members, posed).
 
 ## Open questions
 

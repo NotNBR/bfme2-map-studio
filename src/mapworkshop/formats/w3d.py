@@ -1,4 +1,5 @@
-"""BFME W3D -> Recoil piece geometry and sampled animation.
+"""BFME W3D -> Recoil piece geometry and sampled animation, and the still
+poses the renderer draws units in (pose).
 
 GPL-3.0-only. Adaptive delta decoding follows OpenSAGE's
 W3dAdaptiveDeltaCodec / W3dAdaptiveDeltaBlock (see THIRD_PARTY.md).
@@ -89,10 +90,11 @@ def decode_delta(data, count, components, bits):
     return result
 
 
-def interpolate(times, values, frames, quaternion=False):
+def interpolate(times, values, frames, quaternion=False, start=0):
+    """Values at frames start .. start+frames-1 from keys at `times`."""
     result = np.empty((frames, values.shape[1]))
     right = 0
-    for frame in range(frames):
+    for index, frame in enumerate(range(start, start+frames)):
         while right < len(times)-1 and times[right] < frame:
             right += 1
         left = max(0, right-1)
@@ -106,9 +108,9 @@ def interpolate(times, values, frames, quaternion=False):
                 b, dot = -b, -dot
             if dot < .9995:
                 angle = math.acos(np.clip(dot, -1, 1))
-                result[frame] = (a*math.sin((1-t)*angle)+b*math.sin(t*angle))/math.sin(angle)
+                result[index] = (a*math.sin((1-t)*angle)+b*math.sin(t*angle))/math.sin(angle)
                 continue
-        result[frame] = a*(1-t)+b*t
+        result[index] = a*(1-t)+b*t
     return result
 
 
@@ -127,51 +129,120 @@ def recoil_pose(m):
     return [*m[:3, 3], pitch, yaw, roll]
 
 
-def animation(data, bones, scale=1):
-    items = list(chunks(dict(chunks(data))[0x280]))
-    header = dict(items)[0x281]
-    frames, fps = struct.unpack_from('<IH', header, 36)
-    translation = np.zeros((frames, len(bones), 3))
-    rotation = np.zeros((frames, len(bones), 4)); rotation[:, :, 3] = 1
+def channels(data):
+    """An animation file's motion: (dict(name, hierarchy, frames, fps),
+    [(pivot, channel, times, values)]). Channel 0-2 is a translation along
+    X, Y or Z, 6 a quaternion (x, y, z, w); visibility channels are left out.
+    Reads uncompressed animations (0x200), compressed ones with timecoded
+    channels (0x282) and BFME's motion channels (0x284, timecoded or
+    adaptive delta)."""
+    top = dict(chunks(data))
+    kind = 0x280 if 0x280 in top else 0x200 if 0x200 in top else None
+    if kind is None:
+        raise ValueError('No W3D animation')
+    items = list(chunks(top[kind]))
+    header = dict(items)[kind+1]
+    frames, fps = struct.unpack_from('<IH' if kind == 0x280 else '<II', header, 36)
+    info = dict(name=cstr(header[4:20]), hierarchy=cstr(header[20:36]), frames=frames, fps=int(fps))
+    motion = []
     for kind, payload in items:
-        if kind != 0x284:
-            if kind not in (0x281, 0x283):
-                raise ValueError(f'Unsupported animation chunk {kind:#x}')
-            continue
-        zero, delta, components, channel, count, pivot = struct.unpack_from('<4B2H', payload)
+        if kind == 0x202:
+            # W3dAnimChannelStruct: first and last frame, vector length,
+            # type, pivot, padding; then a value for every frame between.
+            first, last, components, channel, pivot = struct.unpack_from('<5H', payload)
+            count = last-first+1
+            times = np.arange(first, last+1)
+            values = np.frombuffer(payload, '<f4', count*components, 12).reshape(count, components)
+        elif kind == 0x282:
+            # W3dTimeCodedAnimationChannel: count, pivot, vector length, type,
+            # then each time code (top bit: no interpolation) and its value.
+            count, pivot, components, channel = struct.unpack_from('<IHBB', payload)
+            rows = np.frombuffer(payload, [('time', '<u4'), ('value', '<f4', (components,))], count, 8)
+            times = (rows['time'] & 0x7fffffff).astype(int)
+            values = rows['value'].reshape(count, components)
+        elif kind == 0x284:
+            zero, delta, components, channel, count, pivot = struct.unpack_from('<4B2H', payload)
+            if delta == 0:
+                times = np.frombuffer(payload, '<u2', count, 8).astype(int) & 0x7fff
+                start = 8 + ((count+1)//2)*4
+                values = np.frombuffer(payload, '<f4', count*components, start).reshape(count, components)
+            elif delta in (1, 2):
+                times = np.arange(count)
+                values = decode_delta(payload[8:], count, components, 4 if delta == 1 else 8)
+            else:
+                raise ValueError(f'Unsupported W3D delta type {delta}')
+        elif kind in (0x201, 0x203, 0x281, 0x283):
+            continue                     # headers and visibility channels
+        else:
+            raise ValueError(f'Unsupported animation chunk {kind:#x}')
         if channel not in (0, 1, 2, 6):
             continue
-        if not count or pivot >= len(bones):
+        if not count:
             raise ValueError('Invalid animation channel')
-        if delta == 0:
-            times = np.frombuffer(payload, '<u2', count, 8).astype(int) & 0x7fff
-            start = 8 + ((count+1)//2)*4
-            values = np.frombuffer(payload, '<f4', count*components, start).reshape(count, components)
-        elif delta in (1, 2):
-            times = np.arange(count)
-            values = decode_delta(payload[8:], count, components, 4 if delta == 1 else 8)
+        motion.append((pivot, channel, times, np.asarray(values, float)))
+    return info, motion
+
+
+def sample(times, values, frame, quaternion=False):
+    """One channel's value at `frame`, as interpolate gives it."""
+    right = min(int(np.searchsorted(times, frame)), len(times)-1)
+    return interpolate(times[max(0, right-1):right+1], values[max(0, right-1):right+1], 1, quaternion,
+                       start=frame)[0]
+
+
+def local_poses(bones, motion, frames):
+    """Each frame's (translation, rotation) offsets of every bone."""
+    translation = np.zeros((len(frames), len(bones), 3))
+    rotation = np.zeros((len(frames), len(bones), 4)); rotation[:, :, 3] = 1
+    for pivot, channel, times, values in motion:
+        if pivot >= len(bones):
+            raise ValueError('Invalid animation channel')
+        if len(frames) == 1:
+            values = sample(times, values, frames[0], channel == 6)[None]
         else:
-            raise ValueError(f'Unsupported W3D delta type {delta}')
-        values = interpolate(times, values, frames, channel == 6)
+            values = interpolate(times, values, len(frames), channel == 6)
         if channel == 6:
             rotation[:, pivot] = values
         else:
             translation[:, pivot, channel] = values[:, 0]
+    return translation, rotation
+
+
+def posed(bones, translation, rotation):
+    """Model-space matrices of the bones under one frame's offsets."""
+    world = []
+    for i, bone in enumerate(bones):
+        # OpenSAGE uses row vectors: AnimatedOffset * BindLocal.
+        # Our column-vector equivalent is BindLocal * AnimatedOffset.
+        local = bone['local'] @ matrix(translation[i], rotation[i])
+        world.append(world[bone['parent']] @ local if bone['parent'] >= 0 else local)
+    return world
+
+
+def pose(data, skeleton_of, frame=0):
+    """One frame of an animation file: the bones of its hierarchy and their
+    model-space matrices (W3D coordinates). `skeleton_of(name)` gives a
+    hierarchy's bones as skeleton() reads them."""
+    info, motion = channels(data)
+    bones = skeleton_of(info['hierarchy'])
+    translation, rotation = local_poses(bones, motion, [min(frame, max(info['frames']-1, 0))])
+    return bones, posed(bones, translation[0], rotation[0])
+
+
+def animation(data, bones, scale=1):
+    info, motion = channels(data)
+    frames = info['frames']
+    translation, rotation = local_poses(bones, motion, range(frames))
     transforms = []
     for frame in range(frames):
-        world = []
-        for i, bone in enumerate(bones):
-            # OpenSAGE uses row vectors: AnimatedOffset * BindLocal.
-            # Our column-vector equivalent is BindLocal * AnimatedOffset.
-            local = bone['local'] @ matrix(translation[frame, i], rotation[frame, i])
-            world.append(world[bone['parent']] @ local if bone['parent'] >= 0 else local)
+        world = posed(bones, translation[frame], rotation[frame])
         converted = []
         for m in world:
             m = BASIS @ m @ BASIS.T
             m[:3, 3] *= scale
             converted.append(recoil_pose(m))
         transforms.append(converted)
-    return dict(fps=int(fps), frames=transforms)
+    return dict(fps=info['fps'], frames=transforms)
 
 
 def meshes(data, bones, scale=1):
