@@ -8,6 +8,7 @@ import numpy as np
 
 from mapworkshop.formats import sections
 from mapworkshop.formats.map import Map, differences, tile_offset
+from mapworkshop.formats.terrain import playable_extent
 
 
 def finite(value):
@@ -23,7 +24,8 @@ def brush(terrain, op):
         raise ValueError('Brush radius must be positive')
     border = terrain['border']
     w, h = terrain['width'], terrain['height']
-    if not (0 <= x < (w - 2 * border) * 10 and 0 <= y < (h - 2 * border) * 10):
+    extent_x, extent_y = playable_extent(terrain)
+    if not (0 <= x < extent_x and 0 <= y < extent_y):
         raise ValueError('Brush center outside playable area')
     yy, xx = np.ogrid[:h, :w]
     weight = np.clip(1 - np.hypot((xx - border) * 10 - x, (yy - border) * 10 - y) / radius, 0, 1)
@@ -115,8 +117,7 @@ def apply_recipe(source, recipe):
             max_slope = finite(op.get('max_slope', 0.55))
             if gap <= 0 or max_slope < 0:
                 raise ValueError('Invalid spacing/slope')
-            w = (terrain['width'] - 2 * terrain['border']) * 10
-            h = (terrain['height'] - 2 * terrain['border']) * 10
+            w, h = playable_extent(terrain)
             bounds = [finite(v) for v in op.get('rect', [0, 0, w - 10, h - 10])]
             if len(bounds) != 4 or not (0 <= bounds[0] < bounds[2] < w and 0 <= bounds[1] < bounds[3] < h):
                 raise ValueError('Scatter rectangle outside playable area')

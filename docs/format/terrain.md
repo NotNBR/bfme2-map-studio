@@ -15,16 +15,25 @@ u16 elevations[H][W]               # row-major, X changes fastest
 ```
 
 The payload length is `20 + 8*borderRecordCount + 2*W*H`. The modern constructor
-emits one border record `(W-2B, H-2B)`. Preserve multiple records when reading;
-their broader runtime interpretation is not established here.
+emits one border record `(W-2B, H-2B)`, as 116 of the 129 records in the stock
+maps are; the others, in cinematic and campaign maps, are smaller. Preserve
+multiple records when reading.
 
 ```text
 world Z = elevationSample * 0.0390625
 sample X = world X / 10 + B
 sample Y = world Y / 10 + B
-playable dimensions = (W - 2B, H - 2B) samples
-reported world extent = ((W - 2B)*10, (H - 2B)*10)
+playable extent = (0, 0) to (largest record x, largest record y) * 10
+                  ((W - 2B, H - 2B) samples without records)
+MapCache.ini extent = ((W - 2B)*10, (H - 2B)*10), whatever the records say
 ```
+
+The playable extent is what W3DTerrainLogic::getExtent returns (ROTWK game.dat
+RW 0x46273E and 0x4626A3, reconstructed in OpenBFME's `TerrainLogic` and
+`TerrainPathfindSource`); the pathfinder and the game's black border take it.
+`formats.terrain.playable_extent` computes it. The MapCache rule holds in all
+122 retail entries (OpenBFME `test_map_cache`). Neither is
+`(W - 1 - 2B)*10`, the distance between the first and last playable samples.
 
 Elevation storage spans `0 .. 2559.9609375` world units. World positions do not
 include the border offset. Row-major storage does not imply screen-image Y

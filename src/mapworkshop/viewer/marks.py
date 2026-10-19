@@ -338,7 +338,7 @@ def describe(data, near=150.0, assets=None, m=None, terrain=None):
         entry['vegetation'] = dict(Counter(o['template'] for o in found if is_vegetation(o['template'])))
         entry['layers'] = dict(Counter(layer(o) for o in found if layer(o)).most_common())
         marks.append(entry)
-    width, height = (terrain.width - 1 - 2*terrain.border)*10, (terrain.height - 1 - 2*terrain.border)*10
+    width, height = terrain.playable
     from mapworkshop.project import for_map_file
     owner = for_map_file(data['map_path'])
     return dict(data, title=owner.title if owner else data['map'], playable=[width, height], near=near, marks=marks)

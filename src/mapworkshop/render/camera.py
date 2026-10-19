@@ -311,8 +311,8 @@ class TopView:
             return self.region
         b = terrain.border*10
         if border if border is not None else self.border:
-            return (-b, -b, (terrain.width-1)*10-b, (terrain.height-1)*10-b)
-        return (0, 0, (terrain.width-1)*10-2*b, (terrain.height-1)*10-2*b)
+            return (-b, -b, (terrain.width-1)*10-b, (terrain.height-1)*10-b)    # every sample
+        return (0, 0, *terrain.playable)
 
     def resolve(self, terrain, aspect=None):
         x0, y0, x1, y1 = self.bounds(terrain)

@@ -19,7 +19,7 @@ import re
 
 import numpy as np
 
-from mapworkshop.formats.terrain import terrain_records
+from mapworkshop.formats.terrain import playable_extent, terrain_records
 
 INVERTED, FLIPPED = 1, 2
 # Corner order: 0 (x,y), 1 (x+1,y), 2 (x+1,y+1), 3 (x,y+1).
@@ -82,6 +82,7 @@ class TerrainData:
     def __init__(self, m, checkpoint=lambda: None):
         hm = m.heightmap()
         self.width, self.height, self.border = hm['width'], hm['height'], hm['border']
+        self.playable = playable_extent(hm)
         self.heights = hm['elevations'].astype(np.float32) * 0.0390625
         blend = m.blend(inspection=True)
         self.textures = blend['textures']

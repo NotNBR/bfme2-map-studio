@@ -40,6 +40,18 @@ def decode_heights(data):
     return dict(width=w, height=h, border=border, borders=borders, offset=offset, elevations=elevations)
 
 
+def playable_extent(heights):
+    """The playable area's (x, y) size in world units for decode_heights'
+    values, as the game takes it: W3DTerrainLogic::getExtent (ROTWK game.dat
+    RW 0x46273E, 0x4626A3, as reconstructed in OpenBFME's TerrainLogic) runs
+    from (0, 0) to the largest border record on each axis times 10. A map
+    without border records has (W - 2B, H - 2B) samples, which is what nearly
+    every stock map and every map the toolkit writes stores."""
+    borders = heights.get('borders') or [(heights['width'] - 2*heights['border'],
+                                          heights['height'] - 2*heights['border'])]
+    return max(b[0] for b in borders)*10.0, max(b[1] for b in borders)*10.0
+
+
 def encode_heights(value):
     """The payload for decode_heights' values; the size comes from the elevations."""
     elevations = np.asarray(value['elevations'])

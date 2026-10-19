@@ -1930,8 +1930,8 @@ class MapRenderer:
 
     @property
     def playable(self):
-        t = self.terrain
-        return ((t.width-1-2*t.border)*10.0, (t.height-1-2*t.border)*10.0)
+        """The playable area's (x, y) size in world units (formats.terrain.playable_extent)."""
+        return self.terrain.playable
 
     def render(self, view, size=(1600, 1200), grid=False, border=False, time=0.0, background=None):
         """Render an OrbitView, TopView or key=value spec string to an RGB array.

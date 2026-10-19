@@ -15,6 +15,7 @@ place with each bed.
 """
 import math
 
+from mapworkshop.formats.terrain import playable_extent
 from mapworkshop.mapkit.sites import spread
 
 # Setting: the bed and, per kind of place, the emitters to cycle through.
@@ -103,5 +104,4 @@ def ambient(m, palette, centre, zones, spacing=SPACING, limits=None, layer='Soun
 
 
 def _playable(m):
-    t = m.heightmap()
-    return (t['width']-2*t['border']-1)*10, (t['height']-2*t['border']-1)*10
+    return playable_extent(m.heightmap())

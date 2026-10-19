@@ -7,7 +7,7 @@ All spatial data is generated here. No .map file is read by this constructor.
 import numpy as np
 from mapworkshop.formats import sections
 from mapworkshop.formats.map import Map, Chunk, tile_offset
-from mapworkshop.formats.terrain import encode_blend, encode_heights
+from mapworkshop.formats.terrain import encode_blend, encode_heights, playable_extent
 from mapworkshop.formats.water import standing_water
 
 
@@ -304,7 +304,7 @@ def water_plane(m, name, height, points=None, uv_speed=.03, margin=300, shader='
     (mapkit.rivers) over both kinds: wtr_Riv03 in Ithilien, the nearly still
     'wtr_Riv_pond.W3D' in Fangorn."""
     if points is None:
-        t=m.heightmap();w=(t['width']-2*t['border'])*10;h=(t['height']-2*t['border'])*10
+        w,h=playable_extent(m.heightmap())
         points=[(-margin,-margin),(w+margin,-margin),(w+margin,h+margin),(-margin,h+margin)]
     m.chunk('StandingWaterAreas').data=standing_water([dict(id=1,name=name,layer='Water',
         uv_speed=uv_speed,additive=0,bump_texture='WaterRippleBump.tga',sky_texture='SkyEnv.tga',

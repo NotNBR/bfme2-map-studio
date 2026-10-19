@@ -230,7 +230,9 @@ class Map:
     def report(self, *, inspection=False):
         t, b, objects = self.heightmap(), self.blend(inspection=inspection), self.objects()
         heights = t['elevations'] * 0.0390625
-        pw, ph = t['width'] - 2 * t['border'], t['height'] - 2 * t['border']
+        from mapworkshop.formats.terrain import playable_extent
+        extent = playable_extent(t)
+        pw, ph = round(extent[0] / 10), round(extent[1] / 10)
         r = Reader(self.chunk('WorldInfo').data)
         world = {k: v for k, _, v in self.properties(r)}
         r.finish()

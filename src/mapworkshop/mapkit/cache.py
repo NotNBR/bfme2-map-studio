@@ -13,6 +13,8 @@ def cache_entry(path, m, name, title, description, root=None, players=None):
     def escaped(raw):
         return ''.join(chr(c) if (48<=c<=57 or 65<=c<=90 or 97<=c<=122) else f'_{c:02X}' for c in raw)
     key=escaped(('maps\\'+name+'\\'+name+'.map').encode('ascii'))
+    # MapCache.ini's extent is always (W - 2B) x 10, whatever the border records say
+    # (all 122 retail entries; OpenBFME test_map_cache), unlike formats.terrain.playable_extent.
     t=m.heightmap();w=(t['width']-2*t['border'])*10;h=(t['height']-2*t['border'])*10
     start_objects=[]
     for o in m.objects():
