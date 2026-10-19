@@ -120,6 +120,14 @@ class FlyCameraTests(unittest.TestCase):
         p = cam['view_projection'] @ np.array([0.0, 1000.0, 500.0, 1.0])
         self.assertAlmostEqual(p[1]/p[3], 1.0, places=6)
 
+    def test_refocusing_leaves_the_shadow_ground_in_place(self):
+        fly = FlyCamera(flat)
+        fly.place(np.array([0.0, 0.0, 120.0]), np.array([0.0, 1.0, -0.1]), focus=150.0)
+        ground = fly.matrices(1.6)['ground']
+        fly.refocus(3)
+        np.testing.assert_array_equal(fly.matrices(1.6)['ground'], ground)
+        np.testing.assert_allclose(ground[:2], (0.0, 2000.0), atol=1e-9)
+
     def test_lens_moves_stay_in_range(self):
         fly = FlyCamera(flat)
         fly.zoom(100)

@@ -209,6 +209,7 @@ def march(origin, direction, surface, reach):
 LOOK_DEGREES_PER_PIXEL = 0.08     # at a 50 degree field of view; narrower turns slower
 FOCAL_STEP = 1.12                  # focal length factor per wheel notch
 FOCUS_STEP = 1.15                  # focus distance factor per wheel notch
+SHADOW_AHEAD = 2000.0              # map units ahead of the eye the shadow map centres on
 
 
 class FlyCamera:
@@ -301,17 +302,22 @@ class FlyCamera:
 
     def matrices(self, aspect):
         """The camera for the renderer; its target is the point in focus ahead,
-        `sensor` the window's width in mm at the sensor's scale."""
+        `ground` the ground SHADOW_AHEAD ahead of the eye, where the shadow map
+        centres (it does not follow the focus), `sensor` the window's width in
+        mm at the sensor's scale."""
         eye = self.eye
         target = eye + self.forward()*self.focus
+        h = math.radians(self.heading)
+        x, y = eye[0]+math.sin(h)*SHADOW_AHEAD, eye[1]+math.cos(h)*SHADOW_AHEAD
+        ground = np.array([x, y, float(self.surface(x, y))])
         width, height = image_size(aspect, self.frame)
         fov_y = 2*math.degrees(math.atan(height/2/self.focal))
         near = min(40.0, max(1.0, abs(self.clearance())*0.02))
         far = 80000.0
         proj = perspective(fov_y, aspect, near, far)
         view = rolled(look_at(eye, target), self.roll)
-        return dict(view_projection=proj @ view, eye=eye.copy(), target=target, near=near, far=far, sensor=width,
-                    photo=self.settings())
+        return dict(view_projection=proj @ view, eye=eye.copy(), target=target, ground=ground, near=near, far=far,
+                    sensor=width, photo=self.settings())
 
     def settings(self):
         return dict(focal=self.focal, aperture=self.aperture, focus=self.focus, ev=self.ev)

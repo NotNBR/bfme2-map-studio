@@ -59,8 +59,12 @@ reproduces ([how the game draws a map](README.md)).
   view's clip planes and frustum, the ShadowMap block at 0x00DB447C (MapSize,
   MaxViewDistance, MinShadowedTerrainHeight) and the constants 400, 10 and
   0.1. The renderer fits an orthographic map to the camera's ground
-  footprint instead, and which objects draw into the game's shadow map is
-  not traced.
+  footprint instead (a view ray above the horizon reaches the far plane), at
+  most a set radius around the camera's ground point (Photo mode: 2,000
+  units ahead of the eye, so refocusing leaves it), its window on whole
+  texels of a grid fixed by the sun so a moving camera never shifts the
+  point-sampled edges by part of a texel. Which objects draw into the game's
+  shadow map is not traced.
 - Shadow volumes: skinned meshes extrude in their bind pose; the NON_SELF
   variants are treated as SHADOW_VOLUME; the extra per-mesh z term in
   updateVolumes (0x000F3D23, banked near-miss) is taken as 0; V2's z-fail

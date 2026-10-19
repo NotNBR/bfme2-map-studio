@@ -1663,18 +1663,24 @@ class MapRenderer:
         self.report['shadow_decals'] = len(decals)
 
     # Shadows ----------------------------------------------------------------
-    def _light_projection(self, camera, bounds=None, max_radius=12000.0):
-        """Orthographic sun projection covering the camera's ground footprint.
+    def _light_projection(self, camera, bounds=None, max_radius=12000.0, max_size=16384):
+        """Orthographic sun projection covering the camera's ground footprint,
+        with the shadow map's size in texels and its depth range.
 
-        `bounds` (x0, y0, x1, y1) replaces the footprint for top views. When the
-        footprint exceeds `max_radius`, the area around the camera target wins.
+        `bounds` (x0, y0, x1, y1) replaces the footprint for top views. The
+        footprint lies at the height of the camera's `ground` point (its target
+        when it has none); when it exceeds `max_radius`, the area around that
+        point wins. The window is on whole texels of a grid fixed by the sun, so
+        a camera that moves shifts the map by whole texels and the
+        point-sampled shadow edges do not jump or crawl.
         """
         from mapworkshop.render.camera import look_at, orthographic
+        anchor = np.asarray(camera.get('ground', camera['target']), float)
         if bounds is not None:
             x0, y0, x1, y1 = bounds
         else:
             inv = np.linalg.inv(camera['view_projection'])
-            ground = float(camera['target'][2])
+            ground = float(anchor[2])
             xs, ys = [], []
             for sx in (-1, 0, 1):
                 for sy in (-1, 0, 1):
@@ -1682,7 +1688,8 @@ class MapRenderer:
                     far = inv @ np.array([sx, sy, 1, 1.0]); far = far[:3]/far[3]
                     d = far-near
                     t = (ground-near[2])/d[2] if abs(d[2]) > 1e-6 else 1.0
-                    hit = near + d*min(max(t, 0.0), 1.0)
+                    # A ray that never comes down to the ground sees as far as the far plane.
+                    hit = near + d*(t if 0.0 <= t <= 1.0 else 1.0)
                     xs.append(hit[0]); ys.append(hit[1])
             x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
         center = np.array([(x0+x1)/2, (y0+y1)/2, float(self.terrain.heights.mean())])
@@ -1690,13 +1697,25 @@ class MapRenderer:
         if radius > max_radius:
             radius = max_radius
             if bounds is None:
-                center[:2] = camera['target'][:2]
+                center[:2] = anchor[:2]
+        # Shadow maps use the game's texel size so edges are equally soft;
+        # stencil volumes are exact, approximated here by a fine map.
+        texel = self.shadow_settings['texel'] if self.options['shadows'] == 'map' else 0.75
+        size = int(min(max_size, max(256, math.ceil(2*radius/texel)+1)))
+        texel = max(texel, 2*radius/(size-1))
         top = float(self.terrain.heights.max())+radius+2000
-        eye = center + np.array(self.sun_dir)*(top+radius)
-        view_m = look_at(eye, center, up=(0, 1, 0) if abs(self.sun_dir[2]) < 0.99 else (1, 0, 0))
+        # The light looks at a fixed point, so its axes depend on the sun alone;
+        # the window then sits around `center`, its corner on the texel grid.
+        origin = np.array([0.0, 0.0, center[2]])
+        view_m = look_at(origin + np.array(self.sun_dir)*(top+radius), origin,
+                         up=(0, 1, 0) if abs(self.sun_dir[2]) < 0.99 else (1, 0, 0))
+        cx, cy, cz = (view_m @ np.append(center, 1.0))[:3]
+        left, bottom = (math.floor((c-radius)/texel)*texel for c in (cx, cy))
+        # The depth range as seen from `top+radius` above the centre along the sun.
+        near = -cz-(top+radius)
         depth = 2*(top+radius)
-        proj = orthographic(-radius, radius, -radius, radius, 1.0, depth+radius)
-        return proj @ view_m, radius, depth
+        proj = orthographic(left, left+size*texel, bottom, bottom+size*texel, near+1.0, near+depth+radius)
+        return proj @ view_m, size, depth
 
     def _shadow_settings(self):
         """environment.ini ShadowMap block: MapSize texels over MaxViewDistance."""
@@ -1711,12 +1730,8 @@ class MapRenderer:
         values['texel'] = 2*values['maxviewdistance']/values['mapsize']
         return values
 
-    def _shadow_pass(self, light_vp, radius, max_size=16384):
+    def _shadow_pass(self, light_vp, size):
         ctx, mgl = self.ctx, self.moderngl
-        # Shadow maps use the game's texel size so edges are equally soft;
-        # stencil volumes are exact, approximated here by a fine map.
-        texel = self.shadow_settings['texel'] if self.options['shadows'] == 'map' else 0.75
-        size = int(min(max_size, max(256, round(2*radius/texel))))
         if getattr(self, 'shadow_size', None) != size:
             if hasattr(self, 'shadow_texture'):
                 self.shadow_fbo.release(); self.shadow_texture.release()
@@ -1946,8 +1961,8 @@ class MapRenderer:
             self.object_program['sway'].value = self._sway_offsets(time)
         if self.batches and self.visible['shadows']:
             if self.options['shadows'] == 'map':
-                light_vp, light_radius, light_depth = self._light_projection(camera, bounds, shadow_radius)
-                self._shadow_pass(light_vp, light_radius, shadow_size)
+                light_vp, light_size, light_depth = self._light_projection(camera, bounds, shadow_radius, shadow_size)
+                self._shadow_pass(light_vp, light_size)
             elif self.options['shadows'] == 'volume':
                 volume_count = self._volume_pass(camera, size)
         reflection = self._reflection_pass(camera, size, time)
