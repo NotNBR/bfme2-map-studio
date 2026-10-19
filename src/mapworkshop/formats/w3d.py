@@ -1,5 +1,5 @@
-"""BFME W3D -> Recoil piece geometry and sampled animation, and the still
-poses the renderer draws units in (pose).
+"""BFME W3D animation files: skeletons, their channels (adaptive-delta and
+time-coded) and the still poses the renderer draws units in (pose).
 
 GPL-3.0-only. Adaptive delta decoding follows OpenSAGE's
 W3dAdaptiveDeltaCodec / W3dAdaptiveDeltaBlock (see THIRD_PARTY.md).
@@ -114,21 +114,6 @@ def interpolate(times, values, frames, quaternion=False, start=0):
     return result
 
 
-# W3D: Z up, X forward. Recoil: Y up, Z forward. Positive determinant.
-BASIS = np.array([[0, 1, 0, 0], [0, 0, 1, 0], [1, 0, 0, 0], [0, 0, 0, 1]], dtype=float)
-
-
-def recoil_pose(m):
-    """Translation + native Y-X-Z Euler angles (script X,Y,Z components)."""
-    pitch = math.asin(float(np.clip(-m[1, 2], -1, 1)))
-    if abs(math.cos(pitch)) > 1e-6:
-        yaw = math.atan2(m[0, 2], m[2, 2])
-        roll = math.atan2(m[1, 0], m[1, 1])
-    else:
-        yaw = math.atan2(-m[2, 0], m[0, 0]); roll = 0
-    return [*m[:3, 3], pitch, yaw, roll]
-
-
 def channels(data):
     """An animation file's motion: (dict(name, hierarchy, frames, fps),
     [(pivot, channel, times, values)]). Channel 0-2 is a translation along
@@ -227,80 +212,3 @@ def pose(data, skeleton_of, frame=0):
     bones = skeleton_of(info['hierarchy'])
     translation, rotation = local_poses(bones, motion, [min(frame, max(info['frames']-1, 0))])
     return bones, posed(bones, translation[0], rotation[0])
-
-
-def animation(data, bones, scale=1):
-    info, motion = channels(data)
-    frames = info['frames']
-    translation, rotation = local_poses(bones, motion, range(frames))
-    transforms = []
-    for frame in range(frames):
-        world = posed(bones, translation[frame], rotation[frame])
-        converted = []
-        for m in world:
-            m = BASIS @ m @ BASIS.T
-            m[:3, 3] *= scale
-            converted.append(recoil_pose(m))
-        transforms.append(converted)
-    return dict(fps=info['fps'], frames=transforms)
-
-
-def meshes(data, bones, scale=1):
-    top = list(chunks(data))
-    attachment = {}
-    for kind, payload in top:
-        if kind == 0x700:
-            for t, p in chunks(payload):
-                if t == 0x702:
-                    for k, v in chunks(p):
-                        if k == 0x704:
-                            attachment[cstr(v[4:]).split('.')[-1]] = struct.unpack_from('<I', v)[0]
-    result = []
-    for kind, payload in top:
-        if kind != 0:
-            continue
-        parts = dict(chunks(payload))
-        header = parts[0x1f]
-        name = cstr(header[8:24])
-        if any(x in name for x in ('forged', 'glow', 'fire')):
-            continue  # upgrade effect meshes, not the base unit
-        verts = np.frombuffer(parts[2], '<f4').reshape(-1, 3).copy()
-        normals = np.frombuffer(parts[3], '<f4').reshape(-1, 3).copy()
-        triangles = np.frombuffer(parts[0x20], '<u4').reshape(-1, 8)[:, :3]
-        textures = []
-        for k, tex in chunks(parts.get(0x30, b'')):
-            if k == 0x31:
-                textures.append(cstr(dict(chunks(tex))[0x32]))
-        stages = [v for k, v in chunks(parts[0x38]) if k == 0x48]
-        stage = dict(chunks(stages[0]))
-        uv = np.frombuffer(stage[0x4a], '<f4').reshape(-1, 2)
-        texids = np.frombuffer(stage[0x49], '<u4')
-        if 0xe in parts:
-            influences = np.frombuffer(parts[0xe], '<u2').reshape(-1, 4)
-            bone_ids = np.where(influences[:, 3] > influences[:, 2], influences[:, 1], influences[:, 0])
-            skinned = True
-        else:
-            bone_ids = np.full(len(verts), attachment.get(name, 0))
-            skinned = False
-        groups = {}
-        for j, tri in enumerate(triangles):
-            # Recoil's standard S3O renderer is rigid-piece based. One dominant
-            # bone per triangle avoids detached individual triangle vertices.
-            ids, counts = np.unique(bone_ids[tri], return_counts=True)
-            bone = int(ids[np.argmax(counts)])
-            texture = textures[int(texids[0 if len(texids) == 1 else j])]
-            key = bone, texture
-            out = groups.setdefault(key, [])
-            inverse = np.linalg.inv(bones[bone]['bind']) if skinned else np.eye(4)
-            for idx in tri:
-                # BFME stores each skinned vertex in its own bone's space.
-                # Rebase it to the triangle's selected rigid bone.
-                rebase = inverse @ bones[int(bone_ids[idx])]['bind'] if skinned else np.eye(4)
-                position = rebase @ np.r_[verts[idx], 1]
-                normal = rebase[:3, :3] @ normals[idx]
-                position = BASIS @ position
-                normal = BASIS[:3, :3] @ normal
-                out.append([*(position[:3]*scale), *normal, *uv[idx]])
-        for (bone, texture), vertices in groups.items():
-            result.append(dict(bone=bone, texture=texture, vertices=vertices, source=name))
-    return result

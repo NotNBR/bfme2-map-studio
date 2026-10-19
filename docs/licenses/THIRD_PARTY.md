@@ -47,16 +47,6 @@ EA's `Common/MapObject.h`, compared with OpenSAGE's `RoadType.cs` and OpenBFME2'
 road-buffer source. Corpus and native evidence, and the limits of those source
 comparisons, are recorded in [roads and bridges](../game/roads-and-bridges.md).
 
-## Recoil / Spring
-
-Source and releases: https://github.com/beyond-all-reason/RecoilEngine
-
-Pinned local release: `2026.07.04`, Windows amd64. Archive SHA-256:
-
-`2e0a43744115e6b3cbd7db4a36aecc3d28afdef4fb615d07ab01703e4b5525e1`
-
-The engine is downloaded as a separate ignored runtime. Its GPL source and license are available in that repository. Built-in Lua gadget and unit-script handlers retain the original authors' notices inside the engine's base packages. `unit_script.lua` invokes that existing handler, attributed to Tobi Vollebregt.
-
 ## openbfme2 and BFME II
 
 [openbfme2 (Open-BFME-2)](https://github.com/Open-BFME/Open-BFME-2) supplies reconstruction, symbols and file-layout references under its GPLv3 license. No retail installation or extracted game assets are distributed here; the game runtime (`local/runtime/`) is made from a user-supplied BFME II installation and stays in ignored files.

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import numpy as np
 
-from mapworkshop.formats.w3d import channels, chunks, decode_delta, interpolate, matrix, pose, recoil_pose
+from mapworkshop.formats.w3d import channels, chunks, decode_delta, interpolate, matrix, pose
 
 
 def chunk(kind, payload):
@@ -72,16 +72,6 @@ class NativeFormats(unittest.TestCase):
     def test_quaternion_shortest_arc(self):
         out=interpolate(np.array([0,2]),np.array([[0.,0,0,1],[0,0,0,-1.]]),3,True)
         np.testing.assert_allclose(out,[[0,0,0,1]]*3)
-
-    def test_native_euler_roundtrip(self):
-        rng=np.random.default_rng(43)
-        for _ in range(100):
-            original=matrix([1,2,3],rng.normal(size=4))
-            x,y,z=recoil_pose(original)[3:]
-            rx=matrix([0,0,0],[math.sin(x/2),0,0,math.cos(x/2)])
-            ry=matrix([0,0,0],[0,math.sin(y/2),0,math.cos(y/2)])
-            rz=matrix([0,0,0],[0,0,math.sin(z/2),math.cos(z/2)])
-            np.testing.assert_allclose((ry@rx@rz)[:3,:3],original[:3,:3],atol=1e-6)
 
 
 if __name__=='__main__': unittest.main()

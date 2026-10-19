@@ -1,4 +1,4 @@
-"""Camera-only edits to native BFME maps. All other decompressed bytes survive.
+"""A .map file's container: EAR (RefPack-compressed) or plain CkMp, unpacked.
 
 GPL-3.0-only. Container/RefPack layouts cross-checked with OpenSAGE Data/Map
 and FileFormats.RefPack; see native/THIRD_PARTY.md.
@@ -50,60 +50,3 @@ def unpack(data):
         if len(data)!=declared: raise ValueError('EAR size mismatch')
     if data[:4]!=b'CkMp': raise ValueError('Unsupported map container')
     return data
-
-
-def metadata(data):
-    """Return WorldInfo properties with exact original value offsets."""
-    if data[:4]!=b'CkMp': raise ValueError('Expected uncompressed map')
-    count=struct.unpack_from('<I',data,4)[0]; pos=8;names={}
-    if count>100000: raise ValueError('Invalid map string count')
-    for expected in range(count,0,-1):
-        length=shift=0
-        while True:
-            b=data[pos];pos+=1;length|=(b&127)<<shift;shift+=7
-            if b<128:break
-            if shift>28:raise ValueError('Invalid map string length')
-        name=data[pos:pos+length].decode('utf-8');pos+=length
-        index=struct.unpack_from('<I',data,pos)[0];pos+=4
-        if index!=expected:raise ValueError('Unexpected map string index')
-        names[index]=name
-    while pos<len(data):
-        index,version,size=struct.unpack_from('<IHI',data,pos);pos+=10
-        end=pos+size
-        if end>len(data):raise ValueError('Map chunk outside container')
-        if names[index]!='WorldInfo':pos=end;continue
-        fields={};count=struct.unpack_from('<H',data,pos)[0];pos+=2
-        for _ in range(count):
-            kind=data[pos];index=int.from_bytes(data[pos+1:pos+4],'little');pos+=4
-            offset=pos
-            if kind==0:value=bool(data[pos]);pos+=1
-            elif kind in (1,2):value=struct.unpack_from('<i' if kind==1 else '<f',data,pos)[0];pos+=4
-            elif kind in (3,4,5):
-                length=struct.unpack_from('<H',data,pos)[0];pos+=2
-                length*=2 if kind==4 else 1
-                value=data[pos:pos+length].decode('utf-16-le' if kind==4 else 'cp1252');pos+=length
-            else:raise ValueError('Unknown map property type')
-            fields[names[index]]={'kind':kind,'offset':offset,'value':value}
-        if pos!=end:raise ValueError('Unexpected WorldInfo trailing bytes')
-        return fields
-    raise ValueError('Missing WorldInfo')
-
-
-def extend_camera(data,factor):
-    original=unpack(data); fields=metadata(original)
-    # GroundMin/MaxHeight describe terrain-related camera data; preserve them.
-    candidates=[(k,v) for k,v in fields.items() if k=='cameraMaxHeight']
-    if not candidates:
-        return original,[]  # map inherits the GameData default
-    result=bytearray(original)
-    changes=[];allowed=set()
-    for key,field in candidates:
-        if field['kind']!=2 or not 50<=field['value']<=2000:
-            raise ValueError('Unrecognized native camera height')
-        new=field['value']*factor
-        struct.pack_into('<f',result,field['offset'],new)
-        allowed.update(range(field['offset'],field['offset']+4))
-        changes.append({'field':key,'offset':field['offset'],'before':field['value'],'after':new})
-    if any(a!=b and i not in allowed for i,(a,b) in enumerate(zip(original,result))):
-        raise AssertionError('Non-camera map content changed')
-    return bytes(result),changes
