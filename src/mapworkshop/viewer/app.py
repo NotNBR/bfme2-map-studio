@@ -640,12 +640,33 @@ class Viewer:
             return 'photo', photo_spec(self.fly)
         return 'edit', edit_spec(self.camera)
 
+    def preview(self):
+        """The preview as it is shown, for viewer.views.render_flags: the
+        picture's size in pixels (Photo: its frame), the detail level,
+        weather, sun, animation time and the layers mw render can switch."""
+        r, visible = self.renderer, self.renderer.visible
+        w, h = glfw.get_framebuffer_size(self.window)
+        if self.mode == 'photo':
+            x0, y0, x1, y1 = bar.frame_rect((w, h), bar.frame_ratio(self.framing['frame']))
+            w, h = x1-x0, y1-y0
+        return dict(size=(w, h), lod=r.options['lod'], weather=r.weather_preset, sun=r.sun, time=self.time,
+                    normal_maps=self.session.options['normal_maps'], objects=visible['objects'],
+                    units=r.options['units'], shadows=visible['shadows'], clouds=r.options['clouds'],
+                    weather_fx=visible['weather'], limits=r.options['vegetation_limits'],
+                    markers=r.options['editor_markers'], grid=self.view['grid'], border=self.view['border'],
+                    walkable=visible['walkable'], flow=visible['flow'])
+
     def copy_view(self):
+        """The view as a mw render command that reproduces the picture: the
+        camera, and the preview options that differ from mw render's defaults."""
         _, spec = self.view_spec()
-        owner = self.session.owner
-        glfw.set_clipboard_string(self.window, render_command(owner.id if owner else f'"{self.session.source}"',
-                                                              'view', spec))
-        self.status.set('copied the view as a mw render command', 5)
+        owner, source = self.session.owner, self.session.source
+        command = render_command(owner.id if owner else f'"{source}"', 'view', spec, self.preview(),
+                                 label=owner.id if owner else Path(source).stem)
+        glfw.set_clipboard_string(self.window, command)
+        # mw render has no switch for the water layer.
+        hidden = '' if self.renderer.visible['water'] else ' (with water: mw render always draws it)'
+        self.status.set('copied the view as a mw render command' + hidden, 5)
 
     def save_view(self, slot=None):
         """Save the view in `slot` (1-9; None: the first free one) with a

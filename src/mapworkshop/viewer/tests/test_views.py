@@ -63,6 +63,20 @@ class ViewsTests(unittest.TestCase):
         words = command.split('--view ', 1)[1].split()[1:]
         self.assertEqual(parse_view(words).describe()['aperture'], 2.8)
 
+    def test_the_command_carries_the_preview_where_it_differs_from_mw_render(self):
+        shown = dict(size=(1600, 1200), lod='medium', weather=None, sun=None, time=0.0, normal_maps=None,
+                     objects=True, units=True, shadows=True, clouds=True, weather_fx=True, limits=False,
+                     markers=False, grid=False, border=False, walkable=False, flow=False)
+        self.assertEqual(viewlib.render_flags(shown), [])
+        shown.update(size=(1920, 816), lod='high', weather='rain', sun='ember', time=12.34, normal_maps=False,
+                     units=False, clouds=False, grid=True)
+        self.assertEqual(viewlib.render_flags(shown),
+                         ['--size 1920x816', '--lod high', '--weather rain', '--sun ember', '--time 12.3',
+                          '--normal-maps off', '--no-units', '--no-clouds', '--grid'])
+        command = viewlib.render_command('lab', 'v', dict(target=[1, 2]), shown)
+        self.assertIn('-views --size 1920x816 --lod high', command)
+        self.assertTrue(command.endswith('--view v target=1,2'))
+
 
 if __name__ == '__main__':
     unittest.main()

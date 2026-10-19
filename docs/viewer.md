@@ -82,7 +82,13 @@ The **camera bar** at the bottom left holds, from the left:
   ([rendering](guide/rendering.md#cameras)), with the thumbnails in a folder
   beside it.
 - **Copy view**: the view as a `mw render --map ... --view view ...` command on
-  the clipboard, to render it at full quality or hand it to an agent.
+  the clipboard, to render it at full quality or hand it to an agent. It
+  reproduces the picture: besides the camera it carries each preview setting
+  that differs from `mw render`'s default, namely the size (Photo: the frame's), `--lod`,
+  `--weather`, `--sun`, `--time`, `--normal-maps` and the layers `mw render`
+  can switch (objects, units, shadows, clouds, fog and rain, vegetation limits,
+  editor markers, grid, border, walkable, flow). Hidden water is the one
+  setting it cannot carry. Saved views keep the camera only.
 - In Photo mode, the lens ([render/photo.py](../src/mapworkshop/render/photo.py)):
   **focal length** (mm on a full-frame 36 x 24 mm sensor; 39 mm is Edit's 50
   degrees), **aperture** (f/ - is everything sharp; an f-number blurs what is
