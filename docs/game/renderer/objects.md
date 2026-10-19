@@ -83,9 +83,17 @@ are drawn as a new game creates them, still (`render.assets`,
   the next `RankInfo` `Position` for its `UnitType`, rank by rank. Positions
   are in the horde's frame, X forward, and members face the horde's way. They
   stand on the ground, or level with a horde raised above it (on a wall).
+- A siege engine gets its crew from its `SiegeEngineContain`: the
+  `InitialCrew` (the battering rams' six `IsengardRamCrew` or `MordorRamCrew`
+  Uruks, which the ram's model does not include), member k on the model's
+  bone `PassengerBonePrefix` + k (`CREWBONE01`..`06`), facing the engine's
+  way. Each takes the pose of the crew's `AnimationState = PASSENGER` plus the
+  condition `BoneSpecificConditionState` gives its bone: the left side
+  (`PASSENGER_VARIATION_1`) holds the ram with `IUUrukahi_BIDB`, the right
+  with `BIDA` (`GameAssets.siege_crew`).
 - A template with `BuildVariations` (`RohanPeasant`) becomes one of them; a
   hash of the object stands in for the game's random pick.
-- Each unit is posed at the first frame of its idle animation: the first
+- Each other unit is posed at the first frame of its idle animation: the first
   `AnimationName` of the draw module's `IdleAnimationState`, else the
   `DefaultModelConditionState`'s animation, `#include`d files read
   (`GameAssets.unit_animation`). The animation's bones replace the bind pose
@@ -112,7 +120,7 @@ Not reproduced: the game's random idle choice and start frame (members
 differ slightly in the game, all alike here), banner carriers and
 `RandomTexture` swaps. `render --no-units` and the viewer's
 **Units** leave every unit out; the render report counts them under `units`
-(hidden, hordes, members, posed).
+(hidden, hordes, members, crew, posed).
 
 ## Open questions
 

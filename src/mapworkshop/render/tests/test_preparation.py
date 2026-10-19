@@ -145,6 +145,26 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(assets.unit_animation('Rider'), 'ride_idlb')
         self.assertIsNone(assets.unit_animation('Statue'))
 
+    def test_siege_crew_sit_on_their_bones_in_their_side_s_hold(self):
+        ram = ('  Behavior = SiegeEngineContain ModuleTag_Contain\n'
+               '    InitialCrew = Crew 3\n'
+               '    PassengerBonePrefix = PassengerBone:CREWBONE    KindOf:INFANTRY\n'
+               '    BoneSpecificConditionState 1 PASSENGER_VARIATION_1\n'
+               '    BoneSpecificConditionState 2 PASSENGER_VARIATION_2\n'
+               '  End\n')
+        crew = ('  Draw = W3DHordeModelDraw ModuleTag_01\n'
+                '    IdleAnimationState\n      Animation = IDLA\n        AnimationName = Sold_IDLA\n      End\n    End\n'
+                '    AnimationState = MOVING PASSENGER PASSENGER_VARIATION_1\n'
+                '      Animation = Run\n        AnimationName = Ride_IDLB\n      End\n    End\n'
+                '    AnimationState = PASSENGER PASSENGER_VARIATION_1 ; holding\n'
+                '      Animation = Hold\n        AnimationName = Skl.Ride_IDLB\n      End\n    End\n'
+                '  End\n')
+        assets = self.unit_assets({'Ram': (None, ram), 'Crew': (None, crew)})
+        self.assertEqual(assets.siege_crew('Ram'), [('Crew', 'crewbone01', 'ride_idlb'),
+                                                    ('Crew', 'crewbone02', 'sold_idla'),    # no state for its side: idle
+                                                    ('Crew', 'crewbone03', 'sold_idla')])
+        self.assertEqual(assets.siege_crew('Crew'), [])
+
     def test_build_variations_name_known_templates(self):
         assets = self.unit_assets({'Peasant': (None, 'BuildVariations = Peasant1 Peasant9\n'), 'Peasant1': (None, '')})
         self.assertEqual(assets.build_variations('Peasant'), ['Peasant1'])

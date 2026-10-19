@@ -172,7 +172,7 @@ class MapRenderer:
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
                             walkable=False, effects=True, flow=False)
         self.report = dict(missing_textures=[], missing_models=[], unreadable_models={}, objects_drawn=0,
-                           objects_skipped=0, editor_markers=0, units=dict(hidden=0, hordes=0, members=0, posed=0))
+                           objects_skipped=0, editor_markers=0, units=dict(hidden=0, hordes=0, members=0, crew=0, posed=0))
         self._progress = report
         self._effects = {}
         self._lighting()
@@ -892,7 +892,7 @@ class MapRenderer:
             if hasattr(self, attr):
                 delattr(self, attr)
         self.report.update(missing_models=[], unreadable_models={}, objects_drawn=0, objects_skipped=0,
-                           editor_markers=0, units=dict(hidden=0, hordes=0, members=0, posed=0))
+                           editor_markers=0, units=dict(hidden=0, hordes=0, members=0, crew=0, posed=0))
         self.batches = []
         self._objects_gpu()
 
@@ -935,7 +935,8 @@ class MapRenderer:
                 continue                     # WorldBuilder-only: the game draws nothing
             kinds = resolved['kinds']
             model = resolved['model']
-            animation = self.assets.unit_animation(name) if resolved['unit'] and not resolved['tree'] else None
+            animation = o.get('animation') or (self.assets.unit_animation(name)
+                                               if resolved['unit'] and not resolved['tree'] else None)
             if animation:
                 model = f'{model}+{animation}'           # ModelCache.load: posed at its first frame
                 self.report['units']['posed'] += 1
@@ -1028,9 +1029,11 @@ class MapRenderer:
         """The map's objects as a new game creates them: a horde replaced by
         its members (GameAssets.horde_members), each at its RankInfo position
         facing the horde's way, and a template with BuildVariations by one of
-        them (a hash of the object stands in for the game's random pick).
-        Members stand on the ground, or level with a horde raised above it
-        (on a wall). With the units option off, every unit is left out."""
+        them (a hash of the object stands in for the game's random pick). A
+        siege engine gets its crew (GameAssets.siege_crew: a battering ram's
+        Uruks), each on its bone of the engine's model in the pose for that
+        side. Members stand on the ground, or level with a horde raised above
+        it (on a wall). With the units option off, every unit is left out."""
         show, report = self.options.get('units', True), self.report['units']
         for o in objects:
             name = o['template']
@@ -1054,6 +1057,18 @@ class MapRenderer:
                 mx, my = o['x'] + c*x - s*y, o['y'] + s*x + c*y
                 z = ground + o['z'] - float(self.terrain.height_at(mx, my)) if o['z'] else 0.0
                 yield dict(o, template=member, x=mx, y=my, z=z)
+            crew = self.assets.siege_crew(name)
+            if crew:
+                loaded = self.model_cache.load(resolved['model'])
+                bones = (loaded or {}).get('bones', {})
+                for member, bone, animation in crew:
+                    if bone not in bones:
+                        continue
+                    x, y = (float(v)*resolved['scale'] for v in bones[bone][:2, 3])
+                    mx, my = o['x'] + c*x - s*y, o['y'] + s*x + c*y
+                    z = ground + o['z'] - float(self.terrain.height_at(mx, my)) if o['z'] else 0.0
+                    report['crew'] += 1
+                    yield dict(o, template=member, x=mx, y=my, z=z, animation=animation)
 
     def _objects_gpu(self):
         self._prepared_objects = self._object_groups()

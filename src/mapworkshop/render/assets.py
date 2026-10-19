@@ -379,6 +379,50 @@ class GameAssets:
         Position for its UnitType, rank by rank. [] for anything else."""
         return self._unit_cached('members', template, self._horde_members)
 
+    def siege_crew(self, template):
+        """The crew a siege engine carries from the start of a game (the
+        battering rams' Uruks), [(template, bone, animation)]: its
+        SiegeEngineContain's InitialCrew, member k on the model's bone
+        PassengerBonePrefix + k (CREWBONE01), standing in the crew's
+        AnimationState = PASSENGER plus the condition that
+        BoneSpecificConditionState gives bone k (its side: the left and
+        right-handed holds), else in its idle animation. [] for anything else."""
+        return self._unit_cached('crew', template, self._siege_crew)
+
+    def _siege_crew(self, template):
+        for body in self._bodies(template):
+            contain = re.search(r'(?ims)^\s*Behavior\s*=\s*SiegeEngineContain\b(.*?)(?=^\s*(?:Behavior|Draw|Body)\s*=|\Z)', body)
+            if contain:
+                break
+        else:
+            return []
+        from mapworkshop.formats.big import number
+        block = contain.group(1)
+        prefix = re.search(r'(?im)^\s*PassengerBonePrefix\s*=\s*PassengerBone:\s*(\w+)', block)
+        conditions = {int(k): c.upper() for k, c in
+                      re.findall(r'(?im)^\s*BoneSpecificConditionState\s+(\d+)\s+(\w+)', block)}
+        crew = []
+        for name, count in re.findall(r'(?im)^\s*InitialCrew\s*=\s*(\S+)\s+(\S+)', block):
+            for _ in range(int(number(count, self.constants))):
+                k = len(crew) + 1
+                condition = conditions.get(k)
+                animation = self._state_animation(name, {'PASSENGER', condition} if condition else {'PASSENGER'})
+                crew.append((name, f'{prefix.group(1).lower()}{k:02d}' if prefix else None,
+                             animation or self.unit_animation(name)))
+        return crew
+
+    def _state_animation(self, template, conditions):
+        """The first AnimationName of the template's AnimationState for
+        exactly these model conditions, as an animation file; None without."""
+        for body in self._bodies(template):
+            for flags, state in re.findall(r'(?ims)^\s*AnimationState\s*=([^\n]*)\n(.*?)^\s*End\b', WORLD_BUILDER.sub('', body)):
+                if {f.upper() for f in flags.split()} == conditions:
+                    for name in re.findall(r'(?im)^\s*AnimationName\s*=\s*([\w.]+)', state):
+                        animation = name.rsplit('.', 1)[-1].lower()
+                        if self.model_key(animation):
+                            return animation
+        return None
+
     def build_variations(self, template):
         """BuildVariations: the templates the game creates one of in its
         place (RohanPeasant: RohanPeasant1, 3 or 4); [] for none."""
