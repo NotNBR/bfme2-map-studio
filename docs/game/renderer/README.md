@@ -64,7 +64,7 @@ run to 0.1 units) and the native framing to within one pixel.
   point, `BRIDGE_SPAN` repeats as often as fits and `BRIDGE_RIGHT` ends at the
   second, scaled along the axis to fit and by `BridgeScale` across and up, 0.25
   above the terrain at each end, with the type's `Texture`
-  ([render/bridges.py](../../../src/mapworkshop/render/bridges.py)). They are lit as
+  ([mapkit/bridges.py](../../../src/mapworkshop/mapkit/bridges.py)). They are lit as
   objects, not with the game's terrain lighting (`doTheLight`), and drawn
   undamaged.
 - Object scale: the map's `objectPrototypeScale` multiplies an object's scale

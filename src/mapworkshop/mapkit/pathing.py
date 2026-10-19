@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from mapworkshop.mapkit.checks.analyze import records
-from mapworkshop.render.water import inside
+from mapworkshop.mapkit.lines import inside
 
 CELL = 10
 NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
@@ -200,10 +200,10 @@ def polygon_cells(points, shape):
 
 def compute(m, *, assets=None, map_ini='', models=None):
     """A grid compatible with walkable.analyse; no native dump is loaded or written."""
-    from mapworkshop.render.assets import GameAssets
-    from mapworkshop.render.w3d import ModelCache
+    from mapworkshop.assets.library import GameAssets
+    from mapworkshop.assets.models import ModelCache
     from mapworkshop.mapkit.bridges import bridge_types
-    from mapworkshop.render.bridges import endpoint_pairs, pieces
+    from mapworkshop.mapkit.bridges import endpoint_pairs, pieces
 
     assets = assets if assets is not None else GameAssets()
     # Isolate map overrides: never leave one map's templates in a shared asset cache.

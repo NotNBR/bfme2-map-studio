@@ -1,10 +1,10 @@
-"""render.w3d: mesh details that the effects and glows depend on, without game data."""
+"""assets.models: mesh details that the effects and glows depend on, without game data."""
 import struct
 import unittest
 
 import numpy as np
 
-from mapworkshop.render.w3d import (CAMERA_MODES, GEOMETRY_TYPE, MESH, SKIN, ModelCache, classic_shader, grid_mapper,
+from mapworkshop.assets.models import (CAMERA_MODES, GEOMETRY_TYPE, MESH, SKIN, ModelCache, classic_shader, grid_mapper,
                                     vertex_material)
 
 

@@ -2,7 +2,7 @@
 import unittest
 
 from mapworkshop.render import catalog
-from mapworkshop.render.assets import TEMPLATE
+from mapworkshop.assets.library import TEMPLATE
 
 
 def template(name, file, body, kind='Object', parent=None):

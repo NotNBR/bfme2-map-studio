@@ -586,7 +586,7 @@ class Viewer:
     def open_properties(self):
         """The Properties window (viewer.properties) for the map shown: editable
         for a project, read-only for a game map. Saving rebuilds the project."""
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         from mapworkshop.viewer.properties import PropertiesDialog
         if self.properties is not None and self.properties.is_open:
             self.properties.lift()

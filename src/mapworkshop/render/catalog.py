@@ -362,7 +362,7 @@ def _stamp(assets):
 
 def _texture_names(assets, model):
     """Texture names in a W3D model's meshes (no geometry is decoded)."""
-    from mapworkshop.render.w3d import chunks
+    from mapworkshop.assets.models import chunks
     key = assets.model_key(model) if model else None
     names = set()
     if key:
@@ -388,7 +388,7 @@ def build(assets=None, progress=print):
     """Index every object template, terrain texture, road, sound and effect."""
     import numpy as np
     from mapworkshop.formats.map import Map
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets = assets or GameAssets()
     started = time.time()
     progress("Indexing the game's assets (once, about half a minute)...")
@@ -453,7 +453,7 @@ def build(assets=None, progress=print):
 
 def load(assets=None, refresh=False, progress=print):
     """The index, rebuilt when the game data or the stock maps changed."""
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets = assets or GameAssets()
     if not refresh and INDEX.exists():
         try:
@@ -668,7 +668,7 @@ def check_ini(assets, ini):
     outside AddModule or ReplaceModule (_override_problems), and a particle
     system whose texture the game doesn't have. `assets` are the game's,
     without the map's templates."""
-    from mapworkshop.render.assets import TEMPLATE
+    from mapworkshop.assets.library import TEMPLATE
     known = _object_names(assets)
     out = [f'Object {name}: adds an object type; BFME2 hangs loading a map whose map.ini does '
            "(change one of the game's objects instead)"

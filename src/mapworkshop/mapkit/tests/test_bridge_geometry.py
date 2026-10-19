@@ -1,9 +1,9 @@
-"""Spanned bridge geometry (render.bridges), without a GPU."""
+"""Spanned bridge geometry (mapkit.bridges), without a GPU."""
 import unittest
 
 import numpy as np
 
-from mapworkshop.render.bridges import endpoint_pairs, layout, pieces, place
+from mapworkshop.mapkit.bridges import endpoint_pairs, layout, pieces, place
 
 
 def part(name, x0, x1):

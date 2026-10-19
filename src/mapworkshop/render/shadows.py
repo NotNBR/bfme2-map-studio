@@ -12,7 +12,7 @@ GameLOD UseShadowVolumes is on, else decals. SHADOW_VOLUME and NON_SELF go to
 W3DVolumetricShadowManager ('classic'), SHADOW_VOLUME_NEW to the V2 manager
 ('v2'), decal types to the projected-shadow manager.
 
-Geometry: the top LOD's meshes with CAST_SHADOW (render.w3d 'shadow'). V2
+Geometry: the top LOD's meshes with CAST_SHADOW (assets.models 'shadow'). V2
 skips a hidden mesh unless its name contains SHADOW (0x00107E76).
 
 Extrusion (the light is TheW3DShadowManager light 0: the time of day's

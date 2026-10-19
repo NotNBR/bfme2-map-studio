@@ -13,13 +13,13 @@ from mapworkshop.formats.lighting import decode
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.render import shaders
-from mapworkshop.render.assets import GameAssets
+from mapworkshop.assets.library import GameAssets
 from mapworkshop.render.camera import OrbitView, TopView, parse_view, _normalize
 from mapworkshop.render.effects import QUAD_CORNERS, TRI_CORNERS, Effects
 from mapworkshop.render.photo import Post, active
 from mapworkshop.render.shadows import shadow_kind
 from mapworkshop.render.terrain import TerrainData
-from mapworkshop.render.w3d import ModelCache, chunks, fx_constants
+from mapworkshop.assets.models import ModelCache, chunks, fx_constants
 
 ARRAY_SIZE = 512
 # WaterShader.fx techniques with a GLSL port: the water shaders' `technique` uniform.
@@ -1111,7 +1111,7 @@ class MapRenderer:
             else:
                 textures(self.model_cache.load(model))
         from mapworkshop.mapkit.bridges import bridge_types
-        from mapworkshop.render.bridges import endpoint_pairs
+        from mapworkshop.mapkit.bridges import endpoint_pairs
         pairs = endpoint_pairs(objects)
         if pairs:
             types = {k.lower(): v for k, v in bridge_types(self.assets.ini_text('roads.ini')+'\n'+self.map_ini).items()}
@@ -1341,12 +1341,12 @@ class MapRenderer:
 
     def _bridges_steps(self, objects, fx_report):
         """Bridges the game spans between two map objects flagged 0x10 and
-        0x20 (render.bridges): their Bridge type (roads.ini or the map's
+        0x20 (mapkit.bridges): their Bridge type (roads.ini or the map's
         map.ini) names the model, texture and BridgeScale. Drawn as lit
         objects; the game lights them like terrain (doTheLight), and their
         damaged states are not drawn."""
         from mapworkshop.mapkit.bridges import bridge_types
-        from mapworkshop.render.bridges import FLOAT, endpoint_pairs, layout, pieces, place
+        from mapworkshop.mapkit.bridges import FLOAT, endpoint_pairs, layout, pieces, place
         pairs = endpoint_pairs(objects)
         self.report['bridges'] = []
         if not pairs:
@@ -1880,7 +1880,7 @@ class MapRenderer:
         if binding is None or binding[0] is not known:
             # Its uniforms, worked out once (_apply_sky drops them when it changes the batch).
             uniforms = batch['uniforms']
-            # Camera-facing meshes and Grid-mapped textures (render.w3d): camera_mode, pivot, uv_grid.
+            # Camera-facing meshes and Grid-mapped textures (assets.models): camera_mode, pivot, uv_grid.
             values = [('tex', 0), ('has_texture', int(batch['texture'] is not None)), ('technique', batch['technique']),
                       ('alpha_ref', -1.0 if batch['alpha_ref'] is None else float(batch['alpha_ref'])), ('texturing', 1),
                       ('camera_mode', batch.get('camera', 0)), ('pivot', batch.get('pivot', (0.0, 0.0, 0.0))),
@@ -1963,7 +1963,7 @@ class MapRenderer:
 
     def surface_at(self, x, y):
         """Visible surface height: terrain, raised to standing water levels."""
-        from mapworkshop.render.water import inside
+        from mapworkshop.mapkit.lines import inside
         x = np.asarray(x, float); y = np.asarray(y, float)
         z = np.asarray(self.terrain.height_at(x, y), float)
         for entry in self.water:

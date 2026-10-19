@@ -97,7 +97,7 @@ class Session:
 
     # Loading ----------------------------------------------------------------------
     def start_load(self):
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         from mapworkshop.render.engine import MapRenderer
         self.reload = False
         if self.request:

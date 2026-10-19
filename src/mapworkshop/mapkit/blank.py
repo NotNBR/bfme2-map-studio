@@ -63,7 +63,7 @@ def terrain_cell_sizes(palette):
     WorldHeightMap::readTexClass skips a class whose file has fewer tiles than
     declared, so the declaration must not exceed the installed texture.
     """
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets = GameAssets.shared()
     sizes = []
     for name in palette:

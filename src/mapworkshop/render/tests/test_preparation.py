@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import numpy as np
 
-from mapworkshop.render.assets import GameAssets
+from mapworkshop.assets.library import GameAssets
 from mapworkshop.render.terrain import TerrainData
 from mapworkshop.render.engine import MapRenderer, TextureCache
 

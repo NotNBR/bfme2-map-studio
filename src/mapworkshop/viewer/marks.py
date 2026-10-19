@@ -308,7 +308,7 @@ def describe(data, near=150.0, assets=None, m=None, terrain=None):
     ox = np.array([o['x'] for o in objects], float)
     oy = np.array([o['y'] for o in objects], float)
     if assets is None:
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         assets = GameAssets()
     vegetation = {}
 

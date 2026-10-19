@@ -25,7 +25,7 @@ import zlib
 
 import numpy as np
 
-from mapworkshop.render.w3d import chunks
+from mapworkshop.assets.models import chunks
 
 FRAMES_PER_SECOND = 30.0
 WARM_UP = 3600.0            # seconds of emission before time 0

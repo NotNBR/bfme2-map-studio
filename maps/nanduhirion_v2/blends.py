@@ -127,7 +127,7 @@ def ladders(labels, names):
     """The in-between textures for the pairs in `labels` (indices into
     `names`): (names, with the chosen textures added, and {(darker, brighter):
     [in-between indices, darker side first]})."""
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets = GameAssets.shared()
     kinds = {n: t for n, (_, t) in types().items()}
     spelled = {n: name for n, (name, _) in types().items()}

@@ -96,8 +96,8 @@ from mapworkshop.mapkit.pathing import polygon_cells, template_data
 from mapworkshop.mapkit.script_writer import Writer, arg
 from mapworkshop.mapkit.weather import apply_weather, ini_block
 from mapworkshop.render.terrain import TerrainData
-from mapworkshop.render.w3d import ModelCache
-from mapworkshop.render.water import inside
+from mapworkshop.assets.models import ModelCache
+from mapworkshop.mapkit.lines import inside
 from maps.nanduhirion_battle.map import Ground, check_templates, owner
 
 SOURCE = 'maps/map wor helms deep/'     # in the game's Maps.big

@@ -90,7 +90,7 @@ for settings the code leaves alone.
 | `b.image(name, image)` | keep a plan or preview image (PIL) with this build |
 | `b.report` | a dict saved as `report.json` with the build |
 | `b.work` | this build's folder, for other files |
-| `b.assets` | the game's assets: templates, INIs, textures, models (`render.assets.GameAssets`) |
+| `b.assets` | the game's assets: templates, INIs, textures, models (`assets.library.GameAssets`) |
 | `b.args` | extra command-line arguments: `mw build crown -- --phase terrain` |
 
 Most projects in `maps/` use `build(b)`; Bramble Hollow, Brightwater Fold

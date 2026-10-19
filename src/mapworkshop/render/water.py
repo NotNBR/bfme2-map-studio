@@ -23,6 +23,8 @@ import re
 
 import numpy as np
 
+from mapworkshop.mapkit.lines import inside
+
 
 def grid_spacing(bounds, level=3):
     # Coarse while TheGameLODManager's WaterLOD (+0x1784) is High or lower.
@@ -35,18 +37,6 @@ def grid_spacing(bounds, level=3):
         if nx*ny <= limit:
             return spacing, nx, ny
         spacing *= 2.0
-
-
-def inside(points, xs, ys):
-    """Even-odd point-in-polygon test, vectorized over xs/ys."""
-    result = np.zeros(xs.shape, bool)
-    px = np.array([p[0] for p in points]); py = np.array([p[1] for p in points])
-    j = len(points)-1
-    for i in range(len(points)):
-        crosses = ((py[i] > ys) != (py[j] > ys)) & (xs < (px[j]-px[i])*(ys-py[i])/(py[j]-py[i]+1e-30)+px[i])
-        result ^= crosses
-        j = i
-    return result
 
 
 def build_mesh(points, water_z, height_at, level=3):

@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from mapworkshop import config, game
-from mapworkshop.render.assets import GameAssets
+from mapworkshop.assets.library import GameAssets
 
 
 def write_big(path, entries):

@@ -12,6 +12,9 @@ broadcasting: the same values with a third of the work. With `reach`,
 each segment is measured only against the samples within `reach` of it,
 which gives exactly the same values there (0.2 s for the same lanes); use it
 for fields that are only compared against distances below `reach`.
+
+inside(points, xs, ys) tells which points lie within an outline (a water area,
+say), by the even-odd rule.
 """
 import math
 
@@ -112,3 +115,15 @@ def nearest(lines, x, y, reach=None):
     for line in lines:
         d = np.minimum(d, polyline_distance(line, x, y, reach)[0])
     return d
+
+
+def inside(points, xs, ys):
+    """Even-odd point-in-polygon test, vectorized over xs/ys."""
+    result = np.zeros(xs.shape, bool)
+    px = np.array([p[0] for p in points]); py = np.array([p[1] for p in points])
+    j = len(points)-1
+    for i in range(len(points)):
+        crosses = ((py[i] > ys) != (py[j] > ys)) & (xs < (px[j]-px[i])*(ys-py[i])/(py[j]-py[i]+1e-30)+px[i])
+        result ^= crosses
+        j = i
+    return result

@@ -43,7 +43,7 @@ import numpy as np
 # The model --------------------------------------------------------------------
 def _assets(assets):
     if assets is None:
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         assets = GameAssets.shared()
     return assets
 
@@ -60,7 +60,7 @@ def model(template, assets=None):
     cache = assets.__dict__.setdefault('_footprint_models', {})
     key = info['model'].lower()
     if key not in cache:
-        from mapworkshop.render.w3d import ModelCache
+        from mapworkshop.assets.models import ModelCache
         cache[key] = ModelCache(assets).load(info['model'])
     loaded = cache[key]
     if not loaded:

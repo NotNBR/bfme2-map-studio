@@ -618,7 +618,7 @@ def plan_sites(t):
 
 def decorate(m,t):
     rng=random.Random(SEED); placed=Counter(); occupied=[];buckets={};largest_gap=0
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets=GameAssets.shared(); kinds={}
     def vegetation(template):
         if template not in kinds:
@@ -732,7 +732,7 @@ def build(b):
     # Vegetation past the game's optimized buffers would not be drawn; move
     # the overflow to map-local full-model templates (see mapkit.vegetation).
     from mapworkshop.mapkit.vegetation import plan as vegetation_plan, rename as vegetation_rename
-    from mapworkshop.render.assets import GameAssets
+    from mapworkshop.assets.library import GameAssets
     assets=GameAssets.shared()
     def model_texture(model):
         key=assets.model_key(model)

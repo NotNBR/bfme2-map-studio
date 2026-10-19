@@ -6,11 +6,11 @@ docs/history/ gives bfme-workshop's commands as this repository's;
 maps/README.md lists every map project; the guides (docs/guide/) show every
 `mw` command.
 
-Layers, bottom up; a package imports only from its own layer or below.
-mapkit and render share a layer: the renderer reads mapkit's weather
-presets and mapkit reads the game assets through render.assets. Command
-entry points (`cli.py`, `__main__.py`) may import from any layer. Nothing in
-src/ imports the map projects (maps/) or misc/.
+Layers, bottom up; a package imports only from its own layer or below. The
+game's files (assets) sit below mapkit, which builds maps from them; render
+sits above both, as it draws what mapkit makes (its weather presets, bridges,
+walkability). Command entry points (`cli.py`, `__main__.py`) may import from
+any layer. Nothing in src/ imports the map projects (maps/) or misc/.
 """
 import ast
 import os
@@ -22,8 +22,8 @@ from urllib.parse import unquote
 
 from mapworkshop.config import ROOT
 
-LAYERS = dict(config=0, formats=1, mapkit=2, render=2, video=2, game=3, project=3, templates=3, selftest=3, native=3,
-              viewer=4, cli=5, __main__=5)
+LAYERS = dict(config=0, formats=1, assets=2, video=2, mapkit=3, render=4, game=5, project=5, templates=5, selftest=5,
+              native=5, viewer=6, cli=7, __main__=7)
 
 
 def _units(node):

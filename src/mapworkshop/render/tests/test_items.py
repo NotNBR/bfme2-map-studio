@@ -61,7 +61,7 @@ class ItemTests(unittest.TestCase):
 class SelectionTests(unittest.TestCase):
     def setUp(self):
         try:
-            from mapworkshop.render.assets import GameAssets
+            from mapworkshop.assets.library import GameAssets
             self.assets = GameAssets()
             self.assets.templates
         except Exception as error:   # no game data: `mw setup`

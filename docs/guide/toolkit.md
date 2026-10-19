@@ -59,6 +59,15 @@ searches both ([finding assets](finding-assets.md)).
 
 The [map-file specification](../format/README.md) describes the bytes.
 
+## The game's files: `assets`
+
+Below `mapkit` and `render`, which both read the installed game through it.
+
+| Module | For |
+|---|---|
+| [library](../../src/mapworkshop/assets/library.py) | `GameAssets`: the game's archives and loose files in its override order, its object templates (`templates`, `template_model`, a unit's idle animation), INIs, textures and models; `b.assets` in a build |
+| [models](../../src/mapworkshop/assets/models.py) | W3D models made ready to draw or measure (`ModelCache.load`, `load_tree`): meshes on their bones, materials and shader states |
+
 ## Around the build
 
 | Module | For |

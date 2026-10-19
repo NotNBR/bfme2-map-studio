@@ -157,7 +157,7 @@ class Build:
     @property
     def assets(self):
         if self._assets is None:
-            from mapworkshop.render.assets import GameAssets
+            from mapworkshop.assets.library import GameAssets
             self._assets = GameAssets.shared()
         return self._assets
 
@@ -209,7 +209,7 @@ def render_minimap(path):
         from PIL import Image
         from mapworkshop.render.camera import TopView
         from mapworkshop.render.engine import MapRenderer
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         renderer = MapRenderer(path, assets=GameAssets.shared(), objects=True, clouds=False)
         width, height = renderer.playable
         top = renderer.render(TopView(), (1350, max(1, round(1350*height/width))))

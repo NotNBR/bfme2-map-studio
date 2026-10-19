@@ -120,7 +120,7 @@ class ItemRenderer:
 
     def __init__(self, assets=None, lod='high'):
         import moderngl
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         self.assets = assets or GameAssets()
         self.ctx = moderngl.create_standalone_context(require=430)
         self.ctx.gc_mode = 'auto'      # free each item's GPU objects once it is done
@@ -129,7 +129,7 @@ class ItemRenderer:
 
     def measure(self, template):
         """Model, scale and the box of the model as placed: (min, max) in map units."""
-        from mapworkshop.render.w3d import ModelCache
+        from mapworkshop.assets.models import ModelCache
         info = self.assets.template_model(template)
         cache = self.shared.setdefault('model_cache', ModelCache(self.assets))
         model = cache.load(info['model']) if info else None
@@ -393,7 +393,7 @@ def main_item(argv=None):
         return _print_shape(args)
     if args.info:
         from mapworkshop.render import catalog
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         assets = GameAssets()
         print('\n'.join(catalog.describe(assets, args.template, catalog.load(assets, progress=lambda text: print(text, flush=True)))))
         return 0

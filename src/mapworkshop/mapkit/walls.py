@@ -222,7 +222,7 @@ def castle_layout(faction='Men', direction='', assets=None):
     from mapworkshop.formats.map import Map
     from mapworkshop.formats.map_archive import unpack
     if assets is None:
-        from mapworkshop.render.assets import GameAssets
+        from mapworkshop.assets.library import GameAssets
         assets = GameAssets()
     name = f'castle_{faction}{direction}'.lower()
     data = assets.read(f'bases/{name}/{name}.bse')

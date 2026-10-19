@@ -75,7 +75,7 @@ castle centre's stand-in.
 ## Units
 
 Templates with `EditorSorting = UNIT` (faction units, heroes, hordes, creeps)
-are drawn as a new game creates them, still (`render.assets`,
+are drawn as a new game creates them, still (`assets.library`,
 `MapRenderer._placed_units`):
 
 - A horde fills itself from its `HordeContain` (or `HorseHordeContain`):

@@ -4,7 +4,7 @@ Meshes are placed using the HLOD's highest-detail LOD and its hierarchy
 (embedded or the referenced skeleton file). Skinned vertices are stored
 relative to their primary bone and are transformed by that bone. A model is
 in its bind pose, or still at the first frame of an animation when loaded as
-'model+animation' (units, render.assets.unit_animation); animation is not
+'model+animation' (units, assets.library.unit_animation); animation is not
 played.
 
 Each part carries what the game's fixed-function path needs (vertex material,

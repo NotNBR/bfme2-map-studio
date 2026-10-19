@@ -9,7 +9,7 @@ from mapworkshop.formats.map import Map
 from mapworkshop.mapkit import pathing, walkable
 from mapworkshop.mapkit.blank import create, set_heights, set_materials, water_plane, add_object
 from mapworkshop.mapkit.bridges import add_bridge
-from mapworkshop.render.assets import GameAssets
+from mapworkshop.assets.library import GameAssets
 
 
 def assets(body='', name='House'):
