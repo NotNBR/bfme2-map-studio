@@ -50,7 +50,7 @@ have the game's own, freed to zoom out and tilt.
 | M | Show or hide the marks |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, reload, build, controls |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change (Edit) |
-| Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); in Photo free the mouse, then go back to Edit; quit when nothing is left |
+| Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); in Photo free the mouse, then go back to Edit; never closes the viewer |
 
 ## Photo mode and the camera bar
 
@@ -216,8 +216,8 @@ Marks are red, numbered and draped on the terrain. They are kept per map in
 `local/marks/<map>.json`, rewritten on every change. A panel at the right lists
 each mark with the objects inside it. **View → Marks** (key M) hides the marks
 and the panel; picking a tool shows them again. Esc steps back one level: it
-closes an open menu, cancels a drawing, drops the selection, puts the tool
-away and only then quits.
+closes an open menu, cancels a drawing, drops the selection and puts the
+tool away. It never closes the viewer.
 
 **Copy for agent** puts the marks on the clipboard. Paste them into an agent's
 prompt with your request ("add a forest in mark 2", "remove the bridge at

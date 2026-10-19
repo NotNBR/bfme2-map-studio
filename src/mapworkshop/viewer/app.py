@@ -40,7 +40,7 @@ Both
   Del        delete the selected mark;  Ctrl+Z  undo a mark change
   Esc        steps back: closes a menu or list, cancels a drawing, drops the
              selection, puts the mark tool away; in Photo frees the mouse, then
-             goes back to Edit; then quits
+             goes back to Edit. It never closes the viewer
 
 Toolbar
   Map        your map projects, then the game's maps; Open project folder; Browse...
@@ -363,7 +363,7 @@ class Viewer:
     def back(self):
         """Esc steps back: close a menu or the camera bar's list, then the
         marking levels (MarkEditor.escape); in Photo mode free the mouse, then
-        go back to Edit; with nothing left to step back from it quits."""
+        go back to Edit. It never closes the viewer."""
         if self.toolbar.open_menu:
             self.toolbar.open_menu = None
         elif self.camerabar.open:
@@ -373,8 +373,8 @@ class Viewer:
                 self.set_capture(False)
             else:
                 self.set_mode('edit')
-        elif self.renderer is None or not self.editor.escape():
-            glfw.set_window_should_close(self.window, True)
+        elif self.renderer is not None:
+            self.editor.escape()
         if self.renderer is not None and self.editor.drag is None and self.nav is None:
             self.update_pointer(self.toolbar_target(self.cursor_pos()), self.cursor_pos())
 
