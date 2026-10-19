@@ -57,12 +57,14 @@ night of the battle:
 - Scripts, on PlyrCivilian: at CHARGE seconds each battalion attacks the
   piece of the defences straight ahead of it (TARGETS: the main gate, the
   culvert or a section of the Deeping Wall), the rams the main gate. The
-  ladders dock against the section ahead of them (their
-  SpecialAbilitySiegeDeploy takes any STRUCTURE +WALK_ON_TOP_OF_WALL); the
-  Deeping Wall's swords make for the Deep, up the ladders, while its pikes
-  batter the wall. The mine carrier plants its charge against the culvert
-  and the berserker runs after it (the charge goes off when it burns: the
-  berserker's torch, or its own Detonate, which the Isengard AI fires). Once
+  ladders dock against the section ahead of them (DEPLOY_SIEGE_ON_NAMED_WALL:
+  their SpecialAbilitySiegeDeploy takes any STRUCTURE +WALK_ON_TOP_OF_WALL);
+  the Deeping Wall's swords make for the Deep, up the ladders, while its
+  pikes batter the wall. The mine carrier plants its charge against the
+  culvert and the berserker lights his torch and runs after it; once the
+  carrier has dropped the charge (BOMB), the charge, named HD_Bomb, burns
+  (its Detonate: a script cannot set the berserker's torch on his own side's
+  charge; its UnpackTime, 20 seconds, is the fuse) and takes the culvert. Once
   the culvert or a section falls, the Deeping Wall's attackers pour into the
   Deep, and DEEP_ONWARD later make for the keep; once the main gate falls,
   its attackers storm the bailey, GATE_ONWARD later attack the keep's gate,
@@ -73,9 +75,10 @@ night of the battle:
   (DAWN_FORCE, made by the script). Your units otherwise follow your orders
   only.
 
-Untested in the game, the bomb's detonation above all. OpenBFME (mw play --godot) has no wall layer and no
-ladder docking yet (its docs/STOPS.md S-161, S-1103): there the archers
-cannot stand on the walls nor the ladders scale them.
+In OpenBFME (mw play --godot) the archers stand on the walls' layers, the
+ladders deploy onto the sections and their climbs enter the pathfinder
+(its lanes WALL-1, WALL-2, SIEGE-1), the charge drops and the culvert falls
+(its tests test_wall1_battle.cpp and test_siege1_deploy.cpp).
 
     mw build helms-deep-battle; mw play helms-deep-battle
 """
@@ -158,6 +161,8 @@ CAUSEWAY_FOOT = (2830, 1840)
 TESTUDO = 3, 6
 RAMS = 4
 MINE, BERSERKER = 'IsengardExplosiveMine', 'IsengardBeserker'
+BOMB = 'IsengardDeployedExplosiveMine'          # what the carrier's IsengardExplosiveMineDroppingWeapon leaves
+TORCH, DETONATE = 'Command_SpecialAbilityLightTorch', 'Command_IsengardMineDetonate'
 # What each battalion attacks: the destructible piece straight ahead of it (nearest west to east); the gate's attackers form
 # one assault, the rest the Deeping Wall's
 TARGETS = ('Main Gate', 'Culvert', 'Deeping Wall Far Left', 'Deeping Wall Center Left', 'Deeping Wall Near Left',
@@ -477,8 +482,11 @@ def scripts(m, side, units, riders):
     destroyed = lambda name: op('condition', 'NAMED_DESTROYED', text(14, name))
     attack = lambda unit, target: op('action', 'NAMED_ATTACK_NAMED', text(14, unit), text(14, target))
     move = lambda unit, waypoint: op('action', 'ATTACK_MOVE_NAMED_UNIT_TO', text(14, unit), text(7, waypoint))
-    dock = lambda unit, target: op('action', 'NAMED_FIRE_SPECIAL_POWER_AT_NAMED', text(14, unit),
-                                   text(31, 'SpecialAbilitySiegeDeploy'), text(14, target))
+    dock = lambda unit, target: op('action', 'DEPLOY_SIEGE_ON_NAMED_WALL', text(14, unit), text(14, target))
+    button = lambda unit, name: op('action', 'NAMED_USE_COMMANDBUTTON_ABILITY', text(14, unit), text(34, name))
+    # the charge the mine carrier drops is a new, unnamed object: named as the one nearest the host's centre (there is one)
+    name_bomb = op('action', 'SET_REF_TO_NEREST_TEAM_OF_TYPE_OWNED_BY_PLAYER', text(61, BOMB), text(11, f'Player_{ENEMY}'),
+                   text(3, f'Player_{ENEMY}/teamPlayer_{ENEMY}'), text(54, 'HD_Bomb'))
     create = lambda unit, template, waypoint: op('action', 'CREATE_NAMED_ON_TEAM_AT_WAYPOINT', text(14, unit),
                                                  text(15, template), text(3, f'Player_{YOU}/teamPlayer_{YOU}'),
                                                  text(7, waypoint))
@@ -495,7 +503,12 @@ def scripts(m, side, units, riders):
     setup += [timer(f'HD_{group}{n}', .1) for group, n in orders]
     charge = [set_stage('Deep', 1), set_stage('Gate', 1)] + [dock(n, t) for n, t, r in units if r == 'ladder']
     charge += [attack(n, t) for n, t, r in units if r == 'mine']             # it plants its charge against the culvert
-    charge += [move(n, 'HD_Culvert') for n, t, r in units if r == 'berserker']   # and the torch-bearer runs after it
+    charge += [button(n, TORCH) for n, t, r in units if r == 'berserker']    # the torch-bearer lights his torch
+    charge += [move(n, 'HD_Culvert') for n, t, r in units if r == 'berserker']   # and runs after it
+    # once the carrier has dropped its charge (it fades as it does) the charge burns: its Detonate (the torch's work; a script cannot set the
+    # berserker's torch on his own side's charge), whose UnpackTime is its fuse
+    carriers = [n for n, t, r in units if r == 'mine']
+    bomb = [name_bomb, button('HD_Bomb', DETONATE)]
     # dawn: the keep's riders charge down the causeway, Gandalf and Eomer come over the eastern ridge with the Rohirrim
     dawn = [move(n, 'HD_Coomb') for n in riders]
     for i, template in enumerate(t for t, count in DAWN_FORCE for _ in range(count)):
@@ -510,6 +523,8 @@ def scripts(m, side, units, riders):
            w.script('HD_GateOnward', [[stage('Gate', 2), expired('HD_GateOnward')]], [set_stage('Gate', 3)]),
            w.script('HD_KeepGateBroken', [[destroyed('Inner Keep Gate')]], [set_stage('Gate', 4), set_stage('Deep', 3)]),
            w.script('HD_Dawn', [[expired('HD_Dawn')]], dawn)]
+    if carriers:
+        out.append(w.script('HD_Bomb', [[destroyed(n)] for n in carriers], bomb))
     for (group, n), order in orders.items():               # each stage's orders, at once and every DRIVE seconds
         name = f'HD_{group}{n}'
         actions = [order(*u) for u in groups[group]] + [timer(name, DRIVE)]
