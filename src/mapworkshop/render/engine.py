@@ -25,6 +25,7 @@ ARRAY_SIZE = 512
 # WaterShader.fx techniques with a GLSL port: the water shaders' `technique` uniform.
 WATER_TECHNIQUES = {'BumpSpecular': 0, 'BumpSpecular_M': 1, 'PCA_L': 2}
 SKIP_TEMPLATES = ('*waypoints', 'amb_', 'animalwanderpoint', 'waterripplespawn')
+_UNSENT = object()            # MapRenderer._put: no value sent yet in this pass
 
 
 class TextureCache(OrderedDict):
@@ -275,6 +276,7 @@ class MapRenderer:
         # environments by the chunk's last three values (1, 1, 1 by default).
         final = tuple(value.get('final_values') or (1.0, 1.0, 1.0))
         self.light_scale = final if self.options['lod'] in ('verylow', 'low', 'medium') else (1.0, 1.0, 1.0)
+        self._light_environments = {}         # light_environment's results, for these lights
         raw = value.get('shadow_color_raw', 0xFFA0A0A0)
         self.shadow_color = tuple(((raw >> shift) & 255)/255 for shift in (16, 8, 0))
         try:
@@ -509,14 +511,20 @@ class MapRenderer:
         """(ambient, [(direction, colour)] x 3) as LightEnvironmentClass holds
         them: Add_Light (0x00140770) drops lights whose diffuse is below 0.05
         in every channel and keeps the rest sorted by squared diffuse length;
-        unused slots are black."""
+        unused slots are black. Worked out once per set of lights (_lighting)."""
+        known = getattr(self, '_light_environments', None)
+        if known is not None and scaled in known:
+            return known[scaled]
         scale = np.asarray(self.light_scale if scaled else (1.0, 1.0, 1.0), np.float32)
         lights = [(tuple(d), np.asarray(c, np.float32)*scale) for d, c in self.object_lights]
         lights = [l for l in lights if not (l[1] < 0.05).all()]
         lights.sort(key=lambda l: -float(l[1] @ l[1]))
         lights += [((0.0, 0.0, 1.0), np.zeros(3, np.float32))]*(3-len(lights))
         ambient = tuple(float(v) for v in np.asarray(self.object_ambient)*scale)
-        return ambient, [(d, tuple(float(v) for v in c)) for d, c in lights[:3]]
+        result = ambient, [(d, tuple(float(v) for v in c)) for d, c in lights[:3]]
+        if known is not None:
+            known[scaled] = result
+        return result
 
     def _bind_light_environment(self, p, scaled):
         ambient, lights = self.light_environment(scaled)
@@ -1605,6 +1613,7 @@ class MapRenderer:
             op['view_projection'].write(vp)
             op['depth_only'].value = 1
             op['use_shadows'].value = 0
+            self._begin_batches()
             for batch in self.batches:
                 # Receivers' depth: everything that writes depth (the tree
                 # buffer blends but still writes depth).
@@ -1711,7 +1720,7 @@ class MapRenderer:
                     hit = near + d*(t if 0.0 <= t <= 1.0 else 1.0)
                     xs.append(hit[0]); ys.append(hit[1])
             x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-        center = np.array([(x0+x1)/2, (y0+y1)/2, float(self.terrain.heights.mean())])
+        center = np.array([(x0+x1)/2, (y0+y1)/2, self.terrain.mean_height])
         radius = 0.5*math.hypot(x1-x0, y1-y0)+300
         if radius > max_radius:
             radius = max_radius
@@ -1722,7 +1731,7 @@ class MapRenderer:
         texel = self.shadow_settings['texel'] if self.options['shadows'] == 'map' else 0.75
         size = int(min(max_size, max(256, math.ceil(2*radius/texel)+1)))
         texel = max(texel, 2*radius/(size-1))
-        top = float(self.terrain.heights.max())+radius+2000
+        top = self.terrain.max_height+radius+2000
         # The light looks at a fixed point, so its axes depend on the sun alone;
         # the window then sits around `center`, its corner on the texel grid.
         origin = np.array([0.0, 0.0, center[2]])
@@ -1769,6 +1778,7 @@ class MapRenderer:
         op['view_projection'].write(np.ascontiguousarray(light_vp.T, dtype='f4').tobytes())
         op['depth_only'].value = 1
         op['use_shadows'].value = 0
+        self._begin_batches()
         for batch in self.batches:
             if not batch['caster'] or batch['mode'] in ('blend', 'additive'):
                 continue
@@ -1794,6 +1804,7 @@ class MapRenderer:
             batch['texture'] = texture
             self.sky_horizon = self._horizon_color(name, batch['sky_rim_uv']) or self.sky_horizon
             batch['uniforms']['sky_horizon'] = self.sky_horizon or (0.0, 0.0, 0.0)
+            batch.pop('_binding', None)          # _bind_batch works its uniforms out again
 
     def _horizon_color(self, name, uv):
         """Mean colour of texture `name` along a sky dome's rim (`uv`): the
@@ -1815,12 +1826,13 @@ class MapRenderer:
         op['eye'].value = eye
         op['use_shadows'].value = 0
         ctx.enable(mgl.DEPTH_TEST)
+        self._begin_batches()
         for batch in batches:
             if batch['cull']:
                 ctx.enable(mgl.CULL_FACE)
             self._bind_batch(op, batch)
             if 'sky_horizon' in op:
-                op['sky_horizon'].value = self._horizon()
+                self._put(op, 'sky_horizon', self._horizon())
             batch['vao'].render(mgl.TRIANGLES, instances=batch['count'])
             ctx.disable(mgl.CULL_FACE)
 
@@ -1833,29 +1845,61 @@ class MapRenderer:
             return tuple(float(c) for c in w['hardwarefogcolor'])
         return self.sky_horizon
 
+    def _begin_batches(self):
+        """Start a pass over the object batches: forget what _put has sent, so
+        whatever was written to the object program before counts as unknown."""
+        self._sent = {}
+
+    def _put(self, op, name, value):
+        """Write an object-program uniform, unless this pass has already sent
+        that very value (the same object, or an equal number or tuple)."""
+        sent = self._sent.get(name, _UNSENT)
+        if sent is value or (type(sent) is type(value) and not isinstance(value, np.ndarray) and sent == value):
+            return
+        op[name].value = value
+        self._sent[name] = value
+
+    def _use(self, texture, unit):
+        """Bind a texture to a unit, unless this pass has bound it there already."""
+        if self._sent.get(('unit', unit)) is not texture:
+            texture.use(unit)
+            self._sent[('unit', unit)] = texture
+
     def _bind_batch(self, op, batch):
-        """Per-material uniforms and textures of an object batch."""
+        """Per-material uniforms and textures of an object batch. Values the
+        batch shares with the one before are not sent again (_put), which is
+        most of them: four passes bind every batch each frame."""
         if batch['texture'] is not None:
-            batch['texture'].use(0)
-        op['tex'].value = 0
-        op['has_texture'].value = int(batch['texture'] is not None)
-        op['technique'].value = batch['technique']
-        op['alpha_ref'].value = -1.0 if batch['alpha_ref'] is None else float(batch['alpha_ref'])
-        op['texturing'].value = 1
-        # Camera-facing meshes and Grid-mapped textures (render.w3d).
-        op['camera_mode'].value = batch.get('camera', 0)
-        op['pivot'].value = batch.get('pivot', (0.0, 0.0, 0.0))
-        op['uv_grid'].value = tuple(float(v) for v in batch.get('grid') or (0, 0, 0))
-        op['detail_func'].value = batch['uniforms'].get('detail_func', 0)
+            self._use(batch['texture'], 0)
         if batch.get('detail') is not None:
-            batch['detail'].use(3)
-            op['detail_tex'].value = 3
+            self._use(batch['detail'], 3)
         if batch.get('normal') is not None:
-            batch['normal'].use(9)
-            op['normal_tex'].value = 9
-        for key, value in batch['uniforms'].items():
-            if key in self._object_uniforms:
-                op[key].value = value
+            self._use(batch['normal'], 9)
+        known = self._object_uniforms
+        binding = batch.get('_binding')
+        if binding is None or binding[0] is not known:
+            # Its uniforms, worked out once (_apply_sky drops them when it changes the batch).
+            uniforms = batch['uniforms']
+            # Camera-facing meshes and Grid-mapped textures (render.w3d): camera_mode, pivot, uv_grid.
+            values = [('tex', 0), ('has_texture', int(batch['texture'] is not None)), ('technique', batch['technique']),
+                      ('alpha_ref', -1.0 if batch['alpha_ref'] is None else float(batch['alpha_ref'])), ('texturing', 1),
+                      ('camera_mode', batch.get('camera', 0)), ('pivot', batch.get('pivot', (0.0, 0.0, 0.0))),
+                      ('uv_grid', tuple(float(v) for v in batch.get('grid') or (0, 0, 0))),
+                      ('detail_func', uniforms.get('detail_func', 0))]
+            if batch.get('detail') is not None:
+                values.append(('detail_tex', 3))
+            if batch.get('normal') is not None:
+                values.append(('normal_tex', 9))
+            values += [(key, value) for key, value in uniforms.items() if key in known]
+            binding = batch['_binding'] = (known, values)
+        # _put, inline: this runs some 4,000 times a frame.
+        sent = self._sent
+        for name, value in binding[1]:
+            old = sent.get(name, _UNSENT)
+            if old is value or (type(old) is type(value) and not isinstance(value, np.ndarray) and old == value):
+                continue
+            op[name].value = value
+            sent[name] = value
         if batch.get('scaled', True) != getattr(self, '_bound_scaled', True):
             # W3DPropBuffer::drawProps builds its own light environment from
             # the object lights without the ShaderLOD scale.
@@ -2062,6 +2106,7 @@ class MapRenderer:
             if self.cloud_tex:
                 self.cloud_tex.use(5)
             op['cloud_tex'].value = 5
+            self._begin_batches()
             # The tree and shrub buffers draw with the terrain; then opaque
             # objects, then translucent ones without depth writes.
             for batch in self._draw_batches:
@@ -2178,6 +2223,7 @@ class MapRenderer:
             self.cloud_tex.use(5)
         op['cloud_tex'].value = 5
         op['clip_z'].value = plane
+        self._begin_batches()
         for batch in self._draw_batches:
             if batch.get('sky') or not batch.get('reflects'):
                 continue

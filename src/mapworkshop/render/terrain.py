@@ -84,6 +84,8 @@ class TerrainData:
         self.width, self.height, self.border = hm['width'], hm['height'], hm['border']
         self.playable = playable_extent(hm)
         self.heights = hm['elevations'].astype(np.float32) * 0.0390625
+        # Read every frame (the shadow light's window); the heights never change.
+        self.mean_height, self.max_height = float(self.heights.mean()), float(self.heights.max())
         blend = m.blend(inspection=True)
         self.textures = blend['textures']
         arrays = blend['arrays']

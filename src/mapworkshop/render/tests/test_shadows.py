@@ -10,7 +10,7 @@ from mapworkshop.render.engine import MapRenderer
 
 def renderer():
     r = MapRenderer.__new__(MapRenderer)
-    r.terrain = types.SimpleNamespace(heights=np.full((10, 10), 100.0))
+    r.terrain = types.SimpleNamespace(heights=np.full((10, 10), 100.0), mean_height=100.0, max_height=100.0)
     sun = np.array([0.4, -0.3, 0.8])
     r.sun_dir = tuple(sun/np.linalg.norm(sun))
     r.shadow_settings = dict(texel=2*1500/1024)

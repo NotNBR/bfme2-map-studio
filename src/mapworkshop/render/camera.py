@@ -316,7 +316,7 @@ class TopView:
 
     def resolve(self, terrain, aspect=None):
         x0, y0, x1, y1 = self.bounds(terrain)
-        top = float(terrain.heights.max())+2000
+        top = terrain.max_height+2000
         eye = np.array([(x0+x1)/2, (y0+y1)/2, top])
         view = look_at(eye, eye-np.array([0, 0, 1.0]), up=(0, 1, 0))
         proj = orthographic(-(x1-x0)/2, (x1-x0)/2, -(y1-y0)/2, (y1-y0)/2, 1.0, top+500)
