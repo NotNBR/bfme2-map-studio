@@ -6,3 +6,4 @@
 	url = https://github.com/NotNBR/openbfme-godot
 	update = none
 	ignore = dirty
+	branch = studio/main

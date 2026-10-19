@@ -137,10 +137,24 @@ The first run sets up everything in `local/openbfme/`, in about three
 minutes plus the time to check the game files:
 
 - **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
-  `mw setup`): [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot),
-  a fork of OpenBFME whose commits carry the studio's engine changes. An
-  engine change is made and committed in the fork, and the submodule then
-  points at it. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
+  `mw setup`): the branch `studio/main` of
+  [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot), a fork of
+  OpenBFME. That branch is upstream's `main`, with every open upstream pull
+  request merged into it (the studio's walls, siege, weather and big-battle
+  work among them), and the studio's own commits on top: the free camera,
+  the cinematics, staged armies, extra archives, `--no-shroud` and the
+  headless battle log. Nobody works on it directly. The fork's
+  `tools/studio/rebuild_branch.py` regenerates it and tags each result
+  `studio-YYYY-MM-DD`, so every commit the submodule ever pointed at stays
+  fetchable. To take upstream's latest, run in the fork's clone
+  `python tools/studio/rebuild_branch.py --push` (it stops on a conflict that
+  git rerere hasn't seen before; resolve it and run with `--resume`). Then
+  point the submodule at the new tag
+  (`git -C src/mapworkshop/native/openbfme-godot fetch --tags` and
+  `checkout studio-YYYY-MM-DD`) and commit it here. An engine change
+  that upstream should have goes to a pull request branch in the fork. One
+  that is the studio's alone is a commit on `studio/main`, which each rebuild
+  replays. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
   releases' SHA-256, then builds the engine. CMake and Ninja must be on PATH
   or in the studio's environment (`pip install cmake ninja`). Windows only.
   A later run rebuilds only when the submodule's commit changes or its
