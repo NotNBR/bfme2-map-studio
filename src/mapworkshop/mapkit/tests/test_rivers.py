@@ -114,19 +114,25 @@ class Waves(unittest.TestCase):
 @unittest.skipUnless(os.environ.get('MW_CORPUS') and (GAME_DATA/'maps').is_dir(),
                      'stock maps: run `mw test --corpus` after `mw setup`')
 class Stock(unittest.TestCase):
+    # ROTWK's Paths of the Dead: additive rivers and no standing water at all.
+    RIVERS_ALONE = {'map mp paths of the dead'}
+
     def test_stock_rivers_lie_over_standing_water(self):
-        """Every stock multiplayer river's height is within 1 to 2 above a standing water area's."""
+        """Every stock multiplayer river's height is within 1 to 2 above a
+        standing water area's, except in the maps known to have rivers alone."""
         from mapworkshop.formats.map_archive import unpack
         checked = 0
         for path in sorted((GAME_DATA/'maps').glob('map mp */*.map')):
             data = path.read_bytes()
             m = Map(data if data[:4] == b'CkMp' else unpack(data))
-            rivers = sections.read(m, 'RiverAreas')
+            rivers = [r for r in sections.read(m, 'RiverAreas') if r['additive']]
             levels = [a['water_height'] for a in sections.read(m, 'StandingWaterAreas')]
+            if path.parent.name in self.RIVERS_ALONE:
+                self.assertTrue(rivers and not levels, f'{path.parent.name} no longer has rivers alone')
+                continue
             for r in rivers:
-                if r['additive']:
-                    self.assertTrue(any(0 <= r['water_height']-h <= 2 for h in levels), (path.parent.name, r['name']))
-                    checked += 1
+                self.assertTrue(any(0 <= r['water_height']-h <= 2 for h in levels), (path.parent.name, r['name']))
+                checked += 1
         self.assertGreater(checked, 5)
 
 

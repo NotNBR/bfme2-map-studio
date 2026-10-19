@@ -9,10 +9,13 @@ The record layouts are in the
 
 A `RiverAreas` record is a strip of cross-sections, each the two bank points,
 every 50 to 180 along the river and 100 to 350 wide, at one water height. In
-the stock multiplayer maps every additive river lies 1 (at most 2) above a
+BFME2's stock multiplayer maps every additive river lies 1 (at most 2) above a
 standing water area that covers it: Argonath 90 over 89, the Fords of Isen
 295 over 294, Weathertop 96 over 95. The standing water is what units wade
-and sink in; the river is the flowing surface over it.
+and sink in; the river is the flowing surface over it. ROTWK's Paths of the
+Dead is the one stock map without it: three additive rivers (142, 143 and 144)
+and no standing water at all (`test_rivers.Stock`, run by `mw test --corpus`
+under each profile).
 
 | Look (`add_river(look=...)`) | Textures | Additive | Stock rivers |
 |---|---|---|---|
@@ -61,7 +64,9 @@ A strip is drawn flat at its height even over a sloping channel (Water Lab's
 Not confirmed: which stored end of a cross-section the game puts first (it
 mirrors the river texture across), and whether `Opacity` reaches the shader's
 w component. Whether a river strip alone (without standing water) affects
-movement has not been tested. `mw render --flow` and
+movement has not been tested; Paths of the Dead would show it, but native
+pathfinding (`mw walkable --native`) reads BFME2 1.06 only and the map is
+ROTWK's. `mw render --flow` and
 the viewer's key 8 draw arrows along each strip in its flow direction;
 `mw rivers` lists the strips' courses. In the Fords of Isen the strips at
 water 365 and 366 end in ones at 295, which agrees with first-to-last flow.
