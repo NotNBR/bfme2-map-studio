@@ -67,7 +67,7 @@ camera bar.
 | Right drag | Slide sideways and up |
 | Wheel | Move forward or back |
 | Alt+wheel, Shift+wheel | Focal length, focus distance |
-| Middle click | Focus on the centre of the view |
+| Middle click | Focus on what is at the centre of the view, ground or object |
 | W A S D / arrows | Fly along the view (Shift faster, Ctrl slower; speed grows with the height above the ground) |
 | Space / C | Up / down |
 | Q / E, R | Roll left / right, level again |
@@ -84,20 +84,26 @@ The **camera bar** at the bottom left holds, from the left:
 - **Copy view**: the view as a `mw render --map ... --view view ...` command on
   the clipboard, to render it at full quality or hand it to an agent.
 - In Photo mode, the lens ([render/photo.py](../src/mapworkshop/render/photo.py)):
-  **focal length** (mm on a full-frame sensor; 39 mm is Edit's 50 degrees),
-  **aperture** (f/ - is everything sharp; an f-number blurs what is nearer or
-  further than the focus), **focus** distance and exposure (**EV**). The wheel
-  or a sideways drag over a field changes it; a click opens its presets.
-  Depth of field follows a real lens with 10 map units to the metre: focused
-  across the map, little blurs; focused within a few hundred units, the
-  distance does. Depth of field and exposure are effects the game does not
-  have.
+  **focal length** (mm on a full-frame 36 x 24 mm sensor; 39 mm is Edit's 50
+  degrees), **aperture** (f/ - is everything sharp; an f-number blurs what is
+  nearer or further than the focus), **focus** distance along the view, and
+  exposure compensation (**EV**). The wheel or a sideways drag over a field
+  changes it; a click opens its presets. Depth of field follows a thin lens
+  with 10 map units to the metre, blurring in linear light: focused across
+  the map, little blurs; focused within a few hundred units, the distance
+  does. The aperture changes only the depth of field, not the brightness.
+  Depth of field and exposure are effects the game does not have.
 - In Photo mode, the framing aids: **Thirds** lines and the **frame**'s
   aspect (Free, 16:9, 21:9, 3:2, 4:3, 1:1), shown by darkening outside it.
-  Screenshots in Photo mode (P) include the lens and exposure, are cropped to
-  the frame and saved as `<map>-photo-<time>.png`.
+  The frame is the sensor's largest crop of its aspect, as in a camera's crop
+  modes: 36 mm wide at 3:2 and wider, 24 mm tall when narrower, so a focal
+  length frames a square picture as a 24 x 24 mm crop would. Screenshots in
+  Photo mode (P) include the lens and exposure, are cropped to the frame and
+  saved as `<map>-photo-<time>.png`.
 - The **readout**: in Edit the target, distance, heading and tilt; in Photo the
-  camera's position, heading, tilt, roll and field of view.
+  camera's position, heading, tilt, roll, the frame's field of view and, with
+  an aperture, the distances that stay sharp (blur under 1/1500 of the
+  frame's diagonal).
 
 ## Live reload
 

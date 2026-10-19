@@ -23,6 +23,7 @@ import time
 
 from PIL import Image, ImageDraw
 
+from mapworkshop.render.photo import sharp_range
 from mapworkshop.viewer.palette import icon
 from mapworkshop.viewer.toolbar import FS, HOVER, LINE, MENU, MUTED, ON, ON_LINE, TEXT, VS, _font
 
@@ -397,15 +398,22 @@ class CameraBar:
         return None
 
 
-def readout(mode, camera, fly):
-    """The camera bar's readout of the current camera."""
+def sharp_text(near, far):
+    return f'sharp {near:,.0f} – ' + ('∞' if far == float('inf') else f'{far:,.0f}')
+
+
+def readout(mode, camera, fly, aspect):
+    """The camera bar's readout of the current camera in a window of `aspect`."""
     if mode == 'photo':
         e = fly.eye
         text = (f'x {e[0]:,.0f}  y {e[1]:,.0f}  z {e[2]:,.0f}   heading {fly.heading % 360:.0f}°   '
                 f'tilt {fly.pitch:+.0f}°')
         if abs(fly.roll) >= 0.5:
             text += f'   roll {fly.roll:+.0f}°'
-        return text + f'   {fly.fov:.0f}° wide'
+        text += f'   {fly.fov(aspect):.0f}° wide'
+        if fly.aperture:
+            text += '   ' + sharp_text(*sharp_range(fly.focus, fly.focal, fly.aperture, fly.frame_aspect(aspect)))
+        return text
     c = camera.cur
     return (f'target {c["x"]:,.0f}, {c["y"]:,.0f}   distance {c["distance"]:,.0f}   '
             f'heading {c["heading"] % 360:.0f}°   tilt {c["elevation"]:.0f}°')

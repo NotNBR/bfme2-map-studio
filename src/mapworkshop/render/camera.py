@@ -20,9 +20,11 @@ Orbit view (default):
                           positive to the right (0)
 
 Photo keys (render.photo; the viewer's Photo mode writes them):
-    focal     = mm        focal length on a full-frame sensor, in place of fov
+    focal     = mm        focal length on a full-frame sensor's crop of the
+                          image's aspect (render.photo.sensor), in place of fov
     aperture  = f-number  depth of field (none: everything sharp)
-    focus     = units     the distance in focus (default: to the target)
+    focus     = units     the distance in focus along the view (default: to
+                          the target)
     ev        = stops     exposure, brighter above 0 (0)
 
 Top view (orthographic, north up):
@@ -97,7 +99,7 @@ class OrbitView:
     kind: str = field(default='orbit', init=False)
 
     def resolve(self, terrain, aspect):
-        from mapworkshop.render.photo import fov_from_focal
+        from mapworkshop.render.photo import focal_from_fov, fov_from_focal, sensor
         tx, ty = self.target[:2]
         tz = self.target[2] if len(self.target) > 2 else float(terrain.height_at(tx, ty))
         target = np.array([tx, ty, tz], float)
@@ -108,14 +110,16 @@ class OrbitView:
             back = np.array([-math.sin(h)*math.cos(e), -math.cos(h)*math.cos(e), math.sin(e)])
             eye = target + back*self.distance
         distance = float(np.linalg.norm(eye-target))
-        fov = fov_from_focal(self.focal) if self.focal else self.fov
+        # A focal length is on the image's crop of the sensor (render.photo).
+        width = sensor(aspect)[0]
+        fov = fov_from_focal(self.focal, width) if self.focal else self.fov
         fov_y = 2*math.degrees(math.atan(math.tan(math.radians(fov)/2)/aspect))
         near = self.near if self.near is not None else max(2.0, distance*0.01)
         far = distance*20+30000
         proj = perspective(fov_y, aspect, near, far)
         view = rolled(look_at(eye, target), self.roll)
-        return dict(view_projection=proj @ view, eye=eye, target=target, near=near, far=far,
-                    photo=dict(focal=self.focal or None, aperture=self.aperture, ev=self.ev,
+        return dict(view_projection=proj @ view, eye=eye, target=target, near=near, far=far, sensor=width,
+                    photo=dict(focal=self.focal or focal_from_fov(fov, width), aperture=self.aperture, ev=self.ev,
                                focus=self.focus if self.focus is not None else distance))
 
     def describe(self):
@@ -124,12 +128,14 @@ class OrbitView:
 
 def rolled(view, roll):
     """A view matrix turned `roll` degrees about the view direction, the camera
-    to the right for a positive roll (the picture turns to the left)."""
+    to the right (clockwise as seen from behind it) for a positive roll, so the
+    picture turns to the left."""
     if not roll:
         return view
     a = math.radians(roll)
+    # The camera's axes turn clockwise by a, so what it sees turns the other way.
     turn = np.eye(4)
-    turn[0, 0], turn[0, 1], turn[1, 0], turn[1, 1] = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
+    turn[0, 0], turn[0, 1], turn[1, 0], turn[1, 1] = math.cos(a), -math.sin(a), math.sin(a), math.cos(a)
     return turn @ view
 
 

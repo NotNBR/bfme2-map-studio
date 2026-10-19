@@ -15,7 +15,7 @@ import math
 import numpy as np
 
 from mapworkshop.render.camera import look_at, perspective, rolled
-from mapworkshop.render.photo import FOCAL_RANGE, focal_from_fov, fov_from_focal
+from mapworkshop.render.photo import FOCAL_RANGE, focal_from_fov, fov_from_focal, image_size, sensor
 
 ORBIT_DEGREES_PER_PIXEL = 0.25
 SMOOTHING = 16.0          # 1/s; higher follows input faster
@@ -215,7 +215,10 @@ class FlyCamera:
     """Photo mode's free camera: an eye anywhere, turned by `heading` (0 north,
     90 east), `pitch` (above the horizon, -90 to 90) and `roll` (to the
     right), and a lens (render.photo): `focal` mm, `aperture` (an f-number,
-    None for everything sharp), `focus` (map units) and `ev`.
+    None for everything sharp), `focus` (map units along the view) and `ev`.
+    `frame` is the aspect of the picture within the window (None: the whole
+    window); the focal length is on that frame's crop of the sensor, and the
+    window shows more around it.
 
     Moves ease the eye towards its goal; turns follow the mouse at once."""
 
@@ -225,10 +228,15 @@ class FlyCamera:
         self.goal = self.eye.copy()
         self.heading, self.pitch, self.roll = 0.0, -30.0, 0.0
         self.focal, self.aperture, self.focus, self.ev = focal_from_fov(50.0), None, 1500.0, 0.0
+        self.frame = None
 
-    @property
-    def fov(self):
-        return fov_from_focal(self.focal)
+    def frame_aspect(self, aspect):
+        """The picture's aspect in a window of `aspect`."""
+        return self.frame or aspect
+
+    def fov(self, aspect):
+        """The picture's horizontal field of view (degrees) in a window of `aspect`."""
+        return fov_from_focal(self.focal, sensor(self.frame_aspect(aspect))[0])
 
     def forward(self):
         h, p = math.radians(self.heading), math.radians(self.pitch)
@@ -263,7 +271,7 @@ class FlyCamera:
 
     def look(self, dx, dy):
         """Turn by a mouse movement in pixels: right and down look right and down."""
-        k = LOOK_DEGREES_PER_PIXEL*self.fov/50.0
+        k = LOOK_DEGREES_PER_PIXEL*fov_from_focal(self.focal)/50.0
         self.heading = (self.heading + dx*k) % 360
         self.pitch = min(89.9, max(-89.9, self.pitch - dy*k))
 
@@ -292,15 +300,17 @@ class FlyCamera:
         self.focus = min(100000.0, max(5.0, self.focus*FOCUS_STEP**notches))
 
     def matrices(self, aspect):
-        """The camera for the renderer; its target is the point in focus ahead."""
+        """The camera for the renderer; its target is the point in focus ahead,
+        `sensor` the window's width in mm at the sensor's scale."""
         eye = self.eye
         target = eye + self.forward()*self.focus
-        fov_y = 2*math.degrees(math.atan(math.tan(math.radians(self.fov)/2)/aspect))
+        width, height = image_size(aspect, self.frame)
+        fov_y = 2*math.degrees(math.atan(height/2/self.focal))
         near = min(40.0, max(1.0, abs(self.clearance())*0.02))
         far = 80000.0
         proj = perspective(fov_y, aspect, near, far)
         view = rolled(look_at(eye, target), self.roll)
-        return dict(view_projection=proj @ view, eye=eye.copy(), target=target, near=near, far=far,
+        return dict(view_projection=proj @ view, eye=eye.copy(), target=target, near=near, far=far, sensor=width,
                     photo=self.settings())
 
     def settings(self):

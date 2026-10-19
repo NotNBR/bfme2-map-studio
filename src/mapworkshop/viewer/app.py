@@ -110,7 +110,7 @@ from mapworkshop import game, project
 from mapworkshop.config import RENDERS, GAME_LABEL, save_setting, setting
 from mapworkshop.mapkit.weather import PRESETS, SUNS
 from mapworkshop.render.camera import view_from_dict
-from mapworkshop.render.photo import Post, active, focal_from_fov, fov_from_focal
+from mapworkshop.render.photo import Post, active, focal_from_fov, fov_from_focal, sensor
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer import camerabar as bar
 from mapworkshop.viewer.camera import Camera, FlyCamera
@@ -210,6 +210,7 @@ class Viewer:
         self.pending_save = None           # (slot, mode, spec): saved with a thumbnail of the next frame
         self.scrub = None                  # a drag over a lens field: [field, last x, moved]
         self.post = None                   # Photo mode's exposure and depth of field (render.photo)
+        self.autofocus = False             # focus on what the next frame shows at the centre
         self.build = Build(self.status, lambda toast: setattr(self.session, 'toast', toast))
         self.walkability = Walkability(self.status)
         self.summary = MarksSummary()
@@ -600,6 +601,7 @@ class Viewer:
     def _enter(self, mode):
         self.mode = mode
         self.camerabar.open = None
+        self.autofocus = False
         if mode == 'photo':
             self.editor.set_tool(None)
         self.set_capture(mode == 'photo')
@@ -699,8 +701,10 @@ class Viewer:
         """A lens field's presets."""
         f = self.fly
         if field == 'focal':
+            w, h = self.window_size()
+            width = sensor(f.frame_aspect(w/max(h, 1)))[0]
             return [dict(target=None, text='Focal length (full frame)')] + [
-                dict(target=('pick', 'focal', v), text=f'{v} mm', hint=f'{fov_from_focal(v):.0f}° wide',
+                dict(target=('pick', 'focal', v), text=f'{v} mm', hint=f'{fov_from_focal(v, width):.0f}° wide',
                      checked=abs(f.focal-v) < 0.5) for v in bar.FOCALS]
         if field == 'aperture':
             return [dict(target=None, text='Aperture: depth of field')] + [
@@ -753,6 +757,7 @@ class Viewer:
                 self.apply_view(self.views.by_name(value))
         elif menu == 'frame':
             self.framing['frame'] = value
+            f.frame = bar.frame_ratio(value)
         elif menu == 'focal':
             f.focal = float(value)
         elif menu == 'aperture':
@@ -781,12 +786,18 @@ class Viewer:
         self.camerabar.refresh_list(self.view_entries())
 
     def focus_centre(self):
-        hit = self.fly.pick_ahead(self.window_size())
-        if hit is None:
-            self.status.set('no ground at the centre of the view to focus on', 3)
+        """Focus on what is at the centre of the view, ground or object: read
+        from the next frame's depth (draw)."""
+        self.autofocus = True
+
+    def focused(self, distance):
+        """Autofocus found `distance` along the view at the centre (None: nothing drawn there)."""
+        self.autofocus = False
+        if distance is None:
+            self.status.set('nothing at the centre of the view to focus on', 3)
             return
-        self.fly.focus = float(np.linalg.norm(hit-self.fly.eye))
-        self.status.set(f'focus {self.fly.focus:,.0f}', 2)
+        self.fly.focus = distance
+        self.status.set(f'focus {distance:,.0f}', 2)
 
     def adjust_field(self, field, notches):
         """The wheel (or a sideways drag) over a lens field."""
@@ -806,7 +817,9 @@ class Viewer:
             self.camerabar.refresh_list(self.lens_entries(field))
 
     def bar_state(self):
-        state = dict(mode=self.mode, readout=self.readout.get(lambda: bar.readout(self.mode, self.camera, self.fly)))
+        w, h = self.window_size()
+        state = dict(mode=self.mode, readout=self.readout.get(
+            lambda: bar.readout(self.mode, self.camera, self.fly, w/max(h, 1))))
         if self.mode == 'photo':
             f = self.fly
             state.update(focal=round(f.focal, 1), aperture=f.aperture, focus=round(f.focus), ev=round(f.ev, 2),
@@ -1079,12 +1092,14 @@ class Viewer:
         if r is not None:
             options = dict(grid=self.view['grid'], border=self.view['border'], shadow_radius=4000.0, shadow_size=4096,
                            time=self.time)
-            if photo and active(self.fly.settings()):
-                # Exposure and depth of field over the scene (render.photo).
+            if photo and (active(self.fly.settings()) or self.autofocus):
+                # Exposure and depth of field over the scene (render.photo); its depth also serves autofocus.
                 if self.post is None:
                     self.post = Post(self.ctx, self.args.samples)
                 r.draw(cam, size, self.post.target(size), **options)
                 self.post.finish(cam, self.fly.settings(), self.ctx.screen, taps=128)
+                if self.autofocus:
+                    self.focused(self.post.distance_at(cam, fw//2, fh//2))
             else:
                 r.draw(cam, size, self.ctx.screen, **options)
             if self.pending_save is not None:

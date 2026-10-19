@@ -37,8 +37,8 @@ def edit_spec(camera):
 
 
 def photo_spec(fly):
-    """A Photo view of a viewer.camera.FlyCamera."""
-    target = fly.eye + fly.forward()*fly.focus
+    """A Photo view of a viewer.camera.FlyCamera, where its eye is going."""
+    target = fly.goal + fly.forward()*fly.focus
     spec = dict(eye=[_round(v) for v in fly.goal], target=[_round(v) for v in target], focal=_round(fly.focal))
     if abs(fly.roll) > 0.05:
         spec['roll'] = _round(fly.roll)

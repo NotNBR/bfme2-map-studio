@@ -3,18 +3,27 @@
 The game has neither; the viewer's Photo mode and `mw render` views with
 `focal`, `aperture`, `focus` or `ev` use them for pictures.
 
-The lens is a full-frame camera's: a 36 x 24 mm sensor, its width across the
-image. A focal length f gives a horizontal field of view of 2 atan(18 / f)
-(39 mm is the preview cameras' 50 degrees). Depth of field follows the thin
-lens: a point at distance D, focused at S with aperture f/N, blurs to a circle
-of (f / N) x f / (S - f) x |D - S| / D on the sensor, scaled to pixels by
-image width / 36 mm. Distances need a scale: UNITS_PER_METRE map units to the
+The lens is a full-frame camera's: a 36 x 24 mm sensor. A picture of aspect
+3:2 or wider is 36 mm wide on it, a narrower one 24 mm tall, as a camera's
+crop modes take the largest frame of their aspect (sensor()). A focal length
+f gives a frame w mm wide a horizontal field of view of 2 atan(w / 2f): at 3:2
+and wider, 39 mm is the preview cameras' 50 degrees. Where the viewer shows a
+frame inside a wider window, the window shows more around it at the frame's
+scale (image_size()).
+
+Depth of field follows the thin lens: a point at distance D, focused at S with
+aperture f/N, blurs to a circle of (f / N) x f / (S - f) x |D - S| / D on the
+sensor, scaled to pixels by the frame's pixels per mm. D and S are along the
+view axis (the depth buffer's distance), so what is in focus is a plane, as
+with a real lens. Distances need a scale: UNITS_PER_METRE map units to the
 metre (a soldier is about 20 units tall), so wide apertures blur as a real lens
-would at that size.
+would at that size. Light mixes in linear colour, so a bright point spreads
+into a bright disc. The aperture changes only the depth of field, as under
+aperture-priority auto exposure; `ev` is the exposure compensation.
 
 Exposure multiplies the linear colour by 2^ev. The renderer's colours are
-already display colours, so it brightens or darkens; it cannot bring back
-highlights that were white.
+already display colours (gamma 2.2), so it brightens or darkens; it cannot
+bring back highlights that were white.
 
 Post draws a scene rendered into its multisampled target (target()) to a
 framebuffer with both effects (finish()): the colour is resolved into a
@@ -29,37 +38,74 @@ and one that does not adds the average so far. So a blurred foreground spreads
 over a sharp background, its outline soft, while a sample behind the pixel
 counts with at most twice the pixel's own circle, so a sharp foreground keeps
 its edge. The disc's sample pattern turns per pixel, which trades the repeated
-copies a fixed pattern gives in large blur for fine grain.
+copies a fixed pattern gives in large blur for fine grain. distance_at() reads
+the depth back, to focus on whatever is under a pixel.
 """
 
 import math
 
 import numpy as np
 
-SENSOR_WIDTH = 36.0                 # mm
+SENSOR = 36.0, 24.0                 # mm, full frame
+SENSOR_WIDTH = SENSOR[0]
 UNITS_PER_METRE = 10.0
 FOCAL_RANGE = 10.0, 600.0           # mm
 MAX_BLUR = 0.06                     # the largest blur circle's diameter, as a share of the image width
+SHARP = 1/1500                      # the blur counted as sharp, as a share of the frame's diagonal (0.029 mm on full frame)
 
 
-def fov_from_focal(focal):
-    """Horizontal field of view (degrees) of a focal length (mm)."""
-    return 2*math.degrees(math.atan(SENSOR_WIDTH/2/focal))
+def sensor(aspect):
+    """(width, height) in mm of the largest frame of `aspect` (width / height)
+    on the sensor: 36 mm wide at 3:2 and wider, 24 mm tall when narrower."""
+    w, h = SENSOR
+    return (w, w/aspect) if aspect >= w/h else (h*aspect, h)
 
 
-def focal_from_fov(fov):
-    """Focal length (mm) giving a horizontal field of view (degrees)."""
-    return SENSOR_WIDTH/2/math.tan(math.radians(fov)/2)
+def image_size(aspect, frame=None):
+    """(width, height) in mm on the sensor's scale of an image of `aspect`
+    holding a centred frame of aspect `frame` (None: the image is the frame),
+    as viewer.camerabar.frame_rect fits a frame in the window."""
+    if not frame:
+        return sensor(aspect)
+    fw, fh = sensor(frame)
+    return (fw, fw/aspect) if aspect <= frame else (fh*aspect, fh)
 
 
-def blur_pixels(distance, focus, focal, aperture, width):
+def fov_from_focal(focal, width=SENSOR_WIDTH):
+    """Horizontal field of view (degrees) of a focal length (mm) over an image
+    `width` mm wide."""
+    return 2*math.degrees(math.atan(width/2/focal))
+
+
+def focal_from_fov(fov, width=SENSOR_WIDTH):
+    """Focal length (mm) giving an image `width` mm wide a horizontal field of
+    view (degrees)."""
+    return width/2/math.tan(math.radians(fov)/2)
+
+
+def _mm(units):
+    return units/UNITS_PER_METRE*1000
+
+
+def blur_pixels(distance, focus, focal, aperture, width, sensor_width=SENSOR_WIDTH):
     """Diameter in pixels of the blur circle of a point `distance` map units
     away, focused at `focus`, for a focal length (mm), an f-number and an
-    image `width` pixels wide; not limited to MAX_BLUR."""
-    d, s = distance/UNITS_PER_METRE*1000, focus/UNITS_PER_METRE*1000
-    s = max(s, focal*1.001)
+    image `width` pixels and `sensor_width` mm wide; not limited to MAX_BLUR."""
+    d, s = _mm(distance), max(_mm(focus), focal*1.001)
     circle = (focal/aperture)*focal/(s-focal)*abs(d-s)/max(d, 1e-6)
-    return circle/SENSOR_WIDTH*width
+    return circle/sensor_width*width
+
+
+def sharp_range(focus, focal, aperture, aspect=1.5):
+    """(near, far) map units between which the blur stays below SHARP of a
+    frame of `aspect`'s diagonal; far is inf at and beyond the hyperfocal
+    distance."""
+    c = math.hypot(*sensor(aspect))*SHARP
+    s = max(_mm(focus), focal*1.001)
+    hyperfocal = focal*focal/(aperture*c) + focal
+    near = s*(hyperfocal-focal)/(hyperfocal+s-2*focal)
+    far = s*(hyperfocal-focal)/(hyperfocal-s) if s < hyperfocal else math.inf
+    return near/1000*UNITS_PER_METRE, far/1000*UNITS_PER_METRE
 
 
 def active(settings):
@@ -81,7 +127,7 @@ COMMON = """
 uniform sampler2D depth_tex;
 uniform vec2 size;
 uniform float near_z, far_z;
-uniform float focus_mm, focal_mm, aperture_mm, px_per_mm, max_blur;
+uniform float mm_per_unit, focus_mm, focal_mm, aperture_mm, px_per_mm, max_blur;
 
 float view_z(float depth) {
     float z = depth*2.0-1.0;
@@ -89,7 +135,7 @@ float view_z(float depth) {
 }
 // The blur circle's radius in pixels of a point `units` map units away.
 float radius(float units) {
-    float d = max(units*100.0, 1e-3);                 // map units to mm (UNITS_PER_METRE 10)
+    float d = max(units*mm_per_unit, 1e-3);
     float s = max(focus_mm, focal_mm*1.001);
     return min(aperture_mm*focal_mm/(s-focal_mm)*abs(d-s)/d*px_per_mm, max_blur)*0.5;
 }
@@ -127,7 +173,7 @@ void main() {
 }
 """
 
-# Pass 3: the blur over the reach around each pixel, then the exposure.
+# Pass 3: the blur over the reach around each pixel, in linear colour, then the exposure.
 FS = COMMON + """
 uniform sampler2D color_tex;
 uniform sampler2D reach_tex;
@@ -137,9 +183,11 @@ uniform int taps;
 uniform int tile;
 out vec4 frag;
 
+vec3 linear(vec2 uv) { return pow(texture(color_tex, uv).rgb, vec3(2.2)); }
+
 void main() {
     vec2 uv = gl_FragCoord.xy/size;
-    vec3 c = texture(color_tex, uv).rgb;
+    vec3 c = linear(uv);
     float reach = use_dof == 1 ? texelFetch(reach_tex, ivec2(gl_FragCoord.xy)/tile, 0).r : 0.0;
     if (reach >= 0.5) {
         float z0 = view_z(texture(depth_tex, uv).r);
@@ -156,13 +204,12 @@ void main() {
             float s = radius(z);
             if (z > z0) s = min(s, s0*2.0);         // behind the pixel: it cannot spread over a sharper pixel
             float m = smoothstep(r-0.5, r+0.5, s);  // does its circle reach this pixel?
-            c += mix(c/total, texture(color_tex, suv).rgb, m);
+            c += mix(c/total, linear(suv), m);
             total += 1.0;
         }
         c /= total;
     }
-    vec3 linear = pow(max(c, 0.0), vec3(2.2))*exposure;
-    frag = vec4(pow(clamp(linear, 0.0, 1.0), vec3(1.0/2.2)), 1.0);
+    frag = vec4(pow(clamp(c*exposure, 0.0, 1.0), vec3(1.0/2.2)), 1.0);
 }
 """
 
@@ -210,16 +257,18 @@ class Post:
     def finish(self, camera, settings, framebuffer, taps=128):
         """Draw the scene in target() to `framebuffer` with the photo
         `settings` (focal, aperture, focus, ev); `camera` is the resolved
-        camera it was drawn with (its near and far)."""
+        camera it was drawn with (its near and far, and `sensor`: the image's
+        width in mm, SENSOR_WIDTH when missing)."""
         ctx, mgl = self.ctx, self.mgl
         ctx.copy_framebuffer(self.resolved, self.fbo)
         width, height = self.size
         aperture = settings.get('aperture')
-        focal = float(settings.get('focal') or 39.0)
+        focal = float(settings.get('focal') or focal_from_fov(50.0))
         max_blur = max(2.0, MAX_BLUR*width)
         values = dict(size=(float(width), float(height)), near_z=float(camera['near']), far_z=float(camera['far']),
-                      focus_mm=float(settings.get('focus') or 1500.0)/UNITS_PER_METRE*1000, focal_mm=focal,
-                      aperture_mm=focal/float(aperture or 1.0), px_per_mm=width/SENSOR_WIDTH, max_blur=max_blur,
+                      mm_per_unit=_mm(1.0), focus_mm=_mm(float(settings.get('focus') or 1500.0)), focal_mm=focal,
+                      aperture_mm=focal/float(aperture or 1.0),
+                      px_per_mm=width/float(camera.get('sensor') or SENSOR_WIDTH), max_blur=max_blur,
                       tile=TILE, spread=int(math.ceil(max_blur/2/TILE)), exposure=2.0**float(settings.get('ev') or 0.0),
                       use_dof=int(bool(aperture)), taps=int(taps), color_tex=0, depth_tex=1, tile_tex=2, reach_tex=3)
         for program in self.programs.values():
@@ -242,6 +291,18 @@ class Post:
         framebuffer.use()
         ctx.viewport = (0, 0, width, height)
         self.vaos['blur'].render(mgl.TRIANGLE_STRIP)
+
+    def distance_at(self, camera, x, y):
+        """The distance along the view axis (map units) of what the last
+        finish() drew at pixel (x, y) from the bottom left (the sky's dome
+        too), or None where nothing was drawn."""
+        depth = np.frombuffer(self.resolved.read(viewport=(int(x), int(y), 1, 1), components=1, attachment=-1,
+                                                 dtype='f4'), 'f4')[0]
+        if depth >= 1.0:
+            return None
+        near, far = float(camera['near']), float(camera['far'])
+        z = depth*2.0-1.0
+        return float(2.0*near*far/(far+near-z*(far-near)))
 
     def release(self):
         for item in self.items:

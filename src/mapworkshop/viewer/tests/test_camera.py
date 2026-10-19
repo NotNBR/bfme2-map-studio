@@ -107,6 +107,19 @@ class FlyCameraTests(unittest.TestCase):
         fly.drive(10.0, up=-1)
         self.assertLess(fly.goal[2], 0.0)         # below the ground: allowed
 
+    def test_a_frame_crops_the_sensor_and_the_window_shows_more_around_it(self):
+        fly = FlyCamera(flat)
+        fly.place(np.array([0.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]))
+        fly.focal = 24.0
+        self.assertAlmostEqual(fly.fov(16/9), 73.7, places=1)          # 36 mm wide
+        fly.frame = 1.0
+        self.assertAlmostEqual(fly.fov(16/9), 53.1, places=1)          # 24 mm wide
+        cam = fly.matrices(16/9)
+        self.assertAlmostEqual(cam['sensor'], 24.0*16/9)
+        # The square frame's top edge, 12 mm up at 24 mm, is the window's top edge.
+        p = cam['view_projection'] @ np.array([0.0, 1000.0, 500.0, 1.0])
+        self.assertAlmostEqual(p[1]/p[3], 1.0, places=6)
+
     def test_lens_moves_stay_in_range(self):
         fly = FlyCamera(flat)
         fly.zoom(100)

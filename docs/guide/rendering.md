@@ -37,10 +37,10 @@ cell.
 | `eye=X,Y,Z` | — | Explicit camera position instead of distance/elevation/heading |
 | `region=X0,Y0,X1,Y1` | — | Orthographic top view of a rectangle, north up |
 | `near=` | | Near clip |
-| `roll=` | 0 | Degrees the camera turns about its view direction, positive to the right |
-| `focal=` | — | Focal length in mm on a full-frame (36 mm wide) sensor, in place of `fov` (39 mm is 50 degrees) |
+| `roll=` | 0 | Degrees the camera turns about its view direction, positive to the right (clockwise from behind; the picture turns left) |
+| `focal=` | — | Focal length in mm on a full-frame 36 x 24 mm sensor, in place of `fov`: the image is the sensor's largest crop of its aspect, 36 mm wide at 3:2 and wider (39 mm is then 50 degrees), 24 mm tall when narrower |
 | `aperture=` | — | f-number: depth of field around `focus` (none: everything sharp) |
-| `focus=` | the target's distance | Distance in focus, map units |
+| `focus=` | the target's distance | Distance in focus along the view, map units |
 | `ev=` | 0 | Exposure in stops: brighter above 0, darker below |
 
 The last four are photo effects the game does not have
