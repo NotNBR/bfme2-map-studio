@@ -2,7 +2,7 @@
 import struct
 import unittest
 import numpy as np
-from mapworkshop.mapkit.blank import create, starts, set_materials, set_heights, set_world, water_plane
+from mapworkshop.mapkit.blank import add_object, create, starts, set_materials, set_heights, set_world, water_plane
 from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.mapkit.weather import apply_weather, weather_code
 from mapworkshop.formats.map import Map, Reader, chunks
@@ -106,6 +106,17 @@ class BlankDocumentTests(unittest.TestCase):
             self.assertEqual(len(chunks(m.chunk(chunk_name).data,m.names)),18)
         self.assertEqual(len(chunks(m.chunk('MPPositionList').data,m.names)),8)
         with self.assertRaises(ValueError):create(player_count=9)
+
+    def test_objects_added_to_a_map_read_from_a_file_keep_unique_ids(self):
+        m = create(64, 64, 4)
+        for x in range(3):
+            add_object(m, 'TreeA', 100+x*10, 100)
+        loaded = Map(m.encode())                   # a scene built on another map's build
+        add_object(loaded, 'TreeA', 200, 200)
+        add_object(loaded, 'TreeA', 210, 200)
+        ids = [v for o in loaded.objects() for k, _, v in o['properties'] if k == 'uniqueID']
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(ids[-2:], ['Ashen_00004', 'Ashen_00005'])
 
     def test_world_info_values_change_by_name(self):
         m=create(71,83,3,title='Vale',description='A quiet vale.')

@@ -522,7 +522,13 @@ def _publish(project, work):
     shutil.rmtree(old, ignore_errors=True)
     if target.exists():
         target.replace(old)
-    staging.replace(target)
+    try:
+        staging.replace(target)
+    except OSError:
+        # Never leave no build at all: the previous one goes back in place.
+        if old.exists() and not target.exists():
+            old.replace(target)
+        raise
     shutil.rmtree(old, ignore_errors=True)
 
 

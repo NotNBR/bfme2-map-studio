@@ -220,20 +220,19 @@ class Post:
     def __init__(self, ctx, samples=4):
         import moderngl
         self.ctx, self.mgl, self.samples = ctx, moderngl, samples
-        quad = ctx.buffer(np.array([0, 0, 1, 0, 0, 1, 1, 1], 'f4').tobytes())
+        self.quad = ctx.buffer(np.array([0, 0, 1, 0, 0, 1, 1, 1], 'f4').tobytes())
         self.programs, self.vaos = {}, {}
         for name, fs in (('tile', TILE_FS), ('spread', SPREAD_FS), ('blur', FS)):
             program = ctx.program(vertex_shader=VS, fragment_shader=fs)
             self.programs[name] = program
-            self.vaos[name] = ctx.vertex_array(program, [(quad, '2f', 'in_pos')])
+            self.vaos[name] = ctx.vertex_array(program, [(self.quad, '2f', 'in_pos')])
         self.size = None
         self.items = []
 
     def target(self, size):
         """The multisampled framebuffer to draw the scene into, `size` pixels."""
         if size != self.size:
-            for item in self.items:
-                item.release()
+            self._release_targets()
             ctx = self.ctx
             self.color = ctx.renderbuffer(size, 4, samples=self.samples)
             self.depth = ctx.depth_renderbuffer(size, samples=self.samples)
@@ -304,7 +303,14 @@ class Post:
         z = depth*2.0-1.0
         return float(2.0*near*far/(far+near-z*(far-near)))
 
-    def release(self):
+    def _release_targets(self):
         for item in self.items:
             item.release()
         self.items, self.size = [], None
+
+    def release(self):
+        """Free everything it holds on the GPU; it cannot be used after."""
+        self._release_targets()
+        for item in (*self.vaos.values(), *self.programs.values(), self.quad):
+            item.release()
+        self.vaos, self.programs = {}, {}

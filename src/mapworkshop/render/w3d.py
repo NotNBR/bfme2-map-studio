@@ -284,9 +284,17 @@ def parse_mesh(payload):
 
 
 class ModelCache:
+    """Models read once. A model the game has but that fails to parse loads as
+    None too, with the error in `unreadable` (model name -> error), so a reader
+    bug is told apart from a missing model."""
+
     def __init__(self, assets):
         self.assets = assets
         self.cache = {}
+        self.unreadable = {}
+
+    def _failed(self, model, error):
+        self.unreadable[model] = f'{type(error).__name__}: {error}'
 
     def load(self, model):
         """A model by name, or 'model+animation' for it posed at the
@@ -303,8 +311,8 @@ class ModelCache:
             try:
                 result = self._build(self.assets.read(key), self.pose(animation) if animation else None,
                                      set(hide.split(',')) - {''})
-            except (ValueError, KeyError, struct.error, IndexError):
-                result = None
+            except (ValueError, KeyError, struct.error, IndexError) as error:
+                self._failed(model, error)
         self.cache[model] = result
         return result
 
@@ -340,8 +348,8 @@ class ModelCache:
         if file_key is not None:
             try:
                 result = self._build_tree(self.assets.read(file_key))
-            except (ValueError, KeyError, struct.error, IndexError):
-                result = None
+            except (ValueError, KeyError, struct.error, IndexError) as error:
+                self._failed(model, error)
         self.cache[key] = result
         return result
 

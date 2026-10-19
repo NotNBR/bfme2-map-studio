@@ -251,10 +251,27 @@ class Viewer:
             ('draw', glfw.CROSSHAIR_CURSOR), ('move', glfw.RESIZE_ALL_CURSOR), ('rotate', glfw.POINTING_HAND_CURSOR),
             ('ew', glfw.RESIZE_EW_CURSOR), ('ns', glfw.RESIZE_NS_CURSOR),
             ('nesw', glfw.RESIZE_NESW_CURSOR), ('nwse', glfw.RESIZE_NWSE_CURSOR))}
-        glfw.set_mouse_button_callback(window, self.on_mouse_button)
-        glfw.set_cursor_pos_callback(window, self.on_cursor)
-        glfw.set_scroll_callback(window, self.on_scroll)
-        glfw.set_key_callback(window, self.on_key)
+        glfw.set_mouse_button_callback(window, self.guarded('the click', self.on_mouse_button))
+        glfw.set_cursor_pos_callback(window, self.guarded('the mouse move', self.on_cursor))
+        glfw.set_scroll_callback(window, self.guarded('the wheel', self.on_scroll))
+        glfw.set_key_callback(window, self.guarded('the key', self.on_key))
+
+    def guarded(self, what, handler):
+        """`handler` for a GLFW callback: an error shows in the status bar (and
+        the terminal) instead of closing the viewer, as pyGLFW re-raises it
+        from poll_events."""
+        def call(*args):
+            try:
+                return handler(*args)
+            except Exception as error:
+                self.report(what, error)
+        return call
+
+    def report(self, what, error):
+        """An error in the status bar and the terminal, the viewer kept open."""
+        import traceback
+        traceback.print_exc()
+        self.status.set(f'{what} failed: {error}'[:160], 10)
 
     @property
     def renderer(self):
@@ -449,9 +466,7 @@ class Viewer:
         try:
             self.handle_click(target)
         except Exception as error:
-            import traceback
-            traceback.print_exc()
-            self.status.set(f'{target[1] if isinstance(target, tuple) else target} failed: {error}', 10)
+            self.report(target[1] if isinstance(target, tuple) else target, error)
 
     def handle_click(self, target):
         toolbar = self.toolbar
@@ -602,6 +617,9 @@ class Viewer:
         self.mode = mode
         self.camerabar.open = None
         self.autofocus = False
+        if mode == 'edit' and self.post is not None:
+            self.post.release()            # the lens's targets: a full-size MSAA frame and more
+            self.post = None
         if mode == 'photo':
             self.editor.set_tool(None)
         self.set_capture(mode == 'photo')
@@ -833,22 +851,23 @@ class Viewer:
         ctx, samples = self.ctx, self.args.samples
         w, h = glfw.get_framebuffer_size(self.window)
         cam = self.current_camera(w/h)
-        resolve = ctx.framebuffer([ctx.renderbuffer((w, h), 4)])
+        pixels_rb = ctx.renderbuffer((w, h), 4)
+        resolve = ctx.framebuffer([pixels_rb])
         options = dict(grid=self.view['grid'], border=self.view['border'], shadow_radius=6000, time=self.time)
         photo = self.mode == 'photo'
         if photo and active(self.fly.settings()):
-            post = Post(ctx, samples)
-            self.renderer.draw(cam, (w, h), post.target((w, h)), **options)
-            post.finish(cam, self.fly.settings(), resolve, taps=256)
-            post.release()
-            items = (resolve,)
+            if self.post is None:
+                self.post = Post(ctx, samples)
+            self.renderer.draw(cam, (w, h), self.post.target((w, h)), **options)
+            self.post.finish(cam, self.fly.settings(), resolve, taps=256)
+            items = (resolve, pixels_rb)
         else:
             color = ctx.renderbuffer((w, h), 4, samples=samples)
             depth = ctx.depth_renderbuffer((w, h), samples=samples)
             fbo = ctx.framebuffer([color], depth)
             self.renderer.draw(cam, (w, h), fbo, **options)
             ctx.copy_framebuffer(resolve, fbo)
-            items = (fbo, resolve, color, depth)
+            items = (fbo, resolve, color, depth, pixels_rb)
         pixels = np.flipud(np.frombuffer(resolve.read(components=4), np.uint8).reshape(h, w, 4))[..., :3]
         for item in items:
             item.release()
@@ -1037,7 +1056,9 @@ class Viewer:
         if action != glfw.PRESS:
             return
         ctrl, shift = bool(mods & glfw.MOD_CONTROL), bool(mods & glfw.MOD_SHIFT)
-        if self.mode == 'photo' and not ctrl:
+        if self.mode == 'photo':
+            # Flying keys, with Ctrl (slower) or Shift (faster) too: Space must
+            # never reach Reset view by the Ctrl fallback of Commands.for_key.
             if key == glfw.KEY_SPACE:
                 return                     # flies up (drive)
             if key == glfw.KEY_R:
@@ -1045,7 +1066,10 @@ class Viewer:
                 return
         command = self.commands.for_key(key, ctrl, shift)
         if command is not None:
-            self.commands.run(command, self.renderer is not None)
+            try:
+                self.commands.run(command, self.renderer is not None)
+            except Exception as error:
+                self.report(command.label or command.id, error)
 
     # The frame loop ------------------------------------------------------------------
     def installed(self, event):
@@ -1103,7 +1127,11 @@ class Viewer:
             else:
                 r.draw(cam, size, self.ctx.screen, **options)
             if self.pending_save is not None:
-                self.finish_save(size)
+                try:
+                    self.finish_save(size)
+                except Exception as error:
+                    self.pending_save = None
+                    self.report('saving the view', error)
             # Every frame, so picking never sees marks that are gone or hidden. Photo mode shows none.
             shown = self.session.marks.items if self.editor.visible and not photo else []
             self.overlay.draw(shown, self.editor.drawing if not photo else None, self.editor.selected, cam,

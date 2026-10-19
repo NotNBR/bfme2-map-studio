@@ -4,7 +4,8 @@ import unittest
 
 import numpy as np
 
-from mapworkshop.render.w3d import CAMERA_MODES, GEOMETRY_TYPE, SKIN, classic_shader, grid_mapper, vertex_material
+from mapworkshop.render.w3d import (CAMERA_MODES, GEOMETRY_TYPE, MESH, SKIN, ModelCache, classic_shader, grid_mapper,
+                                    vertex_material)
 
 
 def chunk(kind, payload):
@@ -38,6 +39,23 @@ class GeometryTypeTests(unittest.TestCase):
         self.assertEqual(CAMERA_MODES.get(oriented & GEOMETRY_TYPE), 2)
         self.assertEqual(CAMERA_MODES.get(0x00010000), 1)
         self.assertIsNone(CAMERA_MODES.get(SKIN))
+
+
+class ModelCacheTests(unittest.TestCase):
+    def test_a_model_that_fails_to_parse_is_unreadable_not_missing(self):
+        class Assets:
+            def model_key(self, name):
+                return None if name == 'gone' else name
+
+            def read(self, key):
+                # A mesh chunk whose only sub-chunk claims 100 bytes it does not have.
+                return struct.pack('<II', MESH, 0x80000000 | 8) + struct.pack('<II', 0x02, 100)
+
+        cache = ModelCache(Assets())
+        self.assertIsNone(cache.load('broken'))
+        self.assertIsNone(cache.load_tree('broken'))
+        self.assertIsNone(cache.load('gone'))
+        self.assertEqual(list(cache.unreadable), ['broken'])
 
 
 if __name__ == '__main__':

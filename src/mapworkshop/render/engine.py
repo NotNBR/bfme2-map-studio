@@ -171,8 +171,8 @@ class MapRenderer:
         # Runtime switches (used by the interactive viewer).
         self.visible = dict(terrain=True, objects=True, water=True, decals=True, shadows=True, weather=True,
                             walkable=False, effects=True, flow=False)
-        self.report = dict(missing_textures=[], missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0,
-                           units=dict(hidden=0, hordes=0, members=0, posed=0))
+        self.report = dict(missing_textures=[], missing_models=[], unreadable_models={}, objects_drawn=0,
+                           objects_skipped=0, editor_markers=0, units=dict(hidden=0, hordes=0, members=0, posed=0))
         self._progress = report
         self._effects = {}
         self._lighting()
@@ -891,8 +891,8 @@ class MapRenderer:
                 item.release()
             if hasattr(self, attr):
                 delattr(self, attr)
-        self.report.update(missing_models=[], objects_drawn=0, objects_skipped=0, editor_markers=0,
-                           units=dict(hidden=0, hordes=0, members=0, posed=0))
+        self.report.update(missing_models=[], unreadable_models={}, objects_drawn=0, objects_skipped=0,
+                           editor_markers=0, units=dict(hidden=0, hordes=0, members=0, posed=0))
         self.batches = []
         self._objects_gpu()
 
@@ -1204,7 +1204,11 @@ class MapRenderer:
             self._bake_decals(decals)
         yield
         self._upload_volumes(self._prepared_volume_triangles)
-        self.report['missing_models'] = sorted(set(self.report['missing_models']))
+        # Models the game has but that would not parse are a reader problem, not missing ones.
+        unreadable = self.model_cache.unreadable
+        self.report['unreadable_models'] = {m: unreadable[m] for m in sorted(set(self.report['missing_models']))
+                                            if m in unreadable}
+        self.report['missing_models'] = sorted(set(self.report['missing_models']) - set(unreadable))
         self._apply_sky()
         self._effects_gpu()
 
@@ -1928,21 +1932,22 @@ class MapRenderer:
         width, height = size
         extra = {} if background is None else dict(clear=tuple(background))
         photo = camera.get('photo') or {}
-        resolve = ctx.framebuffer([ctx.renderbuffer((width, height), 4)])
+        pixels_rb = ctx.renderbuffer((width, height), 4)
+        resolve = ctx.framebuffer([pixels_rb])
         if active(photo):
             # Exposure and depth of field (render.photo) over the scene.
             post = Post(ctx, self.samples)
             self.draw(camera, size, post.target(size), grid=grid, border=border, bounds=bounds, time=time, **extra)
             post.finish(camera, photo, resolve, taps=256)
             post.release()
-            items = (resolve,)
+            items = (resolve, pixels_rb)
         else:
             color = ctx.renderbuffer((width, height), 4, samples=self.samples)
             depth = ctx.depth_renderbuffer((width, height), samples=self.samples)
             fbo = ctx.framebuffer([color], depth)
             self.draw(camera, size, fbo, grid=grid, border=border, bounds=bounds, time=time, **extra)
             ctx.copy_framebuffer(resolve, fbo)
-            items = (fbo, resolve, color, depth)
+            items = (fbo, resolve, color, depth, pixels_rb)
         pixels = np.frombuffer(resolve.read(components=4), np.uint8).reshape(height, width, 4)
         for item in items:
             item.release()

@@ -266,8 +266,19 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
         edge_texture_cells=0,edge_textures=[],blend_records=records,cliff_records=cliff_records),18)
 
 
+def _next_object_number(m):
+    """The next Ashen_NNNNN number: after any already in the map, so a map read
+    from a file (Map(data)) never gets the same uniqueID twice."""
+    if not hasattr(m,'_object_count'):
+        used=[int(v[6:]) for o in m.objects() for k,_,v in o['properties']
+              if k=='uniqueID' and isinstance(v,str) and v.startswith('Ashen_') and v[6:].isdigit()]
+        m._object_count=max(used,default=0)
+    m._object_count+=1
+    return m._object_count
+
+
 def add_object(m, template, x, y, angle=0, layer='', extra=(), z=0):
-    index=getattr(m,'_object_count',0)+1; m._object_count=index
+    index=_next_object_number(m)
     fields=[('objectInitialHealth',1,100),('objectEnabled',0,1),('objectIndestructible',0,0),
             ('objectUnsellable',0,0),('objectPowered',0,1),('objectRecruitableAI',0,1),
             ('objectTargetable',0,0),('objectBasePriority',1,40),('objectBasePhase',1,1),

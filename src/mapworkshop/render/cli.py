@@ -132,6 +132,7 @@ def main(argv=None):
                   options=renderer.options,
                   assets=dict(missing_textures=sorted(set(renderer.report['missing_textures'])),
                               missing_models=renderer.report['missing_models'],
+                              unreadable_models=renderer.report.get('unreadable_models', {}),
                               objects_drawn=renderer.report['objects_drawn'],
                               texture_size_errors=renderer.report.get('texture_size_errors', [])),
                   vegetation=renderer.report.get('vegetation'), fx_materials=renderer.report.get('fx_materials'),
