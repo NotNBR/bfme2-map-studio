@@ -105,11 +105,11 @@ def corner_masks(labels, texture):
     `texture` (an array of one texture per cell, -1 for none)."""
     h,w=labels.shape
     padded=np.pad(labels,1,mode='edge').astype(np.int32)
+    # The eight neighbours once each; neighbouring corners share them.
+    match={(dy,dx):padded[1+dy:1+dy+h,1+dx:1+dx+w]==texture for dy in (-1,0,1) for dx in (-1,0,1) if dy or dx}
     mask=np.zeros((h,w),dtype=np.int32)
     for bit,cells in enumerate(CORNER_CELLS):
-        hit=np.zeros((h,w),bool)
-        for dy,dx in cells:
-            hit|=padded[1+dy:1+dy+h,1+dx:1+dx+w]==texture
+        hit=match[cells[0]]|match[cells[1]]|match[cells[2]]
         mask|=hit.astype(np.int32)<<bit
     mask[texture<0]=0
     return mask
@@ -171,24 +171,50 @@ def corner_blend_records(labels, tile_index):
     below=higher_neighbours(labels,np.where(top<0,0,top)); below_mask=corner_masks(labels,below)
     for mask in (top_mask,below_mask):
         mask[[0,-1],:]=0; mask[:,[0,-1]]=0
-    blends=np.zeros((h,w),dtype='<u4'); extra=np.zeros((h,w),dtype='<u4'); records=[]; lookup={}
-    def record(texture,y,x,mask):
-        direction,flags,long_diagonal=CORNER_BLENDS[mask]
-        key=(int(tile_index(texture,y,x)),direction,flags,long_diagonal)
-        if key not in lookup:
-            records.append(blend_record(*key))
-            lookup[key]=len(records)
-        return lookup[key]
-    for y,x in zip(*np.nonzero(top_mask)):
-        t,tm,b,bm=int(top[y,x]),int(top_mask[y,x]),int(below[y,x]),int(below_mask[y,x])
-        if bm:
-            blends[y,x]=record(b,y,x,bm); extra[y,x]=record(t,y,x,tm)
-        elif tm in OPPOSITE_CORNERS:
-            first,second=OPPOSITE_CORNERS[tm]
-            blends[y,x]=record(t,y,x,first); extra[y,x]=record(t,y,x,second)
-        else:
-            blends[y,x]=record(t,y,x,tm)
+    blends=np.zeros((h,w),dtype='<u4'); extra=np.zeros((h,w),dtype='<u4')
+    ys,xs=np.nonzero(top_mask)
+    t,tm,b,bm=top[ys,xs],top_mask[ys,xs],below[ys,xs],below_mask[ys,xs]
+    # Each cell's blends, primary then three-way: with a texture below, it and
+    # the top one; opposite corners, the top one twice; else the top one alone.
+    two=bm!=0
+    opposite=~two&np.isin(tm,list(OPPOSITE_CORNERS))
+    first_mask,second_mask=tm.copy(),tm.copy()
+    for corners,(first,second) in OPPOSITE_CORNERS.items():
+        first_mask[opposite&(tm==corners)]=first; second_mask[opposite&(tm==corners)]=second
+    first_mask[two]=bm[two]
+    first_tex=np.where(two,b,t)
+    second=two|opposite
+    # In the order the cells take them: a cell's primary, then its three-way blend.
+    start=np.arange(len(ys))+np.cumsum(second)-second        # where each cell's primary goes
+    after=start[second]+1
+    calls=len(ys)+int(second.sum())
+    def listed(primary,three_way):
+        out=np.empty(calls,np.int64); out[start]=primary; out[after]=three_way
+        return out
+    tex,corner=listed(first_tex,t[second]),listed(first_mask,second_mask[second])
+    cy,cx=listed(ys,ys[second]),listed(xs,xs[second])
+    # Masks with one tile share a record (0b0101 and 0b0111 are both a long right diagonal).
+    shapes=sorted(set(CORNER_BLENDS.values()))
+    shape_of=np.full(16,-1)
+    for corners,blend in CORNER_BLENDS.items():
+        shape_of[corners]=shapes.index(blend)
+    shape=shape_of[corner]
+    if (shape<0).any():
+        raise KeyError(int(corner[shape<0][0]))     # a fully enclosed cell: call fill_enclosed first
+    keys,ids=_intern(tile_index(tex,cy,cx).astype(np.int64)*len(shapes)+shape)
+    records=[blend_record(int(k//len(shapes)),*shapes[k%len(shapes)]) for k in keys]
+    blends[ys,xs]=ids[start]
+    extra[ys[second],xs[second]]=ids[after]
     return blends,extra,records
+
+
+def _intern(keys):
+    """Number `keys` (an int array, in order) as records are: the distinct
+    keys in order of first appearance, and each key's number from 1."""
+    distinct,first,inverse=np.unique(keys,return_index=True,return_inverse=True)
+    order=np.argsort(first,kind='stable')
+    rank=np.empty(len(order),np.int64); rank[order]=np.arange(len(order))
+    return distinct[order],rank[inverse.ravel()]+1
 
 
 def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes=None, corner_blends=False,
@@ -231,12 +257,11 @@ def set_materials(m, palette, labels, blocked=None, blend_edges=True, cell_sizes
             other=np.roll(labels,(-dy,-dx),(0,1))
             mask=(other>labels)&(blends==0)
             mask[[0,-1],:]=False; mask[:,[0,-1]]=False
-            for y,x in zip(*np.nonzero(mask)):
-                key=(int(tile_index(other[y,x],y,x)),direction,flags)
-                if key not in lookup:
-                    records.append(blend_record(*key))
-                    lookup[key]=len(records)
-                blends[y,x]=lookup[key]
+            # Each direction's records are its own: its tiles, numbered in cell order.
+            ys,xs=np.nonzero(mask)
+            blend_tiles,ids=_intern(tile_index(other[ys,xs],ys,xs).astype(np.int64))
+            blends[ys,xs]=len(records)+ids
+            records+=[blend_record(int(tile),direction,flags) for tile in blend_tiles]
     cliff_index=np.zeros((h,w),dtype='<u4'); cliff_records=[]
     if cliffs is not None and np.any(cliffs):
         from mapworkshop.mapkit.cliffs import cliff_uvs

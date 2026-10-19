@@ -132,22 +132,38 @@ def _objects(before, after):
         else:
             added.append(o)
     removed = [o for group in waiting.values() for o in group]
-    moved = []
-    by_kind = defaultdict(list)
-    for o in removed:
-        by_kind[o['template'], _layer(o)].append(o)
-    still_added = []
-    for o in added:
-        candidates = by_kind.get((o['template'], _layer(o)), [])
-        best = min(candidates, key=lambda c: math.dist((c['x'], c['y']), (o['x'], o['y'])), default=None)
-        if best is not None and math.dist((best['x'], best['y']), (o['x'], o['y'])) <= MOVE_REACH:
-            candidates.remove(best)
-            moved.append((best, o))
-        else:
-            still_added.append(o)
-    removed = [o for group in by_kind.values() for o in group]
+    moved, still_added, taken = _moves(removed, added)
+    removed = [o for i, o in enumerate(removed) if i not in taken]
     return dict(before=len(a), after=len(b), added=_groups(still_added), removed=_groups(removed),
                 moved=[_move(old, new) for old, new in moved], changed=[_change(old, new) for old, new in changed])
+
+
+def _moves(removed, added):
+    """Pair each added object, in order, with the nearest removed one of its
+    template and layer still free within MOVE_REACH (the first of equals).
+    Removed objects sit in MOVE_REACH-sized cells, so only the 3 x 3 cells
+    around an added one can hold a match. Returns the (old, new) pairs, the
+    objects still added, and the indices into `removed` that moved."""
+    cells = defaultdict(list)                    # (template, layer, cell x, cell y) -> indices into removed
+    for i, o in enumerate(removed):
+        cells[o['template'], _layer(o), int(o['x'] // MOVE_REACH), int(o['y'] // MOVE_REACH)].append(i)
+    moved, still_added, taken = [], [], set()
+    for o in added:
+        kind, cx, cy = (o['template'], _layer(o)), int(o['x'] // MOVE_REACH), int(o['y'] // MOVE_REACH)
+        best = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for i in cells.get((*kind, cx + dx, cy + dy), ()):
+                    if i not in taken:
+                        d = math.dist((removed[i]['x'], removed[i]['y']), (o['x'], o['y']))
+                        if d <= MOVE_REACH and (best is None or (d, i) < best):
+                            best = (d, i)
+        if best is None:
+            still_added.append(o)
+        else:
+            taken.add(best[1])
+            moved.append((removed[best[1]], o))
+    return moved, still_added, taken
 
 
 def _groups(objects):

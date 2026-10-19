@@ -56,6 +56,19 @@ class MapDiffTests(unittest.TestCase):
         self.assertIn('+1 TreeA [Woods] at (1400, 1500)', text)
         self.assertIn('-1 TreeA [Woods] at (400, 320)', text)
 
+    def test_a_move_takes_the_nearest_free_object_and_the_first_of_equals(self):
+        def trees(*points):
+            m = create(64, 64, 4)
+            for x, y in points:
+                add_object(m, 'TreeA', x, y)
+            return m
+        # Two equally near: the earlier one moved. Across a cell edge of the
+        # matching grid (MOVE_REACH 300) still counts.
+        moved = compare(trees((100, 200), (300, 200)), trees((200, 200)))['objects']['moved']
+        self.assertEqual([m['before'] for m in moved], [[100, 200]])
+        moved = compare(trees((290, 100), (610, 100)), trees((310, 100), (600, 100)))['objects']['moved']
+        self.assertEqual(sorted((m['before'][0], m['after'][0]) for m in moved), [(290, 310), (610, 600)])
+
     def test_terrain_heights_textures_and_passability(self):
         text = '\n'.join(lines(compare(build(), build(hill=20., paint=True, blocked=True))))
         self.assertIn('Heights: ', text)

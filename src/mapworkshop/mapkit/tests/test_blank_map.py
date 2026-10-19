@@ -126,6 +126,12 @@ class BlankDocumentTests(unittest.TestCase):
         self.assertIsInstance(Reader(m.chunk('ObjectsList').data).take(4), bytes)
         self.assertEqual(m.objects(), Map(m.encode()).objects())
 
+    def test_blend_records_are_numbered_in_order_of_first_use(self):
+        from mapworkshop.mapkit.blank import _intern
+        keys, ids = _intern(np.array([7, 3, 7, 9, 3, 3]))
+        self.assertEqual(keys.tolist(), [7, 3, 9])
+        self.assertEqual(ids.tolist(), [1, 2, 1, 3, 2, 2])
+
     def test_world_info_values_change_by_name(self):
         m=create(71,83,3,title='Vale',description='A quiet vale.')
         set_world(m,cameraMaxHeight=30000.)
