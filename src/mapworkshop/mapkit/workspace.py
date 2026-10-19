@@ -116,19 +116,35 @@ def preview(path, output):
 def main(argv=None):
     p = argparse.ArgumentParser(prog='mw workspace', description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
-    for name in ('inspect', 'catalog'):
-        s = sub.add_parser(name)
-        s.add_argument('map', type=Path)
-        s.add_argument('--out', type=Path)
-    s = sub.add_parser('checkout'); s.add_argument('source', type=Path); s.add_argument('name')
-    s = sub.add_parser('apply'); s.add_argument('name'); s.add_argument('recipe', type=Path)
+    name_help = 'The workspace, in local/workspaces/'
+    for name, text in (('inspect', "A map's report: dimensions, heights, objects, templates, textures, chunks (formats.map.Map.report)"),
+                       ('catalog', "A map's templates, textures and waypoints")):
+        s = sub.add_parser(name, help=text)
+        s.add_argument('map', type=Path, help='The .map file')
+        s.add_argument('--out', type=Path, help='Also write the JSON to this file')
+    s = sub.add_parser('checkout', help='Copy a .map and its sidecar files into a new workspace, with a first checkpoint')
+    s.add_argument('source', type=Path, help='The .map file to copy (it is never changed)')
+    s.add_argument('name', help='The new workspace: lowercase letters, digits, - and _')
+    s = sub.add_parser('apply', help="Apply a JSON recipe (mapkit.author) to the workspace's map, checkpointed before and after")
+    s.add_argument('name', help=name_help)
+    s.add_argument('recipe', type=Path, help='The recipe JSON; each one applies once per workspace')
     s.add_argument('--expect-sha', required=True, help='Current on-disk file SHA256 from status; rejects stale edits')
-    s = sub.add_parser('checkpoint'); s.add_argument('name'); s.add_argument('--note', required=True)
-    for name in ('status', 'handoff'):
-        s = sub.add_parser(name); s.add_argument('name')
-    s = sub.add_parser('preview'); s.add_argument('map', type=Path); s.add_argument('output', type=Path)
-    s = sub.add_parser('diff'); s.add_argument('before', type=Path); s.add_argument('after', type=Path)
-    s = sub.add_parser('plan-size'); s.add_argument('map', type=Path); s.add_argument('--area-factor', type=float, default=3)
+    s = sub.add_parser('checkpoint', help="Snapshot the workspace's map and sidecars")
+    s.add_argument('name', help=name_help)
+    s.add_argument('--note', required=True, help='What the snapshot is of')
+    for name, text in (('status', "The workspace's map: its path, SHA256 (for apply --expect-sha) and report"),
+                       ('handoff', 'Status plus the steps to edit it in WorldBuilder, also written to handoff.json')):
+        s = sub.add_parser(name, help=text)
+        s.add_argument('name', help=name_help)
+    s = sub.add_parser('preview', help='A top-view diagnostic PNG: heights, texture kinds, impassable cells, starts')
+    s.add_argument('map', type=Path, help='The .map file')
+    s.add_argument('output', type=Path, help='The PNG to write')
+    s = sub.add_parser('diff', help='What differs between two .map files (mapkit.mapdiff)')
+    s.add_argument('before', type=Path, help='The earlier .map file')
+    s.add_argument('after', type=Path, help='The later .map file')
+    s = sub.add_parser('plan-size', help='The playable size a map would have with N times its area (a plan; changes nothing)')
+    s.add_argument('map', type=Path, help='The .map file')
+    s.add_argument('--area-factor', type=float, default=3, help='How many times the playable area (3)')
     args = p.parse_args(argv)
     if args.command in ('inspect', 'catalog'):
         m = Map(args.map.read_bytes())

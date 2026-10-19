@@ -137,7 +137,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog='mw view', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: the last one)')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
-    parser.add_argument('--lod', choices=['low', 'medium', 'high'], default='medium')
+    parser.add_argument('--lod', choices=['low', 'medium', 'high'], default='medium',
+                        help='Game detail level to imitate (GameLOD.ini; Preview changes it later); default medium')
     parser.add_argument('--size', default='1600x1000', help='Initial window size')
     parser.add_argument('--samples', type=int, default=4, help='MSAA samples')
     parser.add_argument('--weather', default='map',

@@ -582,7 +582,7 @@ def main(argv=None):
     parser.add_argument('--archive',type=Path,help='Maps.big used by archive entries')
     parser.add_argument('--ini',type=Path,default=GAME_DATA/'data/ini/object',help='Effective object INI directory')
     parser.add_argument('--out',required=True,type=Path,help='Output directory; never writes into input maps')
-    parser.add_argument('--columns',type=int,default=3)
+    parser.add_argument('--columns',type=int,default=3,help='Panels per row of the atlas and forest-patch sheets, 1-6 (3)')
     parser.add_argument('--patch-size',type=float,default=1000,help='World extent of equal-scale panels')
     parser.add_argument('--crown-radius',type=float,default=16,help='Illustrative tree-dot radius in world units')
     parser.add_argument('--contour-step',type=float,default=25,help='Elevation interval, or 0 to disable contours')

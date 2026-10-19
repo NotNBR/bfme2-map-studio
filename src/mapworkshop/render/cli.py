@@ -47,14 +47,14 @@ def resolve_map(name):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='mw render', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--map', required=True, help='Map project, stock map or .map file')
-    parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--out', required=True, type=Path, help='Folder for the PNGs and render.json (created if missing)')
     parser.add_argument('--view', nargs='+', action='append', default=[], metavar=('NAME', 'KEY=VALUE'),
                         help='Named view followed by camera settings')
     parser.add_argument('--views', type=Path, help='JSON file with named views')
     parser.add_argument('--top', action='store_true', help='Add a top view of the whole map')
     parser.add_argument('--top-scale', type=float, default=2.0, help='Top-view pixels per terrain cell')
     parser.add_argument('--size', default='1600x1200', help='Orbit-view image size')
-    parser.add_argument('--no-objects', action='store_true')
+    parser.add_argument('--no-objects', action='store_true', help='Leave out every placed object: terrain and water alone')
     parser.add_argument('--normal-maps', choices=['auto', 'on', 'off'], default='auto',
                         help='Terrain normal maps; auto follows --lod (on at high)')
     parser.add_argument('--no-clouds', action='store_true',
