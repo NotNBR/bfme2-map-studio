@@ -261,7 +261,7 @@ def seat(m):
 def walkway(o, assets, models, cache):
     """A walk-on-top piece's meshes in map units: (its walkway's triangles, all its walking triangles), each a (3, 3)
     array of x, y and height over the ground under the piece's origin."""
-    data = template_data(assets.templates, o['template'], cache)
+    data = template_data(assets, o['template'], cache)
     info = assets.template_model(o['template'])
     model = models.load(info['model']) if info else None
     names = {k: v.lower() for k, v in data['meshes'].items()}
@@ -343,7 +343,7 @@ def defenders(m, assets, ground):
     for o in m.objects():
         if o['template'] in SOLID:
             ground.taken.append((o['x'], o['y'], 110))
-        data = template_data(assets.templates, o['template'], cache)
+        data = template_data(assets, o['template'], cache)
         if not data or 'WALK_ON_TOP_OF_WALL' not in data['kinds']:
             continue
         walk, every = walkway(o, assets, models, cache)

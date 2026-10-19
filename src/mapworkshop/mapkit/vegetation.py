@@ -19,8 +19,7 @@ objects crashed during map load (logic frame 0, an empty "Game crash" dialog,
 no crash report). Not yet diagnosed.
 """
 
-import re
-
+from mapworkshop.assets import ini
 
 TREE_BUFFER = 1200
 SHRUB_BUFFER = 2000
@@ -28,37 +27,24 @@ PREFIX = 'GW_'
 _DROP_KINDS = {'TREE', 'SHRUB', 'OPTIMIZED_TREE', 'OPTIMIZED_PROP', 'CLUB', 'SELECTABLE'}
 
 
-def _field(body, pattern):
-    match = re.search(pattern, body)
-    return match.group(1) if match else None
-
-
 def describe(templates, name, model_textures=None):
     """Vegetation info for a template, following ObjectReskin/ChildObject
     parents: dict(buffer='tree'|'shrub', model, texture, model_texture,
-    fuzziness, kinds) or None when it is not buffered vegetation."""
+    fuzziness, kinds) or None when it is not buffered vegetation. `templates`
+    is GameAssets (its bodies with their #include files) or its templates."""
     info = {}
-    seen = set()
-    key = name.lower()
-    while key and key not in seen:
-        seen.add(key)
-        entry = templates.get(key)
-        if entry is None:
-            break
-        body = entry['body']
-        tree = re.search(r'(?ims)^\s*Draw\s*=\s*W3DTreeDraw\b(.*?)^\s*End\b', body)
+    for body in ini.bodies(templates, name):
+        tree = ini.in_module(body, 'W3DTreeDraw')
         if tree and 'model' not in info:
-            info['model'] = _field(tree.group(1), r'(?im)^\s*ModelName\s*=\s*(\S+)')
-            info['texture'] = _field(tree.group(1), r'(?im)^\s*TextureName\s*=\s*(\S+)')
-        if 'kinds' not in info:
-            kinds = _field(body, r'(?im)^\s*KindOf\s*=\s*([^;\r\n]*)')
-            if kinds:
-                info['kinds'] = kinds.split()
+            info['model'] = (tree.get('modelname') or '').split()[0] if tree.get('modelname') else None
+            info['texture'] = (tree.get('texturename') or '').split()[0] if tree.get('texturename') else None
+        own = ini.top(body)
+        if 'kinds' not in info and own.get('kindof'):
+            info['kinds'] = own['kindof'].split()
         if 'fuzziness' not in info:
-            fuzz = _field(body, r'(?im)^\s*InstanceScaleFuzziness\s*=\s*([\d.]+)')
-            if fuzz:
-                info['fuzziness'] = float(fuzz)
-        key = entry.get('parent')
+            fuzz = ini.number(own.get('instancescalefuzziness'), None)
+            if fuzz is not None:
+                info['fuzziness'] = fuzz
     if not info.get('model'):
         return None
     kinds = set(info.get('kinds', []))

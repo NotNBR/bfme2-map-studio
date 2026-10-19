@@ -17,66 +17,38 @@ from pathlib import Path
 
 import numpy as np
 
+from mapworkshop.assets import ini
 from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.mapkit.lines import inside
 
 CELL = 10
-NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
-
-
-def number(text, default=0.):
-    """The number a value starts with, as the game's INI reader takes it:
-    '177.0+' and '8.0CA' (both in the retail INI) read 177.0 and 8.0."""
-    match = re.match(NUMBER, text.strip())
-    return float(match.group(0)) if match else default
+number = ini.number
 
 
 def template_data(templates, name, cache=None, visiting=None):
-    """Inherited KindOf, geometry and walking meshes from object INI entries."""
+    """Inherited KindOf, geometry and walking meshes from object INI entries.
+    `templates` is GameAssets (bodies with their #include files) or its
+    templates dict."""
     cache = {} if cache is None else cache
     visiting = set() if visiting is None else visiting
     name = name.lower()
     if name in cache:
         return cache[name]
-    entry = templates.get(name)
+    entry = getattr(templates, 'templates', templates).get(name)
     if entry is None or name in visiting:
         return None
     visiting.add(name)
     parent = template_data(templates, entry['parent'], cache, visiting) if entry.get('parent') else None
     result = copy.deepcopy(parent) if parent else dict(kinds=set(), shapes=[], small=False, scale=1., meshes={})
     shape = result['shapes'][0] if result['shapes'] else None
-    # INI nesting matters: module-local Geometry/Scale must not replace object data.
-    # A bare word opens a block (DefaultModelConditionState, ArmorSet, ...);
-    # statements with arguments (ParticleSysBone bone system, script calls
-    # such as CurDrawableHideSubObject(...)) do not, and the lines of a
-    # BeginScript ... EndScript region are skipped.
-    depth, script = 0, False
-    for raw in entry['body'].splitlines():
-        line = raw.split(';', 1)[0].split('//', 1)[0].strip()
-        if not line:
+    # INI nesting matters (assets.ini): module-local Geometry/Scale must not replace object data.
+    for s in ini.statements(ini.body(templates, entry)):
+        if s.opens:
             continue
-        if script:
-            script = not re.match(r'^EndScript\b', line, re.I)
-            continue
-        if re.match(r'^BeginScript\b', line, re.I):
-            script = True
-            continue
-        if re.match(r'^End\b', line, re.I):
-            depth = max(0, depth - 1)
-            continue
-        match = re.match(r'(\w+)\s*=\s*(.*)', line)
-        if not match:
-            if not line.startswith('#') and re.fullmatch(r'\w+', line):
-                depth += 1
-            continue
-        key, value = match.group(1).lower(), match.group(2).strip()
-        if key in ('draw', 'behavior', 'body', 'clientupdate', 'clientbehavior', 'locomotorset',
-                   'armorset', 'weaponset', 'modelconditionstate', 'animationstate', 'transitionstate', 'animation'):
-            depth += 1
-            continue
+        key, value = s.key, s.value
         if key in ('wallboundsmesh', 'rampmesh1', 'rampmesh2'):
             result['meshes'][key] = value
-        if depth:
+        if s.path:
             continue
         if key == 'kindof':
             tokens = value.upper().split()
@@ -97,7 +69,7 @@ def template_data(templates, name, cache=None, visiting=None):
         elif key in ('geometrymajorradius', 'geometryminorradius') and shape is not None:
             shape['major' if key == 'geometrymajorradius' else 'minor'] = number(value)
         elif key == 'geometryoffset' and shape is not None:
-            xyz = {k.upper(): float(v) for k, v in re.findall(r'([XYZ]):\s*('+NUMBER+')', value)}
+            xyz = {k.upper(): float(v) for k, v in re.findall(r'([XYZ]):\s*('+ini.NUMBER+')', value)}
             shape['offset'] = tuple(xyz.get(k, 0.) for k in 'XYZ')
         elif key == 'geometryissmall':
             result['small'] = value.lower() == 'yes'
@@ -225,7 +197,7 @@ def compute(m, *, assets=None, map_ini='', models=None):
     for obj in objects:
         if obj['flags'] & 0x30 or obj['template'].startswith('*'):
             continue
-        data = template_data(assets.templates, obj['template'], cache)
+        data = template_data(assets, obj['template'], cache)
         if data is None:
             warnings.add('Unknown object template: '+obj['template'])
             continue

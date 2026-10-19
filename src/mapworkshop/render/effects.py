@@ -25,6 +25,7 @@ import zlib
 
 import numpy as np
 
+from mapworkshop.assets import ini
 from mapworkshop.assets.models import chunks
 
 FRAMES_PER_SECOND = 30.0
@@ -581,33 +582,25 @@ def system_particles(s, origins, angles, seeds, time):
 def particle_bones(assets, template):
     """(bone, system) pairs of `ParticleSysBone` in the states an idle object
     shows: the draw module's DefaultModelConditionState and BFME2's
-    IdleAnimationState (FireBonfire keeps its systems there). Follows
-    ObjectReskin/ChildObject parents."""
-    seen, name = set(), template.lower()
-    while name and name not in seen:
-        seen.add(name)
-        entry = assets.templates.get(name)
-        if entry is None:
-            break
-        lines = [l.split(';', 1)[0].strip() for l in entry['body'].splitlines()]
-        found, depth = [], 0
-        for line in lines:
-            if depth == 0:
-                if re.match(r'(?i)(DefaultModelConditionState|IdleAnimationState)\b', line):
-                    depth = 1
-                continue
-            if line.lower() == 'end':
-                depth -= 1
-                continue
-            if re.match(r'(?i)Animation(\s*=.*)?$', line):
-                depth += 1                       # a nested Animation ... End block
-                continue
-            match = re.match(r'(?i)ParticleSysBone\s*=?\s*(\S+)\s+(\S+)', line)
-            if match:
-                found.append((match.group(1).lower(), match.group(2)))
+    IdleAnimationState (FireBonfire keeps its systems there), however deep
+    in them. Follows ObjectReskin/ChildObject parents (assets.ini)."""
+    states = ('defaultmodelconditionstate', 'idleanimationstate')
+    for body in ini.bodies(assets, template):
+        by_state = {}
+        for s in ini.statements(body):
+            words = ini.words(s.value)
+            state = next((p for p in s.path if p in states), None)
+            if s.key == 'particlesysbone' and state and len(words) > 1:
+                by_state.setdefault(state, []).append((words[0].lower(), words[1]))
+        # A state may repeat a system (CineFireRing, twelve times, for a denser
+        # fire); a pair the default state has already given (the Ents name
+        # TreeBeardIdleLeaves in both) is not added again.
+        found = []
+        for pairs in by_state.values():
+            earlier = set(found)
+            found += [p for p in pairs if p not in earlier]
         if found:
             return found
-        name = entry['parent']
     return []
 
 

@@ -1465,32 +1465,14 @@ class MapRenderer:
         return 1.0
 
     def _template_value(self, template, key):
-        """A template's INI value for `key`, inherited through ObjectReskin/ChildObject."""
-        name, seen = template.lower(), set()
-        while name and name not in seen:
-            seen.add(name)
-            entry = self.assets.templates.get(name)
-            if entry is None:
-                return None
-            match = re.search(r'(?im)^\s*' + key + r'\s*=\s*([^\s;]+)', entry['body'])
-            if match:
-                return match.group(1)
-            name = entry['parent']
-        return None
+        """The first word of a template's own (top-level) INI value for `key`,
+        inherited through ObjectReskin/ChildObject (assets.ini)."""
+        value = self.assets.template_value(template, key)
+        return value.split()[0] if value and value.split() else None
 
     def _template_has(self, template, key, word):
-        """Whether a template's (inherited) `key` line lists `word`."""
-        name, seen = template.lower(), set()
-        while name and name not in seen:
-            seen.add(name)
-            entry = self.assets.templates.get(name)
-            if entry is None:
-                return False
-            match = re.search(r'(?im)^\s*' + key + r'\s*=([^;\r\n]*)', entry['body'])
-            if match:
-                return word.upper() in match.group(1).upper().split()
-            name = entry['parent']
-        return False
+        """Whether a template's own (inherited) `key` line lists `word`."""
+        return word.upper() in (self.assets.template_value(template, key) or '').upper().split()
 
     def _template_float(self, template, key):
         try:

@@ -33,9 +33,10 @@ import sys
 import time
 from collections import Counter, defaultdict
 
+from mapworkshop.assets import ini
 from mapworkshop.config import CACHE, GAME_DATA, RENDERS
 
-VERSION = 1
+VERSION = 2                     # the index's layout and readers: a change rebuilds it
 INDEX = CACHE/'catalog.json'
 
 SCENERY = ('Nature', 'Built scenery', 'Gameplay neutrals')
@@ -62,15 +63,13 @@ def _number(text):
 def facts(assets, name):
     """What a template's INI says, its parents' fields included; None if the
     game does not define it."""
-    chain, seen, key = [], set(), name.lower()
-    while key and key in assets.templates and key not in seen:
-        seen.add(key)
-        chain.append(assets.templates[key])
-        key = assets.templates[key]['parent']
+    chain = ini.chain(assets.templates, name)
     if not chain:
         return None
-    bodies = [re.sub(r';[^\n]*', '', e['body']) for e in chain]
-    get = lambda k: next((v for b in bodies if (v := _field(b, k))), None)
+    bodies = ini.bodies(assets, name)
+    # The object's own fields are its top-level lines (assets.ini); draws and particles are its modules'.
+    get = lambda k: ini.inherited(bodies, k) or None
+    lines = [s for b in bodies for s in ini.statements(b)]
     model = assets.template_model(name)
     own = chain[0]
     return dict(
@@ -82,8 +81,8 @@ def facts(assets, name):
         geometry=(get('Geometry') or '').split()[0].upper() if get('Geometry') else '',
         radius=_number(get('GeometryMajorRadius')), height=_number(get('GeometryHeight')),
         buildcost=get('BuildCost'), commandset=get('CommandSet'),
-        draws=sorted({d for b in bodies for d in re.findall(r'(?im)^\s*Draw\s*=\s*(\w+)', b)}),
-        particles=sorted({p for b in bodies for p in re.findall(r'(?im)^\s*ParticleSysBone\s*=\s*\S+\s+(\w+)', b)}),
+        draws=sorted({s.value.split()[0] for s in lines if s.key == 'draw' and not s.path and s.value.split()}),
+        particles=sorted({ini.words(s.value)[1] for s in lines if s.key == 'particlesysbone' and len(ini.words(s.value)) > 1}),
         model=model['model'] if model else '', scale=model['scale'] if model else None,
         tree=bool(model and model['tree']))
 
@@ -614,7 +613,7 @@ def _object_names(assets):
     return set(assets.templates) | {n.lower() for n in _named(assets.ini_text('crate.ini'), '(?:Object|ChildObject|ObjectReskin)')}
 
 
-MODULE = re.compile(r'(?i)^(Draw|Behavior|Body|ClientUpdate|ClientBehavior)\s*=\s*(\w+)\s+(\w+)')
+MODULE_NAMES = dict(draw='Draw', behavior='Behavior', body='Body', clientupdate='ClientUpdate', clientbehavior='ClientBehavior')
 
 
 def _override_problems(name, body):
@@ -622,41 +621,23 @@ def _override_problems(name, body):
     the game refuses (ThingTemplate::parseModuleName in the OpenBFME fork,
     from the retail code): a module declared outside AddModule, ReplaceModule
     or InheritableModule, and a ReplaceModule whose module keeps the old tag."""
-    out, depth, script, replacing = [], 0, False, []
-    for raw in body.splitlines():
-        line = raw.split(';', 1)[0].split('//', 1)[0].strip()
-        if not line or line.startswith('#'):
+    out, replacing = [], []                 # (depth of each open ReplaceModule, its tag)
+    for s in ini.statements(body):
+        depth = len(s.path)
+        while replacing and replacing[-1][0] >= depth:
+            replacing.pop()                 # that ReplaceModule's block has ended
+        words = s.value.split()
+        if s.key == 'replacemodule':
+            replacing.append((depth, words[0] if words else ''))
+        if s.key not in ini.MODULE_KEYS or len(words) < 2:
             continue
-        if script:
-            script = not re.match(r'(?i)^EndScript\b', line)
-            continue
-        if re.match(r'(?i)^BeginScript\b', line):
-            script = True
-            continue
-        if re.match(r'(?i)^End\b', line):
-            depth = max(0, depth - 1)
-            if replacing and replacing[-1][0] == depth:
-                replacing.pop()
-            continue
-        edit = re.match(r'(?i)^(AddModule|ReplaceModule|InheritableModule)\b\s*(\w*)', line)
-        if edit:
-            if edit.group(1).lower() == 'replacemodule':
-                replacing.append((depth, edit.group(2)))
-            depth += 1
-            continue
-        module = MODULE.match(line)
-        if module:
-            if depth == 0:
-                out.append(f'Object {name}: {module.group(1)} {module.group(3)} outside AddModule or ReplaceModule; '
-                           'the game stops loading a map whose map.ini overrides an object so '
-                           '("You must use AddModule to add modules in override INI files")')
-            elif replacing and replacing[-1][0] == depth - 1 and module.group(3).lower() == replacing[-1][1].lower():
-                out.append(f'Object {name}: ReplaceModule {replacing[-1][1]} keeps the tag; the game needs a new one')
-            depth += 1
-            continue
-        if re.fullmatch(r'\w+', line) or re.match(
-                r'(?i)^(LocomotorSet|ArmorSet|WeaponSet|ModelConditionState|AnimationState|TransitionState|Animation)\s*=', line):
-            depth += 1
+        module, tag = MODULE_NAMES[s.key], words[1]
+        if depth == 0:
+            out.append(f'Object {name}: {module} {tag} outside AddModule or ReplaceModule; '
+                       'the game stops loading a map whose map.ini overrides an object so '
+                       '("You must use AddModule to add modules in override INI files")')
+        elif replacing and replacing[-1][0] == depth - 1 and tag.lower() == replacing[-1][1].lower():
+            out.append(f'Object {name}: ReplaceModule {replacing[-1][1]} keeps the tag; the game needs a new one')
     return out
 
 

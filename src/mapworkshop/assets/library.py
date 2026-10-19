@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image
 
 from mapworkshop.config import GAME_DATA, archive_paths, game_dir
+from mapworkshop.assets import ini
 from mapworkshop.formats.big import BigArchive
 
 TEXTURE_EXTENSIONS = ('.dds', '.tga', '.jpg')
@@ -28,7 +29,6 @@ WORLD_BUILDER = re.compile(r'(?ims)^\s*ModelConditionState\s*=\s*WORLD_BUILDER\b
 # Templates whose editor model stands in for what the game makes of them:
 # a horde's units, a castle centre's castle.
 STAND_INS = {'HORDE', 'CASTLE_CENTER', 'BASE_FOUNDATION'}
-COMMENT = re.compile(r'(?:;|//)[^\n]*')
 
 
 class GameAssets:
@@ -190,41 +190,29 @@ class GameAssets:
         return cache[template.lower()]
 
     def _template_model(self, template):
-        seen = set()
-        name = template.lower()
         found = {}
-        while name and name not in seen:
-            seen.add(name)
-            entry = self.templates.get(name)
-            if entry is None:
-                break
-            body = entry['body']
-            match = re.search(r'(?im)^\s*KindOf\s*=\s*([^;\n]*)', body)
-            if match and 'kinds' not in found:
-                found['kinds'] = {k.lstrip('+').upper() for k in match.group(1).split() if not k.startswith('-')}
-            for key, pattern in [('scale', r'(?im)^\s*Scale\s*=\s*([\d.]+)'),
-                                 ('fuzziness', r'(?im)^\s*InstanceScaleFuzziness\s*=\s*([\d.]+)')]:
-                match = re.search(pattern, body)
-                if match and key not in found:
-                    found[key] = float(match.group(1))
-            if re.search(r'(?im)^\s*Draw\s*=\s*W3DPropDraw\b', body):
+        for body in self.template_bodies(template):
+            # The object's own properties are its top-level lines (assets.ini), not a module's.
+            own = ini.top(body)
+            if 'kindof' in own and 'kinds' not in found:
+                found['kinds'] = {k.lstrip('+').upper() for k in own['kindof'].split() if not k.startswith('-')}
+            for key, name in (('scale', 'scale'), ('fuzziness', 'instancescalefuzziness')):
+                value = ini.number(own.get(name), None)
+                if value is not None and key not in found:
+                    found[key] = value
+            if any(not s.path and s.key == 'draw' and s.value.lower().split()[:1] == ['w3dpropdraw']
+                   for s in ini.statements(body)):
                 found.setdefault('prop', True)
-            match = re.search(r'(?im)^\s*Shadow\s*=\s*(\w+)', body)
-            if match and 'shadow' not in found:
-                found['shadow'] = match.group(1).upper()
-            match = re.search(r'(?im)^\s*EditorSorting\s*=\s*(\w+)', body)
-            if match and 'sorting' not in found:
-                found['sorting'] = match.group(1).upper()
+            for key, name in (('shadow', 'shadow'), ('sorting', 'editorsorting')):
+                if own.get(name) and key not in found:
+                    found[key] = own[name].split()[0].upper()
             if 'model' not in found:
-                tree = re.search(r'(?ims)^\s*Draw\s*=\s*W3DTreeDraw.*?^\s*End', body)
-                if tree:
-                    model = re.search(r'(?im)^\s*ModelName\s*=\s*([\w.]+)', tree.group(0))
-                    texture = re.search(r'(?im)^\s*TextureName\s*=\s*([\w.]+)', tree.group(0))
-                    if model:
-                        found['model'] = model.group(1).lower()
-                        found['texture'] = texture.group(1) if texture else None
-                        found['tree'] = True
-                        found['tainted'] = bool(re.search(r'(?im)^\s*TaintedTree\s*=\s*Yes', tree.group(0)))
+                tree = ini.in_module(body, 'W3DTreeDraw')
+                if (tree.get('modelname') or '').split():
+                    found['model'] = tree['modelname'].split()[0].lower()
+                    found['texture'] = tree['texturename'].split()[0] if (tree.get('texturename') or '').split() else None
+                    found['tree'] = True
+                    found['tainted'] = (tree.get('taintedtree') or '').lower().startswith('yes')
                 game = WORLD_BUILDER.sub('', body)
                 for match in re.finditer(r'(?im)^\s*(?:Model|ModelName)\s*=\s*([\w.]+)', game):
                     if 'model' not in found and match.group(1).lower() != 'none':
@@ -237,7 +225,6 @@ class GameAssets:
                     match = re.search(r'(?im)^\s*Model\s*=\s*(?!none\b)([\w.]+)', state)
                     if match and 'editor_model' not in found:
                         found['editor_model'] = match.group(1).lower()
-            name = entry['parent']
         editor = 'model' not in found and 'editor_model' in found
         if editor:
             found['model'] = found['editor_model']
@@ -250,18 +237,17 @@ class GameAssets:
                     editor=editor and not found.get('kinds', set()) & STAND_INS,
                     unit=found.get('sorting') == 'UNIT')
 
-    def _bodies(self, template):
+    def template_bodies(self, template):
         """The template's body, then its parents', with their #include files
-        in place and comments removed."""
-        seen, name, bodies = set(), template.lower(), []
-        while name and name not in seen and name in self.templates:
-            seen.add(name)
-            entry = self.templates[name]
-            bodies.append(COMMENT.sub('', self._included(entry['body'], entry['file'])))
-            name = entry['parent']
-        return bodies
+        in place and comments removed (assets.ini.bodies)."""
+        return ini.bodies(self, template)
 
-    def _included(self, text, file, depth=0):
+    def template_value(self, template, key):
+        """A template's own (top-level) value for key, inherited from its
+        parents; None without one (assets.ini.inherited)."""
+        return ini.inherited(self.template_bodies(template), key)
+
+    def included(self, text, file, depth=0):
         """INI text with each #include "path" (relative to `file`, below
         data/ini) replaced by that file's text."""
         if depth > 4 or '#include' not in text.lower():
@@ -272,7 +258,7 @@ class GameAssets:
             path = posixpath.normpath(posixpath.join(posixpath.dirname(file), match.group(1).replace('\\', '/')))
             if path not in includes:
                 try:
-                    includes[path] = self._included(self.ini_text(path), path, depth+1)
+                    includes[path] = self.included(self.ini_text(path), path, depth+1)
                 except (FileNotFoundError, OSError):
                     includes[path] = ''
             return includes[path]
@@ -296,7 +282,7 @@ class GameAssets:
         return self._unit_cached('animation', template, self._unit_animation)
 
     def _unit_animation(self, template):
-        for body in self._bodies(template):
+        for body in self.template_bodies(template):
             body = WORLD_BUILDER.sub('', body)
             names = []
             idle = re.search(r'(?im)^\s*IdleAnimationState\b', body)
@@ -324,7 +310,7 @@ class GameAssets:
           condition (CINE_DwarvenCatapult hides its crew so)."""
         def hidden(name):
             found = set()
-            for body in self._bodies(name):
+            for body in self.template_bodies(name):
                 for state in re.findall(r'(?ims)^\s*IdleAnimationState\b(.*?)^\s*End\b', body):
                     for script in re.findall(r'(?is)\bBeginScript\b(.*?)\bEndScript\b', state):
                         if not re.search(r'(?i)\bif\b', script):
@@ -332,7 +318,7 @@ class GameAssets:
                                 r'CurDrawableHideSubObject(?:Permanently)?\(\s*"([^"]+)"\s*\)', script))
                 if found:
                     break
-            for body in self._bodies(name):
+            for body in self.template_bodies(name):
                 events = re.search(r'(?im)^\s*AILuaEventsList\s*=\s*(\w+)', body)
                 if events:
                     break
@@ -390,7 +376,7 @@ class GameAssets:
         return self._unit_cached('crew', template, self._siege_crew)
 
     def _siege_crew(self, template):
-        for body in self._bodies(template):
+        for body in self.template_bodies(template):
             contain = re.search(r'(?ims)^\s*Behavior\s*=\s*SiegeEngineContain\b(.*?)(?=^\s*(?:Behavior|Draw|Body)\s*=|\Z)', body)
             if contain:
                 break
@@ -414,7 +400,7 @@ class GameAssets:
     def _state_animation(self, template, conditions):
         """The first AnimationName of the template's AnimationState for
         exactly these model conditions, as an animation file; None without."""
-        for body in self._bodies(template):
+        for body in self.template_bodies(template):
             for flags, state in re.findall(r'(?ims)^\s*AnimationState\s*=([^\n]*)\n(.*?)^\s*End\b', WORLD_BUILDER.sub('', body)):
                 if {f.upper() for f in flags.split()} == conditions:
                     for name in re.findall(r'(?im)^\s*AnimationName\s*=\s*([\w.]+)', state):
@@ -427,7 +413,7 @@ class GameAssets:
         """BuildVariations: the templates the game creates one of in its
         place (RohanPeasant: RohanPeasant1, 3 or 4); [] for none."""
         def variations(name):
-            for body in self._bodies(name):
+            for body in self.template_bodies(name):
                 match = re.search(r'(?im)^\s*BuildVariations\s*=([^\n]*)', body)
                 if match:
                     return [v for v in match.group(1).split() if v.lower() in self.templates]
@@ -442,7 +428,7 @@ class GameAssets:
         return cache[key]
 
     def _horde_members(self, template):
-        for body in self._bodies(template):
+        for body in self.template_bodies(template):
             contain = re.search(r'(?ims)^\s*Behavior\s*=\s*\w*HordeContain\b(.*?)(?=^\s*(?:Behavior|Draw|Body)\s*=|\Z)', body)
             if contain:
                 break
