@@ -118,6 +118,14 @@ class BlankDocumentTests(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(ids[-2:], ['Ashen_00004', 'Ashen_00005'])
 
+    def test_the_objects_list_grows_in_place_and_reads_as_before(self):
+        m = create(64, 64, 4)
+        for x in range(50):
+            add_object(m, 'TreeA', 100+x, 100)
+        self.assertIsInstance(m.chunk('ObjectsList').data, bytearray)
+        self.assertIsInstance(Reader(m.chunk('ObjectsList').data).take(4), bytes)
+        self.assertEqual(m.objects(), Map(m.encode()).objects())
+
     def test_world_info_values_change_by_name(self):
         m=create(71,83,3,title='Vale',description='A quiet vale.')
         set_world(m,cameraMaxHeight=30000.)

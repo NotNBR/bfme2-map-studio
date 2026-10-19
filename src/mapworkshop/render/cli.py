@@ -45,7 +45,7 @@ def resolve_map(name):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(prog='mw render', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--map', required=True, help='Map project, stock map or .map file')
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--view', nargs='+', action='append', default=[], metavar=('NAME', 'KEY=VALUE'),

@@ -114,7 +114,7 @@ def preview(path, output):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(prog='mw workspace', description=__doc__)
     sub = p.add_subparsers(dest='command', required=True)
     for name in ('inspect', 'catalog'):
         s = sub.add_parser(name)

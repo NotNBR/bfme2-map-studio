@@ -233,7 +233,7 @@ def road(m, template, line, step=100):
         for (px, py), flag, end in ((a, 2, 'a'), (c, 4, 'b')):
             o = dict(template=template, x=float(px), y=float(py), z=0., angle=0., flags=flag,
                      properties=base+[('uniqueID', 3, f'{template} {k}{end}'), ('objectLayer', 3, 'Roads')])
-            m.chunk('ObjectsList').data += m.encode_object(o).encode()
+            m.add_object(o)
 
 
 def decorate(m, ground):

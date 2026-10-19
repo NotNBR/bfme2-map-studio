@@ -26,7 +26,9 @@ def tile_offset(x, y, cell_size):
 
 class Reader:
     def __init__(self, data):
-        self.data, self.pos = data, 0
+        # A growing ObjectsList is a bytearray (Map.add_object); what is read
+        # from it is bytes, as from every other chunk.
+        self.data, self.pos = bytes(data) if isinstance(data, bytearray) else data, 0
 
     def take(self, n):
         if n < 0 or self.pos + n > len(self.data):
@@ -168,12 +170,20 @@ class Map:
         from mapworkshop.formats import sections
         sections.write(self, 'ObjectsList', objects)
 
+    def add_object(self, o):
+        """Append one object (a dict as objects() returns it) to the
+        ObjectsList. The list's data grows in place as a bytearray, so adding
+        n objects costs O(n), not a copy of the whole list per object."""
+        chunk = self.chunk('ObjectsList')
+        if not isinstance(chunk.data, bytearray):
+            chunk.data = bytearray(chunk.data)
+        chunk.data += self.encode_object(o).encode()
+
     def append_object(self, prototype, x, y, angle, name):
         # Map object Z is a terrain-relative offset. Preserve the donor's offset.
         props = [(k, t, v) for k, t, v in prototype['properties'] if k not in ('objectName', 'uniqueID')]
         props.append(('uniqueID', 3, name))
-        o = dict(prototype, x=x, y=y, angle=angle, properties=props)
-        self.chunk('ObjectsList').data += self.encode_object(o).encode()
+        self.add_object(dict(prototype, x=x, y=y, angle=angle, properties=props))
 
     def heightmap(self):
         """HeightMapData v5 (formats.terrain.decode_heights)."""

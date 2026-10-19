@@ -93,7 +93,7 @@ for settings the code leaves alone.
 | `b.assets` | the game's assets: templates, INIs, textures, models (`render.assets.GameAssets`) |
 | `b.args` | extra command-line arguments: `mw build crown -- --phase terrain` |
 
-Ten of the projects in `maps/` use `build(b)`; Bramble Hollow, Brightwater Fold
+Most projects in `maps/` use `build(b)`; Bramble Hollow, Brightwater Fold
 and the Hollin Dales are complete examples of a whole map. Four older ones
 (Ashen March, Crown of Cardolan, Eight Kingdoms, Ithilien Frontier) have a
 `build.py` with `main()`, which the pipeline runs the same way. They read their

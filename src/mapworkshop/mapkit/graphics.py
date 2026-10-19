@@ -573,7 +573,7 @@ def report(scenes, output, options):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog='mw graphics', description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--map',type=Path,help='Single native .map file')
     source.add_argument('--config',type=Path,help='JSON list of maps and optional plan overlays')

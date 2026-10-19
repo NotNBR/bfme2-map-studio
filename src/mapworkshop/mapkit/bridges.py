@@ -102,4 +102,4 @@ def add_bridge(m, bridge, start, end, *, name, assets=None, map_ini='', layer='B
     for (x, y), flag, suffix in (((x0, y0), START, 'from'), ((x1, y1), END, 'to')):
         props = [('originalOwner', 3, '/team'), ('uniqueID', 3, f'{name}_{suffix}'), ('objectLayer', 3, layer)]
         o = dict(template=bridge, x=float(x), y=float(y), z=0., angle=0., flags=flag, properties=props)
-        m.chunk('ObjectsList').data += m.encode_object(o).encode()
+        m.add_object(o)

@@ -402,7 +402,7 @@ def agent_text(result):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(prog='mw marks', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: the map whose marks changed last)')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
     parser.add_argument('--json', action='store_true', help='Print JSON instead of text')

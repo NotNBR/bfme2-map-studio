@@ -285,8 +285,7 @@ def add_object(m, template, x, y, angle=0, layer='', extra=(), z=0):
             ('originalOwner',3,'PlyrCivilian/teamPlyrCivilian'),('uniqueID',3,f'Ashen_{index:05d}'),
             ('objectLayer',3,layer)]
     overrides={f[0] for f in extra}; fields=[f for f in fields if f[0] not in overrides]+list(extra)
-    o=dict(template=template,x=x,y=y,z=z,angle=angle,flags=0,properties=fields)
-    m.chunk('ObjectsList').data+=m.encode_object(o).encode()
+    m.add_object(dict(template=template,x=x,y=y,z=z,angle=angle,flags=0,properties=fields))
 
 
 def set_world(m, **values):

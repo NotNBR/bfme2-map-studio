@@ -132,7 +132,7 @@ VIEW_MENU = ('objects', 'units', 'water', 'shadows', None, 'clouds', 'normal_map
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(prog='mw view', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: the last one)')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
     parser.add_argument('--lod', choices=['low', 'medium', 'high'], default='medium')
