@@ -87,21 +87,24 @@ class Build:
 TEST_GAMES = ('original', 'openbfme')     # the toolbar's choice for Test In-Game (setting test_game)
 
 
-def play(owner, status, test_game='original'):
+def play(owner, status, test_game='original', events=lambda event: None):
     """Test In-Game: BFME2 straight in a skirmish on the project (native.play),
     or, when that cannot run (no BFME2 1.06) or for a game map (owner None),
     the normal game at its menu. With test_game 'openbfme', OpenBFME at its
-    menu with the project's map in the Skirmish list (native.openbfme)."""
+    menu with the project's map in the Skirmish list (native.openbfme).
+    `events` hears 'started' once the game is up and 'closed' when a game it
+    can watch has ended, from a worker thread."""
     from mapworkshop import game
     from mapworkshop.config import GAME_LABEL, PROFILE
     if test_game == 'openbfme':
-        return play_openbfme(owner, status)
+        return play_openbfme(owner, status, events)
 
     def normal_game(note=''):
         if owner:
             game.install(owner.build_dir, owner.native_name)
         game.launch()
         status.set(note + (f'{owner.title} installed in the game\'s maps; ' if owner else '') + f'starting {GAME_LABEL}...', 10)
+        events('started')
 
     def work():
         try:
@@ -117,8 +120,10 @@ def play(owner, status, test_game='original'):
             # when the skirmish is playable and when it has closed.
             process, seconds = native.play(owner, progress=lambda line: status.set(line[:140], 600))
             status.set(f'{owner.title} is playable in {GAME_LABEL} ({seconds:.0f} s to start)', 600)
+            events('started')
             native.watch(process)
             status.set(f'the test game on {owner.title} has closed', 8)
+            events('closed')
         except Exception as error:
             status.set(str(error)[:140], 15)
 
@@ -132,16 +137,19 @@ def play(owner, status, test_game='original'):
         status.set(str(error)[:140], 10)
 
 
-def play_openbfme(owner, status):
+def play_openbfme(owner, status, events=lambda event: None):
     """OpenBFME at its menu (mw play --godot); the first time also builds it,
-    which the status follows. A game map (owner None) is in its list already."""
+    which the status follows. A game map (owner None) is in its list already.
+    `events` as for play()."""
     def work():
         try:
             from mapworkshop.native import openbfme
             process = openbfme.play(owner, progress=lambda line: status.set(line.strip()[:140], 600))
             status.set(f'OpenBFME is open: pick {owner.title} under Skirmish' if owner else 'OpenBFME is open', 600)
+            events('started')
             process.wait()
             status.set('OpenBFME has closed', 8)
+            events('closed')
         except Exception as error:
             status.set(f'OpenBFME: {str(error)[:130]}', 20)
 

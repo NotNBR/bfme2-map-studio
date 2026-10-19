@@ -159,7 +159,10 @@ compilation can still cause short pauses.
   in the Skirmish list, as `mw play --godot` does
   ([OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)). The first
   OpenBFME start builds it, which the status bar follows. The choice is kept as
-  `test_game` in `local/config.toml`.
+  `test_game` in `local/config.toml`. The viewer minimises once the game is up
+  (the skirmish playable, or the game or OpenBFME open) and comes back when a
+  skirmish or OpenBFME it started closes; a start that fails leaves it open,
+  with the error in the status bar.
 - **Preview** shows the map another way without changing it. Its button shows
   the current choice, for example `Medium · Map's own`, and the menu stays open
   while you switch:

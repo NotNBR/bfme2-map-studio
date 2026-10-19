@@ -53,7 +53,8 @@ Toolbar
              right shows a running build, then when the last one ended
   Test In-Game  start BFME2 straight in a skirmish on the current project (mw play);
              the dropdown beside it picks OpenBFME instead (mw play --godot), and
-             is remembered (test_game in local/config.toml)
+             is remembered (test_game in local/config.toml). The viewer
+             minimises once the game is up and comes back when it closes
   Preview    how the map is shown, without changing it: detail level (Low,
              Medium, High), the map's own weather or a preset (clear, haze, rain,
              snow, dusk), the weather's own sun or a light rig over it
@@ -96,6 +97,7 @@ detail level chosen with --lod (default medium).
 """
 
 import argparse
+from collections import deque
 import json
 import math
 import sys
@@ -211,6 +213,8 @@ class Viewer:
         self.scrub = None                  # a drag over a lens field: [field, last x, moved]
         self.post = None                   # Photo mode's exposure and depth of field (render.photo)
         self.autofocus = False             # focus on what the next frame shows at the centre
+        self.game_events = deque()         # 'started' and 'closed' from the test game's thread (jobs.play)
+        self.hidden_for_game = False       # minimised while a test game runs
         self.build = Build(self.status, lambda toast: setattr(self.session, 'toast', toast))
         self.walkability = Walkability(self.status)
         self.summary = MarksSummary()
@@ -255,6 +259,33 @@ class Viewer:
         glfw.set_cursor_pos_callback(window, self.guarded('the mouse move', self.on_cursor))
         glfw.set_scroll_callback(window, self.guarded('the wheel', self.on_scroll))
         glfw.set_key_callback(window, self.guarded('the key', self.on_key))
+        # Dragging the window's edge holds poll_events until it is let go; these
+        # keep the picture drawn at each new size meanwhile.
+        glfw.set_window_refresh_callback(window, self.guarded('drawing', self.redraw))
+        glfw.set_framebuffer_size_callback(window, self.guarded('drawing', self.redraw))
+
+    def follow_game(self):
+        """Out of the way while a test game runs: minimised once it has
+        started, back when it closes (for a game it can watch). GLFW's window
+        calls belong on this thread, so the game's thread only queues them."""
+        while self.game_events:
+            event = self.game_events.popleft()
+            if event == 'started':
+                if self.captured:
+                    self.set_capture(False)
+                glfw.iconify_window(self.window)
+                self.hidden_for_game = True
+            elif event == 'closed' and self.hidden_for_game:
+                glfw.restore_window(self.window)
+                glfw.focus_window(self.window)
+                self.hidden_for_game = False
+
+    def redraw(self, *args):
+        """Draw a frame now, from GLFW's refresh and resize callbacks."""
+        fw, fh = glfw.get_framebuffer_size(self.window)
+        if fw and fh:
+            self.draw((fw, fh))
+            glfw.swap_buffers(self.window)
 
     def guarded(self, what, handler):
         """`handler` for a GLFW callback: an error shows in the status bar (and
@@ -306,7 +337,8 @@ class Viewer:
             # Toolbar buttons and keys. Build, Test In-Game and Properties need
             # no scene: they work while the first load is still running or after it failed.
             Command('build', lambda: self.build.start(self.session.owner), keys=('Ctrl+B',), needs_scene=False),
-            Command('play', lambda: play(self.session.owner, self.status, self.test_game), needs_scene=False),
+            Command('play', lambda: play(self.session.owner, self.status, self.test_game, self.game_events.append),
+                    needs_scene=False),
             Command('properties', self.open_properties, needs_scene=False),
             Command('reload', self.request_reload, keys=('F5',), needs_scene=False),
             Command('back', self.back, keys=('Esc',), needs_scene=False),
@@ -1233,6 +1265,7 @@ class Viewer:
         started = previous
         while not glfw.window_should_close(window):
             glfw.poll_events()
+            self.follow_game()
             now = time.perf_counter()
             session.poll(now)
             if session.reload:
@@ -1261,7 +1294,11 @@ class Viewer:
             if fw and fh:
                 self.draw((fw, fh))
                 glfw.swap_buffers(window)
-            self.pace()
+                self.pace()
+            else:
+                # Minimised: nothing to draw. Wait for an event (or a tenth of a
+                # second, for loads and builds) instead of spinning a core.
+                glfw.wait_events_timeout(0.1)
             frames += 1
             if self.args.exit_after and now-started > self.args.exit_after:
                 print(f'Smoke test: {self.fps:.0f} fps')
