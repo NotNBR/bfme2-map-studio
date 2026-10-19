@@ -13,6 +13,8 @@ Cliff cells take no primary blend (0x000ABD19 in 0x000AED2E). A cliff
 record (mapkit.cliffs) applies when its tile's texture is the cell's
 (getUVForTileIndex / 0x000AE490): the cell then takes the record's corner
 UVs in that texture, wrapping, and its triangle flip.
+Its TerrainMixin is the terrain part of render.engine.MapRenderer: the methods
+that put it on the GPU and draw it, sharing the renderer's state.
 """
 
 import re
@@ -20,6 +22,10 @@ import re
 import numpy as np
 
 from mapworkshop.formats.terrain import playable_extent, terrain_records
+from mapworkshop.mapkit.checks.analyze import records
+from mapworkshop.render import shaders
+from mapworkshop.render.materials import ARRAY_SIZE
+from pathlib import Path
 
 INVERTED, FLIPPED = 1, 2
 # Corner order: 0 (x,y), 1 (x+1,y), 2 (x+1,y+1), 3 (x,y+1).
@@ -177,3 +183,136 @@ class TerrainData:
         fx, fy = gx-ix, gy-iy
         h = self.heights
         return ((1-fy)*((1-fx)*h[iy, ix] + fx*h[iy, ix+1]) + fy*((1-fx)*h[iy+1, ix] + fx*h[iy+1, ix+1]))
+
+
+class TerrainMixin:
+    """MapRenderer's terrain: its cell data on the GPU, the shading technique of the
+    detail level, and its lighting uniforms."""
+
+    def _terrain_technique(self):
+        """terrain.fx technique (HeightMap 0x000E153A): Default with normal
+        maps, else Default_M with distance-dependent textures, else Default_L.
+        Without normal maps doTheLight keeps the sun in the vertex colour."""
+        p = self.terrain_program
+        normal = self.options['normal_maps']
+        p['technique'].value = 2 if normal else (1 if self.distance_textures else 0)
+        p['sun_in_vertex'].value = int(not normal)
+
+    def _prepare_terrain(self):
+        t = self.terrain
+        albedo, normals, has_normal, skipped = [], [], [], []
+        for texture in t.textures:
+            file = self.assets.terrain_textures.get(texture['name'].lower())
+            image = self.assets.image(file) if file else None
+            if image is None:
+                self.report['missing_textures'].append(texture['name'])
+                image = np.full((64, 64, 4), (255, 0, 255, 255), np.uint8)
+            needed = texture['cell_size']*64
+            if image.shape[0] < needed or image.shape[1] < needed:
+                # WorldHeightMap::readTexClass (0x000AF917) skips a class whose
+                # file has fewer 64-pixel tiles than declared; the game then
+                # draws other texture data there. Drawn as declared, reported.
+                self.report.setdefault('texture_size_errors', []).append(
+                    dict(name=texture['name'], declared_cells=texture['cell_size'], pixels=list(image.shape[:2])))
+                skipped.append(len(albedo))
+            albedo.append(image)
+            normal = self.assets.image(Path(file).stem+'_nrm') if file else None
+            has_normal.append(int(normal is not None))
+            # A flat normal without gloss (the High PS rebuilds z from RG and
+            # reads B as gloss): in game, flat ground of a texture without a
+            # _nrm map shows no sun glare where B = 255 would mirror the sun
+            # (Specular Lab, High screenshots facing the sun, 15 October 2026).
+            normals.append(normal if normal is not None else np.full((4, 4, 4), (128, 128, 0, 255), np.uint8))
+        self._terrain_pixels = (self._texture_pixels(albedo), self._texture_pixels(normals))
+        self.report['terrain_normal_maps'] = sum(has_normal)
+        from mapworkshop.render.water import depth_tint
+        try:
+            areas = records(self.map, 'StandingWaterAreas')
+        except ValueError:
+            areas = []
+        self._depth_tint = depth_tint(t.heights, t.border, areas, self.assets.read)
+        for name in (self.environment.get('macro_texture', 'TSNoiseUrb.tga'),
+                     self.environment.get('cloud_texture', 'TSCloudMed.tga')):
+            self._prepare_image(name)
+
+    def _terrain_steps(self):
+        self._progress(0.72, 'Uploading terrain')
+        t = self.terrain
+        ctx = self.ctx
+        self.heights = ctx.texture((t.width, t.height), 1, t.heights.astype('f4').tobytes(), dtype='f4')
+        self.heights.filter = (self.moderngl.LINEAR, self.moderngl.LINEAR)
+        self.heights.repeat_x = self.heights.repeat_y = False
+        self.cells = ctx.texture((t.width, t.height), 4, t.cells.astype('u4').tobytes(), dtype='u4')
+        self.cells.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        self.cliff_u = ctx.texture((t.width, t.height), 4, t.cliff_u.tobytes(), dtype='f4')
+        self.cliff_v = ctx.texture((t.width, t.height), 4, t.cliff_v.tobytes(), dtype='f4')
+        for texture in (self.cliff_u, self.cliff_v):
+            texture.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        self.report['cliff_mapped_cells'] = t.cliff_mapped
+        yield
+        self.albedo = self._texture_array(self._terrain_pixels[0])
+        yield
+        self.normal_array = self._texture_array(self._terrain_pixels[1])
+        yield
+        self.terrain_program = ctx.program(vertex_shader=shaders.TERRAIN_VS, fragment_shader=shaders.TERRAIN_FS)
+        p = self.terrain_program
+        subtiles = [float(v) for v in t.subtiles] + [1.0]*(256-len(t.subtiles))
+        p['subtiles'].value = subtiles
+        p['array_size'].value = float(ARRAY_SIZE)
+        p['grid'].value = (t.width, t.height)
+        p['border'].value = t.border
+        p['border_cells'].value = t.border
+        self._terrain_lighting()
+        self._terrain_technique()
+        p['allow_2x'].value = int(self.distance_textures)
+        self.tile_z = ctx.texture((t.tile_z.shape[1], t.tile_z.shape[0]), 2, t.tile_z.astype('f4').tobytes(), dtype='f4')
+        self.tile_z.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        p['tile_z'].value = 9
+        p['grid_lines'].value = 0
+        tint = self._depth_tint
+        self.depth_tint = ctx.texture((t.width, t.height), 3, tint.astype('f4').tobytes(), dtype='f4')
+        self.depth_tint.filter = (self.moderngl.NEAREST, self.moderngl.NEAREST)
+        self.report['depth_tinted_samples'] = int(np.count_nonzero((tint < .999).any(-1)))
+        p['depth_tint'].value = 8
+        for name, unit in [('heights', 0), ('cells', 1), ('albedo', 2), ('normals', 3), ('macro_tex', 4), ('cloud_tex', 5),
+                           ('cliff_u', 13), ('cliff_v', 14)]:
+            p[name].value = unit
+        # terrain.fx macro UV: stretched ((x + MapBorderWidth) / MapSize.x,
+        # -(y + MapBorderWidth) / MapSize.y), MapSize = samples x 10
+        # (callback 0x000E2EB7); else (x, -y) / (66 x MapCellSize).
+        world_w, world_h = t.width*10, t.height*10
+        border = t.border*10
+        macro = self._plain_texture(self.environment.get('macro_texture', 'TSNoiseUrb.tga'))
+        cloud = self._plain_texture(self.environment.get('cloud_texture', 'TSCloudMed.tga'))
+        self.macro_tex, self.cloud_tex = macro, cloud
+        if self.environment.get('macro_texture_stretched'):
+            p['macro_xform'].value = (1/world_w, -1/world_h, border/world_w, -border/world_h)
+        else:
+            p['macro_xform'].value = (1/660, -1/660, 0, 0)
+        # Cloud.ScaleUV_OffsetPerSecondUV (0x000E2BEE): 1 / weather.ini CloudTextureSize.
+        from mapworkshop.render.terrain import cloud_texture_size
+        size = cloud_texture_size(self.assets.ini_text('weather.ini'),
+                                  self.map_ini)
+        self.cloud_scale = (1/size[0], 1/size[1])
+        p['cloud_xform'].value = (*self.cloud_scale, 0, 0)
+        p['use_macro'].value = int(self.options['macro'] and macro is not None)
+        p['use_cloud'].value = int(self.options['clouds'] and cloud is not None)
+        self.terrain_vao = ctx.vertex_array(p, [])
+        self.terrain_vertices = (t.width-1)*(t.height-1)*6
+
+        yield
+
+    def _terrain_lighting(self):
+        p = self.terrain_program
+        p['ambient'].value = tuple(self.terrain_ambient)
+        rays = self.terrain_rays
+        p['fill_dir'].value = [r[0] for r in rays[1:]]
+        p['fill_color'].value = [r[1] for r in rays[1:]]
+        p['vs_sun_dir'].value = rays[0][0]
+        p['vs_sun_color'].value = rays[0][1]
+        # Default technique: Sas.DirectionalLight[0] of the terrain light
+        # environment (0x000E3150): terrain diffuse 0 x final values, its
+        # direction normalized by the VS preshader.
+        p['sun_dir'].value = self.sun_dir
+        p['sun_color'].value = rays[0][1]
+        p['overbright'].value = int(self.overbright)

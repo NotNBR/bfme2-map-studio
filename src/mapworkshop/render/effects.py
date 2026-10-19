@@ -16,6 +16,8 @@ it. Effects are shown as on a map that has run for a while: systems with a
 SystemLifetime (or MaxEmissions) have stopped, the rest emit forever.
 Randomness comes from a hash of the object, the emission and the particle,
 so a render is reproducible.
+Its EffectsMixin is the effects part of render.engine.MapRenderer: the methods
+that put it on the GPU and draw it, sharing the renderer's state.
 """
 
 import math
@@ -27,6 +29,7 @@ import numpy as np
 
 from mapworkshop.assets import ini
 from mapworkshop.assets.models import chunks
+from mapworkshop.render import shaders
 
 FRAMES_PER_SECOND = 30.0
 WARM_UP = 3600.0            # seconds of emission before time 0
@@ -742,3 +745,88 @@ class Effects:
             group = (d['texture'].lower(), d['blend'], d['alpha_ref'], d['depth_test'], shape, ground)
             groups.setdefault(group, []).append(rows)
         return {k: np.concatenate(v) for k, v in groups.items()}
+
+
+class EffectsMixin:
+    """MapRenderer's particle effects on objects: their systems prepared and drawn."""
+
+    def _prepare_effects(self):
+        """Emitters and particle systems of the placed objects (render.effects)."""
+        effects = Effects(self.assets, self.options['lod'])
+        for template, model, x, y, z, angle, scale, index in getattr(self, '_effect_objects', []):
+            effects.add(template, self.model_cache.load(model), x, y, z, angle, scale, index)
+        self.effects = effects.finish()
+        # Additive particles draw the colour under zero alpha, so their
+        # textures are kept as they are (no bleed_alpha).
+        self._effect_images = {name: self.assets.image(name) for name in effects.textures()}
+        self.report['effects'] = dict(emitters=effects.report['emitters'], systems=effects.report['systems'],
+                                      skipped=dict(sorted(effects.report['skipped'].items())))
+
+    def _effects_gpu(self):
+        ctx = self.ctx
+        self.effect_program = ctx.program(vertex_shader=shaders.EFFECT_VS, fragment_shader=shaders.EFFECT_FS)
+        self.effect_corners = {}
+        for shape, corners in (('quad', QUAD_CORNERS), ('tri', TRI_CORNERS)):
+            self.effect_corners[shape] = ctx.buffer(corners.tobytes())
+        self.effect_textures = {}
+        for name, image in getattr(self, '_effect_images', {}).items():
+            if image is None:
+                self.report['missing_textures'].append(name)
+                continue
+            texture = ctx.texture((image.shape[1], image.shape[0]), 4, np.ascontiguousarray(image).tobytes())
+            texture.build_mipmaps()
+            texture.filter = (self.moderngl.LINEAR_MIPMAP_LINEAR, self.moderngl.LINEAR)
+            texture.repeat_x = texture.repeat_y = False
+            self.effect_textures[name.lower()] = texture
+        self._object_resources += [self.effect_program, *self.effect_corners.values(), *self.effect_textures.values()]
+        self.__dict__.pop('_effect_images', None)
+
+    def _draw_effects(self, vp, camera, eye, time):
+        """Particles of object effects at `time`: camera-facing quads or
+        triangles (PointGroupClass), ground-aligned quads flat on the ground,
+        drawn without depth writes; alpha-blended groups first, each sorted
+        back to front, then additive ones. Fog fades additive particles to
+        black and multiplicative ones to white."""
+        groups = self.effects.particles(time)
+        if not groups:
+            return
+        mgl, ctx = self.moderngl, self.ctx
+        p = self.effect_program
+        forward = np.asarray(camera['target'], float) - np.asarray(camera['eye'], float)
+        forward /= np.linalg.norm(forward) or 1.0
+        right = np.cross(forward, (0.0, 0.0, 1.0))
+        right = right/np.linalg.norm(right) if np.linalg.norm(right) > 1e-6 else np.array([1.0, 0.0, 0.0])
+        up = np.cross(right, forward)
+        p['view_projection'].write(vp)
+        self._set_fog(p, eye)
+        p['tex'].value = 0
+        ctx.enable(mgl.BLEND)
+        ctx.fbo.depth_mask = False
+        order = sorted(groups, key=lambda g: g[1] == ('one', 'one'))
+        for texture_name, blend, alpha_ref, depth_test, shape, ground in order:
+            texture = self.effect_textures.get(texture_name)
+            if texture is None:
+                continue
+            rows = groups[(texture_name, blend, alpha_ref, depth_test, shape, ground)]
+            if blend != ('one', 'one'):
+                rows = rows[np.argsort(-np.linalg.norm(rows[:, :3] - np.asarray(eye, np.float32), axis=1))]
+            p['right'].value = (1.0, 0.0, 0.0) if ground else tuple(right)
+            p['up'].value = (0.0, 1.0, 0.0) if ground else tuple(up)
+            p['alpha_ref'].value = -1.0 if alpha_ref is None else float(alpha_ref)
+            p['fog_mode'].value = 1 if blend == ('one', 'one') else 2 if blend == ('zero', 'src_color') else 0
+            ctx.blend_func = self._blend_func(blend)
+            if depth_test:
+                ctx.enable(mgl.DEPTH_TEST)
+            else:
+                ctx.disable(mgl.DEPTH_TEST)
+            texture.use(0)
+            instances = ctx.buffer(np.ascontiguousarray(rows, np.float32).tobytes())
+            vao = ctx.vertex_array(p, [(self.effect_corners[shape], '4f', 'in_corner'),
+                                       (instances, '3f f 4f f 3f/i', 'in_center', 'in_size', 'in_color', 'in_angle',
+                                        'in_frame')])
+            vao.render(mgl.TRIANGLES, vertices=6 if shape == 'quad' else 3, instances=len(rows))
+            vao.release()
+            instances.release()
+        ctx.enable(mgl.DEPTH_TEST)
+        ctx.fbo.depth_mask = True
+        ctx.disable(mgl.BLEND)
