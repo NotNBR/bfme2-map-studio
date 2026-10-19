@@ -115,7 +115,9 @@ Python process. `mw dev` rebuilds on every save with the viewer open
   leaves the previous one in place. The map is published as soon as it is
   written: the minimap, the comparison and the checks below follow while the
   viewer reloads (the previous build's minimap is kept when the map is unchanged).
-- The last five builds are kept; `mw history [MAP]` lists them.
+- The last five builds are kept, and always the last two successful ones,
+  however many failed builds came between, so `mw diff` has the build before
+  to compare with; `mw history [MAP]` lists them.
 - Each build ends with what it changed since the previous one, also kept in its
   `build.json` (`changes`): heights and repainted textures with their area,
   passability, objects added, removed, moved or changed (by layer, fewest first),

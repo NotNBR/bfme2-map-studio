@@ -533,9 +533,15 @@ def _publish(project, work):
 
 
 def _prune(project):
-    runs = sorted(p for p in (HISTORY/project.id).iterdir() if p.is_dir())
-    for run in runs[:-KEEP_BUILDS]:
-        shutil.rmtree(run, ignore_errors=True)
+    """Keep the newest KEEP_BUILDS runs, and the two newest successful ones
+    however many failed runs came between: the build and the one `mw diff`
+    and the next build's changes compare it with (previous_build)."""
+    runs = history(project)
+    built = [folder for folder, record in runs if record.get('status') == 'built']
+    keep = {folder for folder, _ in runs[:KEEP_BUILDS]} | set(built[:2])
+    for folder, _ in runs:
+        if folder not in keep:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def previous_build(project, latest=None):
