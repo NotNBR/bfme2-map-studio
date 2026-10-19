@@ -54,13 +54,16 @@ night of the battle:
   (BERSERKER); the pikes the mass behind them and before the Hornburg. About
   40,100 command points in all. None is recruitable by the AI, so the
   scripts alone move them.
-- Scripts, on PlyrCivilian: at CHARGE seconds each battalion attacks the
+- Scripts, on PlyrCivilian: at CHARGE seconds each battalion assails the
   piece of the defences straight ahead of it (TARGETS: the main gate, the
-  culvert or a section of the Deeping Wall), the rams the main gate. The
-  ladders dock against the section ahead of them (DEPLOY_SIEGE_ON_NAMED_WALL:
-  their SpecialAbilitySiegeDeploy takes any STRUCTURE +WALK_ON_TOP_OF_WALL);
-  the Deeping Wall's swords make for the Deep, up the ladders, while its
-  pikes batter the wall. The mine carrier plants its charge against the
+  culvert or a section of the Deeping Wall). The gate's battalions and the
+  rams attack the main gate. The ladders dock against the section ahead of
+  them (DEPLOY_SIEGE_ON_NAMED_WALL: their SpecialAbilitySiegeDeploy takes any
+  STRUCTURE +WALK_ON_TOP_OF_WALL), and the Deeping Wall's swords and pikes
+  make for the Deep, up the ladders. They cannot batter the wall: its pieces
+  and the culvert wear HelmsDeepWalls, which lets only siege, magic and
+  force through, and the game drops an attack order on a target that no
+  weapon of the unit can damage. The mine carrier plants its charge against the
   culvert and the berserker lights his torch and runs after it; once the
   carrier has dropped the charge (BOMB), the charge, named HD_Bomb, burns
   (its Detonate: a script cannot set the berserker's torch on his own side's
@@ -494,7 +497,9 @@ def scripts(m, side, units, riders):
     once = ('ladder', 'mine', 'berserker')
     groups = {'Deep': [(n, t, r) for n, t, r in units if t != 'Main Gate' and r not in once],
               'Gate': [(n, t, r) for n, t, r in units if t == 'Main Gate' and r not in once]}
-    orders = {('Deep', 1): lambda n, t, r: move(n, 'HD_Deep') if r == 'sword' else attack(n, t),   # the swords up the ladders
+    # the Deeping Wall's attackers make for the Deep, up the ladders: their pikes do no harm to its pieces (armor HelmsDeepWalls,
+    # 0% but to siege, magic and force), and an attack order on a target no weapon can damage leaves the battalion idle
+    orders = {('Deep', 1): lambda n, t, r: move(n, 'HD_Deep'),
               ('Deep', 2): lambda n, t, r: move(n, 'HD_Deep'), ('Deep', 3): lambda n, t, r: move(n, 'HD_Keep'),
               ('Gate', 1): lambda n, t, r: attack(n, 'Main Gate'), ('Gate', 2): lambda n, t, r: move(n, 'HD_Bailey'),
               ('Gate', 3): lambda n, t, r: attack(n, 'Inner Keep Gate'), ('Gate', 4): lambda n, t, r: move(n, 'HD_Keep')}
