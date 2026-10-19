@@ -48,19 +48,49 @@ def setting(key, default=None):
 
 
 def save_setting(key, value):
-    """Set one string setting in local/config.toml, keeping the others."""
+    """Set one setting in local/config.toml (a bool or number as one, anything
+    else as text), keeping the others as they were, whatever their type."""
     if key == 'profile' and value not in ('bfme2', 'rotwk'):
         raise ValueError('Profile must be bfme2 or rotwk')
     values = settings()
-    values[key] = str(value)
+    values[key] = value if isinstance(value, (bool, int, float)) else str(value)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     lines = ['# bfme2-map-workshop settings; `mw config` changes them.']
-    lines += [f'{name} = {_quote(entry)}' for name, entry in values.items() if isinstance(entry, str)]
+    lines += _toml_table(values)
     CONFIG.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
+def _toml_table(values, prefix=''):
+    """TOML lines for a dict as tomllib reads it: its values, then its tables."""
+    lines = [f'{_toml_key(k)} = {_toml_value(v)}' for k, v in values.items() if not isinstance(v, dict)]
+    for k, v in values.items():
+        if isinstance(v, dict):
+            name = prefix + _toml_key(k)
+            lines += ['', f'[{name}]'] + _toml_table(v, name + '.')
+    return lines
+
+
+def _toml_key(key):
+    return key if key and all(c.isalnum() or c in '-_' for c in key) else _quote(key)
+
+
+def _toml_value(value):
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, (list, tuple)):
+        return '[' + ', '.join(_toml_value(v) for v in value) + ']'
+    if isinstance(value, dict):
+        return '{' + ', '.join(f'{_toml_key(k)} = {_toml_value(v)}' for k, v in value.items()) + '}'
+    if hasattr(value, 'isoformat'):         # dates and times
+        return value.isoformat()
+    return _quote(str(value))
+
+
 def _quote(text):
-    return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    escaped = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\t', '\\t').replace('\r', '\\r')
+    return '"' + escaped + '"'
 
 
 def game_dir():
