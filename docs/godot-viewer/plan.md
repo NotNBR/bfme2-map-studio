@@ -55,10 +55,12 @@ skirmish, staged armies, `--no-shroud`, the free-camera tilt).
 - `.gitmodules` sets `update = none` (git clone and `mw setup` skip it;
   `native/openbfme.py` fetches it itself, only when it is missing) and
   `ignore = dirty` (the studio's `git status` hides what is changed inside it).
-- Its worktree is dirty: 4 images show as modified (upstream committed them
-  outside Git LFS), 58 `.uid` and 3 `.import` files are untracked (Godot's
-  import writes them; upstream tracks most `.uid` files and its syncs miss
-  some), and Godot's cache and the 83 MB library are built inside it.
+- Its worktree is dirty: 4 images show as modified, 58 `.uid` and 3 `.import`
+  files are untracked (Godot's import writes them; upstream tracks most `.uid`
+  files and its syncs miss some), and Godot's cache and the 83 MB library are
+  built inside it. The images are unchanged: upstream's `.gitattributes` sends
+  `*.png` through Git LFS but the four are stored as plain files, so wherever
+  Git LFS is installed Git compares them converted and reports a change.
 - Nothing checks that it sits at the commit the studio records. That commit
   (`f2e889c9`, tag `studio-2026-10-19-2`) is pushed and fetchable.
 
@@ -178,11 +180,10 @@ Each phase ends with both reviewing agents' checks (below) passing.
 | Step | Deliverable | Verified by |
 |---|---|---|
 | 0.1 | The user-maps pull request to OpenBFME; meanwhile a minimal fork branch (official `main` + that commit) | OpenBFME's tests; a studio map opens in its map viewer from the user maps folder |
-| 0.2 | Fork-side fixes offered upstream: the missing `.uid` files, the 4 images through LFS | the submodule's `git status` clean after an import |
-| 0.3 | The submodule pinned to that branch, `update = none` and `ignore = dirty` removed, `source()` checks out the recorded commit when it differs | a fresh `git clone --recursive` and `mw setup` in an empty folder |
-| 0.4 | OpenBFME's Godot import and the engine build moved to `local/openbfme/` | `git status --ignore-submodules=none` clean after a build and a test game |
-| 0.5 | `mw doctor` and `mw test` check the submodule's commit and cleanliness; `docs/licenses/THIRD_PARTY.md` names OpenBFME; the pin rule (decision 5) written in the OpenBFME section of `docs/guide/testing-in-game.md`, where every agent reads it | the checks fail on a deliberately dirtied copy |
-| 0.6 | The studio's Godot project skeleton and its assembly under `local/openbfme/viewer/` | assembled twice in a row with the same result |
+| 0.2 | The submodule pinned to that branch, `update = none` and `ignore = dirty` removed, `source()` checks out the recorded commit when it differs and switches Git LFS off in the submodule's own config (see 0.4), so the studio's `git status` agrees with the check | a fresh `git clone --recursive` and `mw setup` in an empty folder |
+| 0.3 | OpenBFME's Godot import and the engine build moved to `local/openbfme/` (so no `.uid` or `.import` file is written into the submodule) | the submodule clean, as 0.4 checks it, after a build and a test game |
+| 0.4 | `mw doctor` and `mw test` check the submodule's commit and cleanliness. Clean means every file matches the commit byte for byte, compared with Git LFS off, so upstream's four plain PNGs under its LFS rule pass without a list of exceptions; `docs/licenses/THIRD_PARTY.md` names OpenBFME; the pin rule (decision 5) written in the OpenBFME section of `docs/guide/testing-in-game.md`, where every agent reads it | the checks fail on a deliberately dirtied copy |
+| 0.5 | The studio's Godot project skeleton and its assembly under `local/openbfme/viewer/` | assembled twice in a row with the same result |
 
 ### Phase 1: proof and a first viewer
 
