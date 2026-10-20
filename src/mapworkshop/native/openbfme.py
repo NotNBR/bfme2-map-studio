@@ -27,13 +27,17 @@ OpenBFME reads maps only from verified archives and ignores loose map files,
 so each installed map goes into a .big of its own, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
 
-Everything else stays in local/openbfme/:
+Nothing is written into the submodule; everything else stays in local/openbfme/:
 
     tools/      llvm-mingw (the C++ toolchain upstream cross-builds Windows
                 with) and Godot, downloaded once, checked against their
                 releases' SHA-256
-    build/      the engine's CMake build; the GDExtension goes to the
-                submodule's godot/bin/, where Godot loads it
+    build/      the engine's CMake build, and openbfme_peer (mw battle)
+    project/    the Godot project Godot runs: a copy of the files the
+                submodule tracks in godot/ (mirror(), on every build), the
+                GDExtension in its bin/, where openbfme.gdextension loads it,
+                and what Godot writes there (.godot/, the .uid and .import
+                files)
     assets/     rotwk/ and bfme2/: every archive OpenBFME's policies list
                 (engine/data/retail-archives), hard links to your installs'
                 files where their MD5 matches; OpenBFME refuses mod, patch
@@ -49,6 +53,7 @@ OpenBFME has eight player slots; a map lists its first eight starts. Windows
 only: the toolchain is llvm-mingw's Windows-hosted build. CMake and Ninja
 must be on PATH or in the studio's virtual environment.
 """
+import filecmp
 import hashlib
 import json
 import os
@@ -66,7 +71,8 @@ from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
 
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
 HOME = LOCAL/'openbfme'
-TOOLS, BUILD, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'assets', 'maps', 'appdata', 'logs'))
+TOOLS, BUILD, PROJECT, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'project', 'assets', 'maps',
+                                                                        'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
 
 LLVM_MINGW = 'llvm-mingw-20261006-ucrt-x86_64'
@@ -75,7 +81,8 @@ LLVM_MINGW_SHA256 = '317492c456aa27ee607a5919f1d2d38dcdc1112516a24d0bf4b00d078f5
 GODOT = 'Godot_v4.7.2-stable_win64'
 GODOT_URL = f'https://github.com/godotengine/godot/releases/download/4.7.2-stable/{GODOT}.exe.zip'
 GODOT_SHA256 = '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953'          # GitHub's digest
-DLL = 'godot/bin/openbfme.windows.template_debug.x86_64.dll'
+DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'      # in PROJECT: openbfme.gdextension's res://bin/...
+GENERATED = ('.godot', 'bin')                                 # PROJECT's folders that Godot and the build write
 FILES = 'https://workshop-files.bfmeladder.com'      # aio_install.gd's FILES: <owner>/<md5>
 INSTALL = {'rotwk': 'ROTWK_INSTALL', 'bfme2': 'BFME2_INSTALL'}
 POLICY = {'rotwk': 'rotwk-201', 'bfme2': 'bfme2-106'}
@@ -95,7 +102,7 @@ set(CMAKE_SHARED_LINKER_FLAGS_INIT "-static")
 
 # The engine -----------------------------------------------------------------------
 def _git(*args, cwd=ROOT):
-    result = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, encoding='utf-8', errors='replace')
     if result.returncode:
         raise RuntimeError(f'git {" ".join(args)}: {(result.stderr or result.stdout).strip()[-400:]}')
     return result.stdout.strip()
@@ -156,30 +163,88 @@ def _program(name):
 
 
 def _stamp():
-    """What the build depends on: the submodule's commit and any uncommitted change to its engine or scripts, the toolchain."""
+    """What the build depends on: the submodule's commit and any uncommitted change to its engine, the toolchain (godot/
+    reaches PROJECT through mirror())."""
     head = _git('rev-parse', 'HEAD', cwd=SOURCE)
-    local = _git('diff', 'HEAD', '--', 'engine', 'godot', cwd=SOURCE)   # an engine edit not committed yet rebuilds too
+    local = _git('diff', 'HEAD', '--', 'engine', cwd=SOURCE)   # an engine edit not committed yet rebuilds too
     return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + local.encode('utf-8')).hexdigest()
 
 
+def mirror(source, target, files):
+    """Make `target` hold `files` (paths relative to `source`; those `source` lacks count as gone) as `source` has them:
+    delete every other file and the folders left empty, then copy those new or changed (by size and time, else content;
+    copy2 keeps their times, so Godot re-imports only what changed). Deleting first lets a file become a folder, or its
+    name change case. Kept: the GENERATED folders, and a .uid or .import file of one of `files`, which Godot writes
+    beside the resource unless `files` has it already. Returns how many files it deleted or copied."""
+    files, changed = {name for name in files if (source/name).is_file()}, 0
+    folders = []
+    for folder, subfolders, names in os.walk(target):
+        here = Path(folder)
+        if here == target:
+            subfolders[:] = [s for s in subfolders if s not in GENERATED]
+        else:
+            folders.append(here)
+        for name in names:
+            path = here/name
+            relative = path.relative_to(target).as_posix()
+            if relative in files or (path.suffix in ('.uid', '.import') and relative.removesuffix(path.suffix) in files):
+                continue
+            path.unlink()
+            changed += 1
+    for folder in reversed(folders):                     # the deepest first
+        if not any(folder.iterdir()):
+            folder.rmdir()
+    for name in sorted(files):
+        a, b = source/name, target/name
+        if b.is_file() and filecmp.cmp(a, b):
+            continue
+        b.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(a, b)
+        changed += 1
+    return changed
+
+
 def build(progress=print):
-    """Build the GDExtension and the headless openbfme_peer (mw battle) and import the Godot project, unless already done for
-    this commit (and its uncommitted engine changes) and toolchain. Returns Godot's (window, console) executables."""
+    """Bring PROJECT up to date with the submodule's godot/ (mirror()), build the GDExtension into its bin/ and the
+    headless openbfme_peer (mw battle), and import it, unless already done for this commit (and its uncommitted engine
+    changes) and toolchain. Returns Godot's (window, console) executables."""
     source(progress)
     llvm, gui, console = toolchain(progress)
-    stamp = BUILD/'stamp.txt'
-    if stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (SOURCE/DLL).exists():
-        return gui, console
-    cmake, ninja = _program('cmake'), _program('ninja')
     BUILD.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(parents=True, exist_ok=True)
+    files = [name.removeprefix('godot/') for name in _git('ls-files', '-z', '--', 'godot', cwd=SOURCE).split('\0') if name]
+    pending = BUILD/'import.pending'            # PROJECT changed since Godot last imported it whole: until then, import
+    if mirror(SOURCE/'godot', PROJECT, files):
+        pending.touch()
+    stamp = BUILD/'stamp.txt'
+    built = stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (PROJECT/DLL).exists()
+    if built and not pending.exists():
+        return gui, console
+    if not built:
+        _compile(llvm, progress)
+    progress('Importing the Godot project...')
+    result = subprocess.run([str(console), '--headless', '--path', str(PROJECT), '--import'], env=_environment([]),
+                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=1200)
+    if result.returncode:
+        (LOGS/'import.log').write_text(result.stdout + result.stderr, encoding='utf-8')
+        raise RuntimeError(f'Godot could not import the OpenBFME project; see {LOGS/"import.log"}')
+    stamp.write_text(_stamp(), encoding='utf-8')
+    pending.unlink(missing_ok=True)
+    return gui, console
+
+
+def _compile(llvm, progress=print):
+    """The engine's CMake build in BUILD, the GDExtension written to PROJECT's bin/."""
+    cmake, ninja = _program('cmake'), _program('ninja')
     (BUILD/'toolchain.cmake').write_text(TOOLCHAIN.format(root=llvm.as_posix()), encoding='utf-8')
-    env = dict(os.environ, PATH=os.pathsep.join([str(llvm/'bin'), str(Path(ninja).parent), os.environ.get('PATH', '')]))
+    env = dict(os.environ, PATH=os.pathsep.join([str(llvm/'bin'), str(Path(ninja).parent), os.environ.get('PATH', '')]),
+               PYTHONDONTWRITEBYTECODE='1')     # godot-cpp's binding generator runs in the submodule: no __pycache__ there
     log = LOGS/'build.log'
     with log.open('w', encoding='utf-8') as out:
         steps = [[cmake, '-S', str(SOURCE/'engine'), '-B', str(BUILD), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
-                  '-DOPENBFME_LAME=OFF', '-DOPENBFME_BUILD_GODOT=ON', f'-DCMAKE_MAKE_PROGRAM={ninja}',
-                  f'-DPython3_EXECUTABLE={sys.executable}', f'-DCMAKE_TOOLCHAIN_FILE={(BUILD/"toolchain.cmake").as_posix()}'],
+                  '-DOPENBFME_LAME=OFF', '-DOPENBFME_BUILD_GODOT=ON', f'-DOPENBFME_GODOT_BIN={(PROJECT/"bin").as_posix()}',
+                  f'-DCMAKE_MAKE_PROGRAM={ninja}', f'-DPython3_EXECUTABLE={sys.executable}',
+                  f'-DCMAKE_TOOLCHAIN_FILE={(BUILD/"toolchain.cmake").as_posix()}'],
                  [cmake, '--build', str(BUILD), '--target', 'openbfme', 'openbfme_peer']]   # the peer: mw battle
         progress('Building the OpenBFME engine (the first build takes a few minutes)...')
         for command in steps:
@@ -195,14 +260,6 @@ def build(progress=print):
                         progress(f'  {shown}%')
             if process.wait():
                 raise RuntimeError(f'The OpenBFME build failed (exit {process.returncode}); see {log}')
-    progress('Importing the Godot project...')
-    result = subprocess.run([str(console), '--headless', '--path', str(SOURCE/'godot'), '--import'], env=_environment([]),
-                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=1200)
-    if result.returncode:
-        (LOGS/'import.log').write_text(result.stdout + result.stderr, encoding='utf-8')
-        raise RuntimeError(f'Godot could not import the OpenBFME project; see {LOGS/"import.log"}')
-    stamp.write_text(_stamp(), encoding='utf-8')
-    return gui, console
 
 
 # The game's files -------------------------------------------------------------------
@@ -412,7 +469,7 @@ def play(project, progress=print, download=False, fog=False, record=False):
     big battle was a third of the simulation's time. With no project: its
     main menu, with the maps packed before. Returns the process."""
     gui, _, env, key = prepare(project, progress, download)
-    args = [str(gui), '--path', str(SOURCE/'godot'), '--', '--no-intro', '--no-update-check', '--free-camera']
+    args = [str(gui), '--path', str(PROJECT), '--', '--no-intro', '--no-update-check', '--free-camera']
     if project is not None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:   # a free port for the host
             s.bind(('127.0.0.1', 0))
@@ -429,7 +486,7 @@ def check(project, progress=print, download=False, seconds=5, timeout=600):
     _, console, env, key = prepare(project, progress, download)
     progress(f'Starting a headless OpenBFME skirmish on {project.title}...')
     started = time.time()
-    result = subprocess.run([str(console), '--headless', '--path', str(SOURCE/'godot'), '--', '--auto', f'--map={key}',
+    result = subprocess.run([str(console), '--headless', '--path', str(PROJECT), '--', '--auto', f'--map={key}',
                              f'--advance={seconds}', '--no-intro', '--no-update-check'], env=env, cwd=HOME,
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
     log = LOGS/f'check-{project.id}.log'
@@ -453,7 +510,7 @@ def status():
     """(ready, text) for `mw doctor`."""
     if not (SOURCE/'engine').exists():
         return False, 'not set up: the first `mw play --godot` fetches and builds it'
-    if not (SOURCE/DLL).exists():
+    if not (PROJECT/DLL).exists():
         return False, 'submodule present, engine not built yet: `mw play --godot` builds it'
     if not (ASSETS/'rotwk'/'_patch201maps.big').exists():
         return False, 'engine built, game files not gathered yet: `mw play --godot` gathers them'

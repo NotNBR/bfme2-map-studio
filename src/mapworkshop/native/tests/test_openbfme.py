@@ -1,9 +1,12 @@
 """OpenBFME's parts that need neither the engine nor the game: the archives
-it mounts, the merged map cache, the launcher's pins and gathering game files."""
+it mounts, the merged map cache, the launcher's pins, gathering game files,
+the Godot project's copy and when build() imports it."""
 import hashlib
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from mapworkshop.formats.big import BigArchive
 from mapworkshop.native import openbfme
@@ -81,6 +84,78 @@ class GatherTests(unittest.TestCase):
             self.assertEqual(fetched, ['Gone.big'])              # the others are kept
             hashes.save()
             self.assertEqual(openbfme.Hashes(tmp/'md5.json').known, hashes.known)
+
+
+class MirrorTests(unittest.TestCase):
+    def test_copies_changes_deletes_the_rest_and_keeps_what_godot_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, target = Path(tmp)/'godot', Path(tmp)/'project'
+            files = ['project.godot', 'scripts/a.gd', 'scripts/old/b.gd', 'icon.png', 'icon.png.import']
+            for name in files:
+                (source/name).parent.mkdir(parents=True, exist_ok=True)
+                (source/name).write_bytes(name.encode())
+            (source/'scripts'/'stray.gd.uid').write_bytes(b'uid://source')     # untracked: not copied
+            self.assertEqual(openbfme.mirror(source, target, files), 5)
+            self.assertEqual(sorted(p.relative_to(target).as_posix() for p in target.rglob('*') if p.is_file()), sorted(files))
+            self.assertEqual((target/'scripts'/'a.gd').stat().st_mtime_ns, (source/'scripts'/'a.gd').stat().st_mtime_ns)
+            self.assertEqual(openbfme.mirror(source, target, files), 0)
+
+            written = ['.godot/uid_cache.bin', 'bin/openbfme.dll', 'scripts/a.gd.uid', 'icon.png.import']   # by Godot and the build
+            for name in written:
+                (target/name).parent.mkdir(parents=True, exist_ok=True)
+                (target/name).write_bytes(b'generated')
+            (target/'project.godot').write_bytes(b'project.godot')              # the same bytes, a newer time
+            self.assertEqual(openbfme.mirror(source, target, files), 1)         # the tracked .import is restored
+            self.assertEqual((target/'icon.png.import').read_bytes(), b'icon.png.import')
+            self.assertEqual((target/'scripts'/'a.gd.uid').read_bytes(), b'generated')
+
+            (source/'scripts'/'a.gd').write_bytes(b'changed')
+            files.remove('scripts/old/b.gd')
+            (target/'scripts'/'old'/'b.gd.uid').write_bytes(b'generated')
+            self.assertEqual(openbfme.mirror(source, target, files), 3)         # a.gd copied, b.gd and its .uid deleted
+            self.assertEqual((target/'scripts'/'a.gd').read_bytes(), b'changed')
+            self.assertFalse((target/'scripts'/'old').exists())
+            self.assertTrue(all((target/name).exists() for name in written))
+
+            (source/'icon.png').unlink()                                        # tracked, gone from the working tree
+            (source/'scripts'/'a.gd').unlink()
+            (source/'scripts'/'a.gd').mkdir()                                   # a file that became a folder
+            (source/'scripts'/'a.gd'/'c.gd').write_bytes(b'c')
+            files[files.index('scripts/a.gd')] = 'scripts/a.gd/c.gd'
+            self.assertEqual(openbfme.mirror(source, target, files), 4)         # icon.png, a.gd and its .uid deleted, c.gd copied
+            self.assertFalse((target/'icon.png').exists())
+            self.assertEqual((target/'scripts'/'a.gd'/'c.gd').read_bytes(), b'c')
+
+
+class BuildTests(unittest.TestCase):
+    def test_an_import_that_failed_runs_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp, links, imports = Path(tmp), [], []
+            (tmp/'src'/'godot').mkdir(parents=True)
+            (tmp/'src'/'godot'/'project.godot').write_bytes(b'project')
+
+            def link(llvm, progress):
+                links.append(llvm)
+                (tmp/'project'/openbfme.DLL).parent.mkdir(parents=True, exist_ok=True)
+                (tmp/'project'/openbfme.DLL).write_bytes(b'dll')
+
+            def run(args, **kwargs):                                            # Godot's import, failing the second time
+                imports.append(args)
+                return subprocess.CompletedProcess(args, int(len(imports) == 2), '', 'error')
+
+            with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', BUILD=tmp/'build', LOGS=tmp/'logs',
+                                     APPDATA=tmp/'appdata', source=lambda progress: None,
+                                     toolchain=lambda progress: (tmp, 'gui', 'console'), _stamp=lambda: 'stamp',
+                                     _compile=link, _git=lambda *args, **kwargs: 'godot/project.godot'), \
+                    mock.patch.object(subprocess, 'run', run):
+                build = lambda: openbfme.build(progress=lambda *_: None)
+                build()                                                         # compiled and imported
+                (tmp/'project'/'project.godot').unlink()                        # the copy changed: imported again, failing
+                self.assertRaises(RuntimeError, build)
+                build()                                                         # nothing changed since, but the import is due
+                build()
+            self.assertEqual((len(links), len(imports)), (1, 3))
+            self.assertFalse((tmp/'build'/'import.pending').exists())
 
 
 if __name__ == '__main__':

@@ -157,10 +157,17 @@ minutes plus the time to check the game files:
   that upstream should have goes to a pull request branch in the fork. One
   that is the studio's alone is a commit on `studio/main`, which each rebuild
   replays. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
-  releases' SHA-256, then builds the engine. CMake and Ninja must be on PATH
-  or in the studio's environment (`pip install cmake ninja`). Windows only.
-  A later run rebuilds only when the submodule's commit changes or its
-  engine files have changes not committed yet.
+  releases' SHA-256, then builds the engine into `local/openbfme/build/`.
+  Godot runs a copy of the submodule's `godot/` folder,
+  `local/openbfme/project/`: the built GDExtension, Godot's import cache and
+  the `.uid` and `.import` files Godot writes stay in the copy, and nothing
+  is written into the submodule. Each run brings the copy up to date with the
+  files the submodule tracks there, and Godot re-imports only the files that
+  changed. CMake and
+  Ninja must be on PATH or in the studio's environment
+  (`pip install cmake ninja`). Windows only. A later run rebuilds only when
+  the submodule's commit changes or its engine files have changes not
+  committed yet.
 - **Extra archives:** the fork adds one thing upstream lacks:
   the `OPENBFME_EXTRA_ARCHIVES` variable, which mounts extra `.big` files.
   OpenBFME reads maps only from verified archives and ignores loose map files.
