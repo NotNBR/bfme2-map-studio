@@ -191,7 +191,8 @@ def cmd_setup(args):
     if (ROOT/'.git').exists() and not (ROOT/'src/mapworkshop/native/loading/loading.cpp').exists():
         import subprocess
         say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
-        subprocess.run(['git', 'submodule', 'update', '--init'], cwd=ROOT, check=False)
+        subprocess.run(['git', 'submodule', 'update', '--init', '--', 'src/mapworkshop/native/loading'], cwd=ROOT, check=False)
+        # OpenBFME's submodule (about 90 MB) is fetched on first use: mw play --godot, mw battle (native/openbfme.py source())
     choice = args.game
     if not choice and game.find() is None:
         if not sys.stdin.isatty():

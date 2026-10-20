@@ -25,7 +25,11 @@
 - **Pinning:** the submodule pins a commit of official `main`. When the studio
   needs something `main` does not have yet, the pin moves to a commit that has
   it, and back once OpenBFME merges it.
-- **Still to decide:** who writes the user-maps pull request.
+- **Where it stands:** the user-maps pull request is open
+  ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)), and phase 0
+  is done: the submodule pins `studio-2026-10-21-1` in the user's public fork
+  (official `main` plus a short, listed set of commits), nothing is written
+  into it, `mw test` checks that, and the viewer's skeleton assembles.
 
 ## Where we are
 
@@ -87,12 +91,17 @@ Taken:
    (as in `1dbb65e`, `bedb715`), which the pin rule above replaces, so phase 0
    writes it where every agent reads it; and phase 0 rebuilds the studio's
    OpenBFME build, which interrupts an `mw play --godot` or `mw battle` running
-   at that moment. They get a one-line note before phase 0.
-
-Open:
-
-1. Who writes the user-maps pull request: the studio's session, or one of the
-   sessions working on OpenBFME.
+   at that moment. They get a one-line note before phase 0 (sent 2026-10-20).
+7. **Who writes the user-maps pull request:** the studio's session
+   ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76), as `NotNBR`).
+8. **Where the pin lives, until official `main` is enough.** The submodule's
+   remote stays the user's fork, which is public, and the pin is a tag there:
+   official `main` with only the commits the studio's commands need, each
+   listed with what replaces it
+   ([testing in the game](../guide/testing-in-game.md#the-pin-and-a-clean-submodule)).
+   The list shrinks as OpenBFME merges pull requests (user maps part 2 retires
+   the archive mount). When it is empty, the remote becomes Open-BFME's, and
+   whatever OpenBFME will not take moves into the studio's own code.
 
 ## Architecture
 

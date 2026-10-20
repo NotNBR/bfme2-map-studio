@@ -92,8 +92,9 @@ BFME2 and ROTWK test games have a free camera, to look at the map from any
 distance and angle. It is enabled by `mw play` and **Test In-Game**; the
 normal-game menu and the installed loading patch keep the game's own camera.
 `mw play --godot` starts OpenBFME with its own free camera on
-(`--free-camera`), which in the studio's fork steers the same way (Ctrl+Z
-turns it off and on).
+(`--free-camera`; Ctrl+Z turns it off and on). It steers as OpenBFME's does:
+the fork's tilt and zoom as in the table are not in the
+[pinned commit](#the-pin-and-a-clean-submodule).
 
 | Input | Does |
 | --- | --- |
@@ -124,9 +125,9 @@ The game is not recorded as a replay unless you add `--record`. OpenBFME
 records every LAN game by default. A replay also stores the full game state's
 hash for every logic frame, and in the Nanduhirion v2 battle that hashing was
 a third of the simulation's time.
-The studio's OpenBFME plays a map's
-[cinematics](../game/scripts.md#cinematics), as a film made with
-`mapkit.cinematics` sets them up. In the viewer, choose **OpenBFME (Godot)** in the
+A map's [cinematics](../game/scripts.md#cinematics) play only in the
+original game for now: the fork's commit that plays them in a skirmish is
+not in the [pinned commit](#the-pin-and-a-clean-submodule). In the viewer, choose **OpenBFME (Godot)** in the
 dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
 skirmish instead: OpenBFME clicks through its menus, starts the map against an
 AI, plays five seconds of game time and closes. The report goes to
@@ -140,14 +141,7 @@ minutes plus the time to check the game files:
 
 - **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
   `mw setup`) at the commit this repository pins
-  ([the pin](#the-pin-and-a-clean-submodule)). It pins `studio-2026-10-19-2`,
-  a commit of the branch `studio/main` of
-  [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot), a fork of
-  OpenBFME: upstream's `main`, with every open upstream pull request merged
-  into it (the studio's walls, siege, weather and big-battle work among
-  them), and the studio's own commits on top: the free camera, the
-  cinematics, staged armies, extra archives, `--no-shroud` and the headless
-  battle log. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
+  ([the pin](#the-pin-and-a-clean-submodule)). It also downloads llvm-mingw and Godot 4.7.2, pinned to their
   releases' SHA-256, then builds the engine into `local/openbfme/build/`.
   Godot runs a copy of the submodule's `godot/` folder,
   `local/openbfme/project/`: the built GDExtension, Godot's import cache and
@@ -278,16 +272,29 @@ The submodule pins one commit, recorded in this repository. By default it is
 a commit of OpenBFME's official `main`
 ([Open-BFME/openbfme-godot](https://github.com/Open-BFME/openbfme-godot)). A
 feature `main` lacks comes in by pinning a commit that has it, for as long as
-OpenBFME takes to merge it: the user-maps change, or an open pull request
-(walls, siege, weather). Once OpenBFME has merged it, the pin goes back to a
-commit of `main`. Every pinned commit is pushed and tagged, and the commit here
-that moves the pin says why. Don't move the pin to the fork's `studio/main`:
-its features reach `mw play --godot` and `mw battle` only when a pin brings
-them in. An engine change goes to OpenBFME as a pull request; what is the
-studio's alone stays in the studio's code, never in OpenBFME. This is
-decision 5 of the [Godot viewer plan](../godot-viewer/plan.md#decisions); the
-current pin, from before it, moves in the plan's
-[phase 0](../godot-viewer/plan.md#phase-0-groundwork).
+OpenBFME takes to merge it. Once OpenBFME has merged it, the pin goes back to a
+commit of `main`. Every pinned commit is pushed and tagged in the fork
+[NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot) (the
+submodule's remote), its tags are never deleted, and the commit here that moves
+the pin says why. Don't move the pin to the fork's `studio/main`: its features
+reach `mw play --godot` and `mw battle` only when a pin brings them in. An
+engine change goes to OpenBFME as a pull request; the few the studio alone
+needs are commits on the pinned tag, listed below, each with what replaces it.
+This is decision 5 of the [Godot viewer plan](../godot-viewer/plan.md#decisions).
+
+The pin is `studio-2026-10-21-1`: OpenBFME's `main` (`1ee8f2e9`) with
+
+| Commits | For | Until |
+|---|---|---|
+| user maps ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)) | the studio's Godot viewer opens a build from the user maps folder | OpenBFME merges it |
+| siege, walkable walls, big battles ([#64](https://github.com/Open-BFME/openbfme-godot/pull/64), with [#63](https://github.com/Open-BFME/openbfme-godot/pull/63) and [#62](https://github.com/Open-BFME/openbfme-godot/pull/62)) | Helm's Deep's assault, and the battle log's siege phases | OpenBFME merges them |
+| extra archives (`OPENBFME_EXTRA_ARCHIVES`) | `mw play --godot`, `--check` and `mw battle` mount a studio map | games on a user map (part 2 of the user-maps change) |
+| `--no-shroud` | `mw play --godot` draws the map revealed | OpenBFME takes it as a debug option, or a pin without it and `--fog` as the default |
+| the headless battle log (`openbfme_peer --battle-log`) | `mw battle` | OpenBFME takes it, or the log moves into the studio |
+
+Not in the pin, though `studio/main` has them: the weather pull request
+([#59](https://github.com/Open-BFME/openbfme-godot/pull/59)), map cinematics
+in a skirmish, staged armies and the free camera's tilt.
 
 To move the pin to a pushed tag:
 
