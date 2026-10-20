@@ -192,7 +192,11 @@ def cmd_setup(args):
         import subprocess
         say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
         subprocess.run(['git', 'submodule', 'update', '--init', '--', 'src/mapworkshop/native/loading'], cwd=ROOT, check=False)
-        # OpenBFME's submodule (about 90 MB) is fetched on first use: mw play --godot, mw battle (native/openbfme.py source())
+    # OpenBFME's submodule (about 90 MB) is fetched on first use (mw play --godot, mw battle); one a recursive clone brought
+    # is brought to the pin, with Git LFS off in its config (native/openbfme.py source())
+    from mapworkshop.native import openbfme
+    if (openbfme.SOURCE/'.git').exists():
+        openbfme.source(say)
     choice = args.game
     if not choice and game.find() is None:
         if not sys.stdin.isatty():

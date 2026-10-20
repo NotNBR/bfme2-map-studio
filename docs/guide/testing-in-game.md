@@ -150,7 +150,10 @@ minutes plus the time to check the game files:
   files the submodule tracks there, and Godot re-imports only the files that
   changed. CMake and
   Ninja must be on PATH or in the studio's environment
-  (`pip install cmake ninja`). Windows only. A later run rebuilds only when
+  (`pip install cmake ninja`). Windows only. Keep the checkout's path short:
+  the paths in godot-cpp, OpenBFME's own submodule, pass Windows's 260
+  characters in a deep folder, and its checkout then fails (or set
+  `git config --global core.longpaths true`). A later run rebuilds only when
   the submodule's commit changes or its engine files have changes not
   committed yet.
 - **Extra archives:** the fork adds one thing upstream lacks:
