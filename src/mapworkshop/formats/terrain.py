@@ -52,6 +52,19 @@ def playable_extent(heights):
     return max(b[0] for b in borders)*10.0, max(b[1] for b in borders)*10.0
 
 
+def height_at(heights, border, x, y):
+    """Bilinear height at world x, y (map units, the playable area's origin) of
+    a [rows, columns] grid of heights in world units with `border` samples
+    around the playable area, clamped to the grid."""
+    rows, columns = heights.shape
+    gx = np.clip(np.asarray(x, float)/10 + border, 0, columns-1.001)
+    gy = np.clip(np.asarray(y, float)/10 + border, 0, rows-1.001)
+    ix, iy = gx.astype(int), gy.astype(int)
+    fx, fy = gx-ix, gy-iy
+    return ((1-fy)*((1-fx)*heights[iy, ix] + fx*heights[iy, ix+1])
+            + fy*((1-fx)*heights[iy+1, ix] + fx*heights[iy+1, ix+1]))
+
+
 def encode_heights(value):
     """The payload for decode_heights' values; the size comes from the elevations."""
     elevations = np.asarray(value['elevations'])

@@ -148,6 +148,13 @@ def parse_args(argv=None):
     parser.add_argument('--sun', default='own',
                         help="Sun: 'own' (the weather's) or a mapkit.weather sun: ember, copper, blood, "
                              "sulphur, ash, violet")
+    parser.add_argument('--godot', action='store_true',
+                        help='Open the map in the Godot viewer on OpenBFME instead (docs/viewer.md, "The Godot viewer")')
+    parser.add_argument('--view', help='With --godot: start at this view, the key=value words of `mw render --view`')
+    parser.add_argument('--probe', action='append', metavar='X,Y[,Z]',
+                        help='With --godot and --view: print where this map point lands in the picture, in Godot and '
+                             'as mw render projects it (repeatable)')
+    parser.add_argument('--screenshot', type=Path, help='With --godot: save the view as this PNG and close')
     parser.add_argument('--exit-after', type=float, help=argparse.SUPPRESS)  # smoke tests
     parser.add_argument('--snapshot', type=Path, help=argparse.SUPPRESS)   # smoke tests: save the window
     return parser.parse_args(argv)
@@ -155,6 +162,11 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.godot:
+        from mapworkshop.viewer import godot_viewer
+        return godot_viewer.main(args)
+    if args.view or args.probe or args.screenshot:
+        raise SystemExit('--view, --probe and --screenshot are options of the Godot viewer: add --godot')
     try:
         source = project.map_path(args.map or args.map_option)
     except LookupError as error:

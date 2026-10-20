@@ -201,6 +201,13 @@ def _program(name):
     return found
 
 
+def is_built():
+    """Whether the GDExtension in PROJECT is built for the submodule's commit (and its uncommitted engine changes) and
+    the toolchain: build() then compiles nothing."""
+    stamp = BUILD/'stamp.txt'
+    return stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (PROJECT/DLL).exists()
+
+
 def _stamp():
     """What the build depends on: the submodule's commit and any uncommitted change to its engine, the toolchain (godot/
     reaches PROJECT through mirror())."""
@@ -256,7 +263,7 @@ def _import(project, console, changed, label, progress=print):
         listed.parent.mkdir(parents=True, exist_ok=True)    # on exit (0xC0000005), though not OpenBFME's
         listed.write_text('res://openbfme.gdextension\n', encoding='utf-8')
     progress(f'Importing {label}...')
-    result = subprocess.run([str(console), '--headless', '--path', str(project), '--import'], env=_environment([]),
+    result = subprocess.run([str(console), '--headless', '--path', str(project), '--import'], env=environment([]),
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=1200)
     if result.returncode:
         log = LOGS/f'import-{project.name}.log'
@@ -277,7 +284,7 @@ def build(progress=print):
              if name}
     changed = mirror(PROJECT, files)
     stamp = BUILD/'stamp.txt'
-    built = stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (PROJECT/DLL).exists()
+    built = is_built()
     if not built:
         _compile(llvm, progress)
     _import(PROJECT, console, changed or not built, 'the Godot project', progress)
@@ -495,6 +502,36 @@ def install(project, progress=print):
     return archives()
 
 
+def user_maps():
+    """OpenBFME's user maps folder, where RotWK keeps WorldBuilder maps: APPDATA (the one OpenBFME gets here), the
+    leaf name the RotWK files' gi.dat holds (OpenBFME reads it there, not in the registry), then "Maps"
+    (UserDataFolder::userMapFolder, Open-BFME/openbfme-godot#76). A build installed there opens by name with the map
+    builders' user_map option."""
+    data = (ASSETS/'rotwk'/'gi.dat').read_bytes()
+    if data[:4] != b'GI  ':
+        raise RuntimeError(f'{ASSETS/"rotwk"/"gi.dat"} is not a gi.dat file')
+    parts = data[8:].split(b'\0')
+    values = {parts[2*i].decode('cp1252').lower(): parts[2*i+1].decode('cp1252')
+              for i in range(int.from_bytes(data[4:8], 'little'))}
+    if not values.get('userdataleafname'):
+        raise RuntimeError(f'{ASSETS/"rotwk"/"gi.dat"} names no UserDataLeafName')
+    return APPDATA/values['userdataleafname']/'Maps'
+
+
+def install_user_map(project):
+    """The project's build in OpenBFME's user maps folder (user_maps()/<native name>/), as game.install puts it in
+    the game's: the .map, map.ini and the preview images, copied when they changed. Returns the folder."""
+    name = project.native_name
+    files = {p.name: p for p in sorted(project.build_dir.iterdir())
+             if p.is_file() and (p.name.startswith(name) or p.name == 'map.ini')}
+    if not any(name.lower().endswith('.map') for name in files):
+        raise RuntimeError(f'{project.title} has no build yet: run `mw build {project.id}`')
+    target = user_maps()/name
+    target.mkdir(parents=True, exist_ok=True)
+    mirror(target, files)
+    return target
+
+
 def archives():
     """Every packed map's archive and the merged map cache, written again from
     them; the archives to mount, the map cache last."""
@@ -507,7 +544,7 @@ def archives():
 
 
 # Running it ---------------------------------------------------------------------------
-def _environment(archives):
+def environment(archives):
     env = dict(os.environ, APPDATA=str(APPDATA), OPENBFME_EXTRA_ARCHIVES=';'.join(str(a) for a in archives))
     env.update({variable: str(ASSETS/game) for game, variable in INSTALL.items()})
     APPDATA.mkdir(parents=True, exist_ok=True)
@@ -520,8 +557,8 @@ def prepare(project, progress=print, download=False):
     gui, console = build(progress)
     assets(progress, download)
     if project is None:
-        return gui, console, _environment(archives()), None
-    return gui, console, _environment(install(project, progress)), f'maps/{project.native_name}/{project.native_name}.map'
+        return gui, console, environment(archives()), None
+    return gui, console, environment(install(project, progress)), f'maps/{project.native_name}/{project.native_name}.map'
 
 
 def net_slots(project):

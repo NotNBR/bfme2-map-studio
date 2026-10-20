@@ -29,7 +29,9 @@
   ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)), and phase 0
   is done: the submodule pins `studio-2026-10-21-1` in the user's public fork
   (official `main` plus a short, listed set of commits), nothing is written
-  into it, `mw test` checks that, and the viewer's skeleton assembles.
+  into it, and `mw test` checks that. Phase 1 is done: `mw view MAP --godot`
+  opens a map in about two seconds, with the Edit camera and the marks, and
+  puts map points on the same pixels as `mw render`.
 
 ## Where we are
 
@@ -138,7 +140,7 @@ running
 | Drawing the map | OpenBFME's builders; units animated by `advance()` | the build, installed as a user map |
 | Edit and Photo cameras | `Camera3D`, the studio's camera maths carried over | the terrain heights, once per load, for picking the ground and keeping the camera on it |
 | Marks | drawn draped on the terrain and edited in Godot; saved as `local/marks/<map>.json` in today's format | what each mark covers (the marks panel, Copy for agent), from today's code |
-| Photo mode | `CameraAttributesPhysical`: focal length, aperture, focus, exposure, depth of field; the sensor and frame rules of today's lens | |
+| Photo mode | today's lens: the frame from the studio's own camera maths (the sensor and frame rules of `render/photo.py`), the depth of field as a compositor effect porting `render/photo.py`'s blur (phase 1 found Godot's `CameraAttributesPhysical` unfit: see there) | the lens settings, as `mw render` resolves a view |
 | Saved views, Copy view | the same `local/views` JSON and `mw render` command | |
 | Walkability, river flow | drawn over the terrain | computed as today, sent as an image and line data |
 | Weather and sun presets | reload | the map's `map.ini` variant |
@@ -204,6 +206,32 @@ screenshots, and the headless library check in `mw test`.
 
 Verified by: Helm's Deep and the Greywater Marches open within about 4 s; a
 point at known map coordinates lands where `mw render` puts it.
+
+**Done (2026-10-21).** `mw view MAP --godot` opens a project's build from the
+user maps folder, or a stock map from the archives
+([the viewer](../viewer.md#the-godot-viewer)); `viewer/godot_viewer.py` is the
+Python side, `viewer/godot/` the Godot project. Measured:
+
+| | |
+|---|---|
+| Opening the map (mount, terrain, objects) | Helm's Deep 1.9 s, the Greywater Marches 2.6 s; Glacial Crossroads (28,500 units across) 16 s, 12.7 s of it OpenBFME's terrain builder |
+| A map point through a view | the camera's projection on mw render's, 0.000 px apart, with heading, elevation, roll, field of view, a focal length and other picture sizes; OpenBFME draws the map in the same frame (`toG`: Godot (x, z, -y) from the playable area's corner, `GodotMapTerrain.cpp`), and screenshots of one view from both line up |
+| Picking and marks | the surface Python sends (terrain raised to standing water); circles, rotated rectangles, freehand paths and pins draped on it, drawn over the terrain |
+| `mw test` | `viewer/tests/test_godot_viewer.py` opens Blend Lab (else a stock map) headless through the library, checks two probes and that the object layer is there (6 to 10 s; skipped without OpenBFME built) |
+
+Found:
+
+- **Godot's physical camera does not fit the studio's lens.** Set on a
+  camera, `CameraAttributesPhysical` takes over its field of view (from the
+  focal length on a 24 mm frame height, keep_aspect forced to height) and its
+  near and far planes (its frustum's, 4,000 by default). Its depth of field
+  treats a world unit as a metre (the studio's lens uses 10 map units to the
+  metre) and blurs far less than `render/photo.py`: at f/1.4 a map 900 units
+  away shows almost none. The viewer does not use it: a view's focal length
+  sets the camera's field of view, and Photo mode will get its depth of field
+  as a compositor effect, a port of `render/photo.py`'s blur (phase 3).
+- **OpenBFME's terrain builder is slow on the largest maps** (12.7 s for Glacial
+  Crossroads); worth measuring in OpenBFME and offering a fix upstream.
 
 ### Phase 2: the agent loop
 

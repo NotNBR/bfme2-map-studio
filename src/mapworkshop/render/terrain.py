@@ -21,7 +21,7 @@ import re
 
 import numpy as np
 
-from mapworkshop.formats.terrain import playable_extent, terrain_records
+from mapworkshop.formats.terrain import height_at, playable_extent, terrain_records
 from mapworkshop.mapkit.checks.analyze import records
 from mapworkshop.render import shaders
 from mapworkshop.render.materials import ARRAY_SIZE
@@ -177,12 +177,7 @@ class TerrainData:
 
     def height_at(self, x, y):
         """Bilinear terrain height at world coordinates (playable origin)."""
-        gx = np.clip(np.asarray(x, float)/10 + self.border, 0, self.width-1.001)
-        gy = np.clip(np.asarray(y, float)/10 + self.border, 0, self.height-1.001)
-        ix, iy = gx.astype(int), gy.astype(int)
-        fx, fy = gx-ix, gy-iy
-        h = self.heights
-        return ((1-fy)*((1-fx)*h[iy, ix] + fx*h[iy, ix+1]) + fy*((1-fx)*h[iy+1, ix] + fx*h[iy+1, ix+1]))
+        return height_at(self.heights, self.border, x, y)
 
 
 class TerrainMixin:

@@ -77,7 +77,7 @@ Below `mapkit` and `render`, which both read the installed game through it.
 | [game](../../src/mapworkshop/game.py) | the BFME2 installation: find it, extract its data, install maps (`mw setup`) |
 | [render](../../src/mapworkshop/render/) | the renderer (`mw render`, the viewer: `engine.MapRenderer`, one part per subject in that subject's module, which [engine](../../src/mapworkshop/render/engine.py)'s docstring lists), the asset catalogue (`catalog`: `mw find`), single objects (`items`: `mw item`, `mw items`) and their measured outlines, footprints and named points, on their own or where a map places them (`footprint`: `mw item --section`, `mw where`, [measuring](finding-assets.md#measuring-outlines-footprints-and-positions)); [rendering](rendering.md), and [the renderer](../game/renderer/README.md) for what it reproduces of the game |
 | [native](../../src/mapworkshop/native/) | the game itself: test games, its pathfinding grid, screenshots, the loading patch ([testing in-game](testing-in-game.md), [the runtime](../game/runtime.md)) |
-| [viewer](../../src/mapworkshop/viewer/) | the viewer ([the viewer](../viewer.md)) |
+| [viewer](../../src/mapworkshop/viewer/) | the viewer ([the viewer](../viewer.md)); `godot_viewer` and `viewer/godot/`, the Godot viewer on OpenBFME (`mw view --godot`, [the Godot viewer](../viewer.md#the-godot-viewer)) |
 | [video](../../src/mapworkshop/video/) | FFmpeg encoding for the videos in `misc/` |
 
 ## Heightmaps
