@@ -101,7 +101,7 @@ Greywater Marches. Without a map, commands use the one you worked on last.
 | `mw find`, `mw item`, `mw items` | [finding assets](finding-assets.md) |
 | `mw render` | [rendering](rendering.md) |
 | `mw graphics` | [map graphics](map-graphics.md) |
-| `mw play`, `mw capture`, `mw patch`, `mw walkable --native` | [testing in the game](testing-in-game.md) |
+| `mw play`, `mw capture`, `mw battle`, `mw patch`, `mw walkable --native` | [testing in the game](testing-in-game.md) |
 | `mw workspace` | [hand-editing](hand-editing.md) |
 | `mw view`, `mw marks` | [the viewer](../viewer.md) |
 

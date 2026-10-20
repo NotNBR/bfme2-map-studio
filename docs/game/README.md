@@ -17,6 +17,7 @@ using the toolkit, in [the guides](../guide/projects-and-builds.md).
 | [Roads and bridges](roads-and-bridges.md) | road records, walkable object bridges, bridges spanned between two points | `mapkit.roads`, `mapkit.bridges` |
 | [Walls and castles](walls-and-castles.md) | chain walls, castle sites | `mapkit.walls` |
 | [Neutral sites](neutral-sites.md) | capture flags, creep lairs, Gollum's spawn points, ambient sound | `mapkit.sites`, `mapkit.ambient` |
+| [Battalions](battalions.md) | where a battalion's soldiers stand, where a second battalion sent to a taken point stops, attack orders it cannot carry out | `mw battle` |
 | [Scripts](scripts.md) | the stored script tree, the catalogue of 595 actions and 195 conditions, what flags and timers do | `mapkit.script_writer` |
 | [Bases and script libraries](bases-and-libraries.md) | `.bse` castle templates, build lists, library linking | `formats.castles` |
 | [How the game draws a map](renderer/README.md) | terrain, water, shadows, objects, weather and particle effects, as the renderer reproduces them | `render` |

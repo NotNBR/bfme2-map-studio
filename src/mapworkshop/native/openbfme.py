@@ -163,7 +163,7 @@ def _stamp():
 
 
 def build(progress=print):
-    """Build the GDExtension and import the Godot project, unless already done for
+    """Build the GDExtension and the headless openbfme_peer (mw battle) and import the Godot project, unless already done for
     this commit (and its uncommitted engine changes) and toolchain. Returns Godot's (window, console) executables."""
     source(progress)
     llvm, gui, console = toolchain(progress)
@@ -180,7 +180,7 @@ def build(progress=print):
         steps = [[cmake, '-S', str(SOURCE/'engine'), '-B', str(BUILD), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
                   '-DOPENBFME_LAME=OFF', '-DOPENBFME_BUILD_GODOT=ON', f'-DCMAKE_MAKE_PROGRAM={ninja}',
                   f'-DPython3_EXECUTABLE={sys.executable}', f'-DCMAKE_TOOLCHAIN_FILE={(BUILD/"toolchain.cmake").as_posix()}'],
-                 [cmake, '--build', str(BUILD), '--target', 'openbfme']]
+                 [cmake, '--build', str(BUILD), '--target', 'openbfme', 'openbfme_peer']]   # the peer: mw battle
         progress('Building the OpenBFME engine (the first build takes a few minutes)...')
         for command in steps:
             process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,

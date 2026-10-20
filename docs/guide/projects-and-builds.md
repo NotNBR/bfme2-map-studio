@@ -181,7 +181,7 @@ map comes out byte for byte the same either way; the build says how many it reus
 | `mw rivers [MAP]` | which way each river strip flows, as compass runs (`--json`: every cross-section) |
 | `mw sites [MAP]` | walking distances from the bases to the neutral sites and lairs (below) |
 | `mw graphics --map FILE` | diagnostic plans: placement atlas, heights, slope, passability ([map graphics](map-graphics.md)) |
-| `mw play MAP`, `mw capture MAP` | the game itself ([testing in-game](testing-in-game.md)) |
+| `mw play MAP`, `mw capture MAP`, `mw battle MAP` | the game itself ([testing in-game](testing-in-game.md)) |
 
 ### Walkability
 

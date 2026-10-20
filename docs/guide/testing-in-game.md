@@ -6,7 +6,9 @@ showing it: `mw walkable --native` (its pathfinding grid) and `mw capture`
 (screenshots). All three run an isolated copy of the game, so your own install,
 profile and saved games are untouched. [The runtime](../game/runtime.md)
 describes how they work. `mw play --godot` opens the map in OpenBFME, the
-Godot rebuild of ROTWK, instead ([below](#openbfme-mw-play---godot)).
+Godot rebuild of ROTWK, instead ([below](#openbfme-mw-play---godot)), and
+`mw battle` plays a map headless to trace how its units move
+([below](#headless-battles-mw-battle)).
 
 With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
 directly in a player-versus-easy-AI skirmish, or the project's
@@ -317,6 +319,41 @@ skirmish is seated as `mw play`'s ([line-ups](#line-ups)).
 
 Use it for what the renderer does not show, such as the water reflections at
 High, and when a check needs the game's own view.
+
+## Headless battles: `mw battle`
+
+```powershell
+mw battle helms-deep-battle                          # its first minute, every unit the map places traced
+mw battle helms-deep-battle --seconds 120 --watch IsengardPikemanHorde,IsengardSiegeLadder
+mw battle horde-spacing-lab --rotwk --seconds 1      # RotWK's battalion destinations and goals
+mw battle horde-spacing-lab --rotwk --seconds 1 --cells
+```
+
+plays a map without graphics and shows how its units move
+([native/battle.py](../../src/mapworkshop/native/battle.py)). Its output goes
+to `local/openbfme/battles/<map>/` (or `--out`).
+
+- **In OpenBFME** (the default), the engine's headless game process
+  (`openbfme_peer`, built with the game) hosts the map's skirmish with its
+  [line-up](#line-ups) and plays `--seconds` of game time (60), at about real
+  time. Every `--every` logic frames (5, a second) its battle log gets a line:
+  each player's troops, those on walls, battalions and heroes, the hurt gates
+  and wall pieces, the siege engines by phase and the map scripts' counters.
+  Under it stands every object of the `--watch` templates (by default the
+  units the map places for its players): name, position, health, AI state,
+  target and siege phase. The command then sums up how each template moved
+  (how many never moved, when they started and stopped, how far east and
+  north, how many went south) and draws `tracks.png` and `battle.gif` (the
+  positions second by second) over a top render; `--no-plot` skips them. The
+  studio's OpenBFME plays in its Uber performance profile; `--faithful` plays
+  the original rules, to tell a difference between the two apart.
+- **In RotWK** (`--rotwk`, the ROTWK profile), the original game runs headless
+  under the studio's debugger until `--seconds` and reports, for every
+  battalion, where its destination was moved to (adjustDestination) and where
+  its members reserved their goals, relative to it; `--cells` adds every cell
+  the destination search tried, with its result. Everything is in
+  `rotwk.json`. Use it to find out what the original game does where
+  OpenBFME differs: [battalions](../game/battalions.md) was measured this way.
 
 ## Faster loading in your normal game: `mw patch`
 

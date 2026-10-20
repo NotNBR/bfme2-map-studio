@@ -52,6 +52,7 @@ answer; the findings are in [how BFME2 behaves](../docs/game/README.md).
 | [Cliff Lab](cliff_lab/map.py) | `cliff-lab` | how does the game draw cliff-mapped terrain? ([cliff mapping](../docs/game/terrain-textures.md#cliff-mapping)) |
 | [Reflection Lab](reflection_lab/map.py) | `reflection-lab` | what do water reflections show at High, in the game and in the renderer? ([water](../docs/game/renderer/water.md)) |
 | [Specular Lab](specular_lab/map.py) | `specular-lab` | how does High terrain shine on textures without a normal map? ([terrain](../docs/game/renderer/terrain.md)) |
+| [Horde Spacing Lab](horde_spacing_lab/map.py) | `horde-spacing-lab` | where does ROTWK put the second of two battalions sent to one point, and where do a battalion's members stand around it? Ten pairs, traced with `mw battle --rotwk` ([battalions](../docs/game/battalions.md)) |
 | [Blend Lab](blend_lab/map.py) | `blend-lab` | how can a change of terrain texture be wider and softer than the game's one-cell blend? Sixteen approaches side by side, among them bands of in-between textures of varying number and width ([blends](../docs/game/terrain-textures.md#blends)) |
 
 ## Adding a map

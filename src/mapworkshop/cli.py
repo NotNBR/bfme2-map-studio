@@ -27,6 +27,8 @@ USAGE = """
   mw diff [MAP] [OTHER]      what the last build changed, or what differs between two maps
   mw walkable [MAP] [--native] estimate walking routes locally (--native: read the game instead)
   mw capture [MAP] --shot NAME X Y HEIGHT   screenshots from the game itself, headless (--graphics High, --show)
+  mw battle [MAP] [--seconds 60] [--watch T,...]   play it headless in OpenBFME and trace its units
+                             (--rotwk: RotWK's battalion destinations and goals instead)
   mw patch [install|remove]  faster map loading in your normal game (status without an action)
   mw rivers [MAP] [--json]   which way each river strip flows
   mw sites [MAP] [--teams 1-4/5-8]   walking distances from the bases to the neutral sites and lairs
@@ -126,6 +128,17 @@ def parser():
                    help='Also wait at least this many milliseconds after moving the camera before each shot')
     s.add_argument('--show', action='store_true',
                    help='Show the game window and use native Direct3D 9 (default: headless, through DXVK)')
+    s = sub.add_parser('battle', help="Play the map headless and trace its units: OpenBFME's battle log, or RotWK's destination choices")
+    s.add_argument('map', nargs='?', help='Map project (default: the last map)')
+    s.add_argument('--seconds', type=float, default=60, help='Game seconds to play (60; 5 logic frames a second)')
+    s.add_argument('--every', type=int, default=5, help='Logic frames between two log lines (5: a line a second)')
+    s.add_argument('--watch', help="Templates to trace, comma-separated (default: the units the map places for its players)")
+    s.add_argument('--faithful', action='store_true', help="OpenBFME's Faithful profile instead of Uber, the studio's default")
+    s.add_argument('--no-plot', action='store_true', help='Skip tracks.png and battle.gif')
+    s.add_argument('--rotwk', action='store_true',
+                   help='Instead: RotWK 2.01 under the debugger, its battalions\' destination adjustments and goal reservations')
+    s.add_argument('--cells', action='store_true', help='With --rotwk: also every candidate cell of each adjustment, with its result')
+    s.add_argument('--out', type=Path, help='Folder for the log and pictures (default local/openbfme/battles/<map>)')
     s = sub.add_parser('patch', help="Faster map loading in your normal game (a dinput8.dll in the game folder)")
     s.add_argument('action', nargs='?', choices=['status', 'install', 'remove'], default='status',
                    help='Report whether it is installed (default), install it, or remove it')
@@ -463,6 +476,48 @@ def cmd_capture(args):
     return 0
 
 
+def cmd_battle(args):
+    import json
+    from mapworkshop import project
+    from mapworkshop.native import battle
+    p = project.find(args.map)
+    project.remember(p)
+    out = Path(args.out or battle.out_dir(p))
+    frames = max(1, round(args.seconds*5))
+    if args.rotwk:
+        trace = battle.rotwk(p, frames=frames, cells=args.cells, progress=say)
+        out.mkdir(parents=True, exist_ok=True)
+        (out/'rotwk.json').write_text(json.dumps(trace, indent=1), encoding='utf-8')
+        say(f'Battalion destinations (RotWK, until frame {frames}):')
+        for a in trace['adjustments']:
+            tried = f', {len(a["cells"])} cells tried' if a['cells'] else ''
+            say(f'  frame {a["frame"]} id {a["id"]} at ({a["at"][0]:.0f}, {a["at"][1]:.0f}): ({a["before"][0]:.1f}, {a["before"][1]:.1f})'
+                f' -> ({a["after"][0]:.1f}, {a["after"][1]:.1f}){tried}')
+        say('Their members\' goals, relative to the battalion\'s:')
+        for f in battle.formations(trace):
+            xs = sorted({m[0] for m in f['members']})
+            say(f'  id {f["id"]} goal ({f["goal"][0]:.1f}, {f["goal"][1]:.1f}): {len(f["members"])} members at x {xs}')
+        say(f'Everything: {out/"rotwk.json"}')
+        return 0
+    watch = [t.strip() for t in args.watch.split(',')] if args.watch else None
+    battle.run(p, frames=frames, every=args.every, watch=watch, uber=not args.faithful, out=out, progress=say)
+    log = battle.parse((out/'battle.log').read_text(encoding='utf-8', errors='replace'))
+    say(f'{len(log["objects"])} objects traced over {len(log["frames"])} lines. How each template moved '
+        f'(frames; dx east, dy north, the mean of those that moved):')
+    for r in battle.summary(log):
+        timing = f'started {r["start"]:.0f}, stopped {r["stop"]:.0f}' if r['start'] is not None else 'none moved'
+        detour = f', paths {r["detour"]:.2f} x their displacement' if r['detour'] else ''
+        say(f'  {r["template"]}: {r["count"]}, {r["never_moved"]} never moved, {r["backwards"]} went south over 50; {timing}; '
+            f'dx {r["dx"]:.0f}, dy {r["dy"]:.0f}{detour}')
+    if log['frames']:
+        say(f'Last line: frame {log["frames"][-1][0]} | {log["frames"][-1][1][:300]}')
+    if not args.no_plot:
+        for path in battle.plot(p, log, out):
+            say(f'  {path}')
+    say(f'The log: {out/"battle.log"}')
+    return 0
+
+
 def cmd_walkable(args):
     """Local walkability, with optional native capture or saved-grid comparison."""
     import json
@@ -726,6 +781,7 @@ def main(argv=None):
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
                     config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, sites=cmd_sites, where=cmd_where, capture=cmd_capture,
+                    battle=cmd_battle,
                     patch=cmd_patch)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:

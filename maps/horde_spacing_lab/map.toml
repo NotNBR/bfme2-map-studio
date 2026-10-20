@@ -1,0 +1,12 @@
+id = "horde-spacing-lab"
+title = "Horde Spacing Lab"
+native_name = "map mp horde spacing lab"
+players = 2
+description = "Test map: pairs of battalions ordered to one point, to see where the game puts the second one."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+[play]
+slots = [                               # slot k takes start k
+    {faction = "Men", team = 1},        # you: every battalion on the map
+    {faction = "Mordor", team = 2, ai = "easy"},   # far away in the north-east corner
+]
