@@ -1,0 +1,16 @@
+; The studio's map viewer on OpenBFME's library (docs/godot-viewer/plan.md). Never run from this folder:
+; mapworkshop.native.openbfme.assemble() copies it, with OpenBFME's library and the shaders that library loads,
+; into local/openbfme/viewer/, and Godot runs and imports it there.
+
+config_version=5
+
+[application]
+
+config/name="BFME2 Map Studio"
+run/main_scene="res://scenes/viewer.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900

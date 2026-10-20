@@ -245,6 +245,12 @@ def cmd_doctor(args):
     from mapworkshop.native import openbfme
     ok, text = openbfme.status()
     check(ok, f'OpenBFME (mw play --godot): {text}', required=False)
+    if (openbfme.SOURCE/'.git').exists():
+        dirt = openbfme.differences()
+        check(not dirt, 'OpenBFME submodule: at the commit recorded here, unchanged' if not dirt else
+              f'OpenBFME submodule: {len(dirt)} difference{"s" if len(dirt) > 1 else ""} from the commit recorded here '
+              f'({"; ".join(dirt[:3])}{"; ..." if len(dirt) > 3 else ""})',
+              'Nothing is written into it: docs/guide/testing-in-game.md, "The pin and a clean submodule".')
     try:
         import moderngl
         ctx = moderngl.create_standalone_context(require=430)

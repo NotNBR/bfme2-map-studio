@@ -55,6 +55,10 @@ comparisons, are recorded in [roads and bridges](../game/roads-and-bridges.md).
 
 `src/mapworkshop/native/ingame/ingame.cpp` takes from bfme-workshop's strategic extension (GPL-3.0-only; same author) its hook trampoline, the camera placement of its photo mode, its camera matrix layout and its D3D9 render-target readback. Direct3D9 interface slots were cross-checked there against mingw-w64's `d3d9.h`, which is not copied. `ingame.dll` is built with the MSVC 7.1 toolchain of openbfme2's reference checkout; the compiler is not redistributed by this project.
 
+## OpenBFME
+
+[OpenBFME](https://github.com/Open-BFME/openbfme-godot), the Godot rebuild of RotWK 2.01 that `mw play --godot` and `mw battle` run, is the submodule `src/mapworkshop/native/openbfme-godot` (its remote is the fork [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot)), under GPL-3.0. The studio never changes its files, so its `LICENSE` and `NOTICE` stay with it there: the notice covers the parts translated from EA's Command & Conquer Generals Zero Hour source (GPL-3.0 with EA's additional terms) and its third-party code (godot-cpp, doctest, Lua 4.0.1, fast_float). `src/mapworkshop/native/openbfme.py` builds it into the ignored `local/openbfme/`; the build is not distributed here. The studio's own viewer (`src/mapworkshop/viewer/godot/`) runs on its library: it is assembled in `local/openbfme/viewer/` with copies of the library and of the shaders the library loads, which keep their licence there. Godot 4.7.2 (MIT) and llvm-mingw, the toolchain it is built with (LLVM and mingw-w64, under their own licences), are downloaded there too, pinned to their releases' SHA-256, and are not distributed here either.
+
 ## DXVK
 
 Headless game runs use the 32-bit `d3d9.dll` of [DXVK](https://github.com/doitsujin/dxvk) (zlib licence), Direct3D 9 on Vulkan, by Philip Rebohle and contributors. It is not distributed here: `src/mapworkshop/native/runtime.py` downloads the pinned release into the ignored `local/runtime/dxvk/` and checks its SHA-256.

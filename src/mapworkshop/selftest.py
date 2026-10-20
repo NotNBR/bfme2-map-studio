@@ -4,7 +4,8 @@ Checks: every Python file parses; imports respect the layers below; every
 relative link in the Markdown files resolves, anchors included; no page outside
 docs/history/ gives bfme-workshop's commands as this repository's;
 maps/README.md lists every map project; the guides (docs/guide/) show every
-`mw` command.
+`mw` command; the OpenBFME submodule, once checked out, is clean
+(native.openbfme.differences()).
 
 Layers, bottom up; a package imports only from its own layer or below. The
 game's files (assets) sit below mapkit, which builds maps from them; render
@@ -171,6 +172,24 @@ def check_index():
     return problems
 
 
+def check_openbfme(path=None, commit=None, shown=10):
+    """The OpenBFME submodule at the commit recorded here and unchanged; (problems, checked), not checked while it is not
+    checked out (`mw play --godot` fetches it)."""
+    from mapworkshop.native import openbfme
+    path = path or openbfme.SOURCE
+    if not (path/'.git').exists():
+        return [], False
+    try:
+        found = openbfme.differences(path, commit)
+    except RuntimeError as error:
+        found = [str(error)]
+    name = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
+    problems = [f'{name}: {d}' for d in found[:shown]] + ([f'{name}: and {len(found) - shown} more'] if len(found) > shown else [])
+    if problems:
+        problems[-1] += '\n    (nothing is written into it: docs/guide/testing-in-game.md#the-pin-and-a-clean-submodule)'
+    return problems, True
+
+
 def main(argv=()):
     if '--corpus' in argv:
         os.environ['MW_CORPUS'] = '1'   # also round-trip every stock map (needs the game data; slow)
@@ -179,8 +198,10 @@ def main(argv=()):
     result = unittest.TextTestRunner(verbosity=1 if '-v' not in argv else 2).run(suite)
     pages = documents()
     links, count = check_links(pages)
-    problems = check_syntax() + check_layers() + links + check_foreign(pages) + check_index()
-    print(f'\nChecks: Python syntax, import layers, {count} links in {len(pages)} documents, the map and command indexes')
+    submodule, checked = check_openbfme()
+    problems = check_syntax() + check_layers() + links + check_foreign(pages) + check_index() + submodule
+    print(f'\nChecks: Python syntax, import layers, {count} links in {len(pages)} documents, the map and command indexes, '
+          f'the OpenBFME submodule{"" if checked else " (not checked out)"}')
     for problem in problems:
         print('  ' + problem)
     ok = result.wasSuccessful() and not problems

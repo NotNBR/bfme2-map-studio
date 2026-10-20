@@ -139,24 +139,15 @@ The first run sets up everything in `local/openbfme/`, in about three
 minutes plus the time to check the game files:
 
 - **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
-  `mw setup`): the branch `studio/main` of
+  `mw setup`) at the commit this repository pins
+  ([the pin](#the-pin-and-a-clean-submodule)). It pins `studio-2026-10-19-2`,
+  a commit of the branch `studio/main` of
   [NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot), a fork of
-  OpenBFME. That branch is upstream's `main`, with every open upstream pull
-  request merged into it (the studio's walls, siege, weather and big-battle
-  work among them), and the studio's own commits on top: the free camera,
-  the cinematics, staged armies, extra archives, `--no-shroud` and the
-  headless battle log. Nobody works on it directly. The fork's
-  `tools/studio/rebuild_branch.py` regenerates it and tags each result
-  `studio-YYYY-MM-DD`, so every commit the submodule ever pointed at stays
-  fetchable. To take upstream's latest, run in the fork's clone
-  `python tools/studio/rebuild_branch.py --push` (it stops on a conflict that
-  git rerere hasn't seen before; resolve it and run with `--resume`). Then
-  point the submodule at the new tag
-  (`git -C src/mapworkshop/native/openbfme-godot fetch --tags` and
-  `checkout studio-YYYY-MM-DD`) and commit it here. An engine change
-  that upstream should have goes to a pull request branch in the fork. One
-  that is the studio's alone is a commit on `studio/main`, which each rebuild
-  replays. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
+  OpenBFME: upstream's `main`, with every open upstream pull request merged
+  into it (the studio's walls, siege, weather and big-battle work among
+  them), and the studio's own commits on top: the free camera, the
+  cinematics, staged armies, extra archives, `--no-shroud` and the headless
+  battle log. It also downloads llvm-mingw and Godot 4.7.2, pinned to their
   releases' SHA-256, then builds the engine into `local/openbfme/build/`.
   Godot runs a copy of the submodule's `godot/` folder,
   `local/openbfme/project/`: the built GDExtension, Godot's import cache and
@@ -280,6 +271,48 @@ OpenBFME has eight player slots, so a map lists its first eight starts. Its
 profile, options and logs stay in `local/openbfme/appdata/`. `mw doctor`
 reports how far the setup has got. OpenBFME is an alpha: what it does not do
 yet is listed in its README.
+
+### The pin and a clean submodule
+
+The submodule pins one commit, recorded in this repository. By default it is
+a commit of OpenBFME's official `main`
+([Open-BFME/openbfme-godot](https://github.com/Open-BFME/openbfme-godot)). A
+feature `main` lacks comes in by pinning a commit that has it, for as long as
+OpenBFME takes to merge it: the user-maps change, or an open pull request
+(walls, siege, weather). Once OpenBFME has merged it, the pin goes back to a
+commit of `main`. Every pinned commit is pushed and tagged, and the commit here
+that moves the pin says why. Don't move the pin to the fork's `studio/main`:
+its features reach `mw play --godot` and `mw battle` only when a pin brings
+them in. An engine change goes to OpenBFME as a pull request; what is the
+studio's alone stays in the studio's code, never in OpenBFME. This is
+decision 5 of the [Godot viewer plan](../godot-viewer/plan.md#decisions); the
+current pin, from before it, moves in the plan's
+[phase 0](../godot-viewer/plan.md#phase-0-groundwork).
+
+To move the pin to a pushed tag:
+
+```powershell
+git -C src/mapworkshop/native/openbfme-godot fetch --tags
+git -C src/mapworkshop/native/openbfme-godot checkout <tag>
+git add src/mapworkshop/native/openbfme-godot      # then commit, saying why
+```
+
+Nothing is ever written into the submodule: the build, Godot's import and the
+games write to `local/openbfme/`. `mw test` and `mw doctor` check that it is
+clean: checked out at the recorded commit, every file as that commit has it,
+nothing untracked and nothing its `.gitignore` names, and godot-cpp, its own
+submodule, the same. Files are compared with Git LFS off: upstream stores four
+plain PNGs under its LFS rule, and Git with LFS reports them changed although
+they are not. The same comparison by hand:
+
+```powershell
+git -C src/mapworkshop/native/openbfme-godot -c filter.lfs.process= -c filter.lfs.clean=cat -c filter.lfs.smudge=cat -c filter.lfs.required=false status --porcelain --ignored
+```
+
+Whatever it lists was written by something else: an older build of the studio
+(before `local/openbfme/project/`), or a tool run inside the submodule. Find
+out what wrote it before you remove it: a changed tracked file may be someone's
+unfinished work.
 
 ## The game's pathfinding grid: `mw walkable --native`
 

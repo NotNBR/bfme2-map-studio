@@ -1,9 +1,13 @@
 """OpenBFME's parts that need neither the engine nor the game: the archives
 it mounts, the merged map cache, the launcher's pins, gathering game files,
-the Godot project's copy and when build() imports it."""
+the Godot project's copy, when build() imports it, the studio viewer's
+assembly, and the submodule's cleanliness check (on a small repository of
+its own)."""
 import hashlib
+import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -91,28 +95,29 @@ class MirrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source, target = Path(tmp)/'godot', Path(tmp)/'project'
             files = ['project.godot', 'scripts/a.gd', 'scripts/old/b.gd', 'icon.png', 'icon.png.import']
+            mirror = lambda: openbfme.mirror(target, {name: source/name for name in files})
             for name in files:
                 (source/name).parent.mkdir(parents=True, exist_ok=True)
                 (source/name).write_bytes(name.encode())
             (source/'scripts'/'stray.gd.uid').write_bytes(b'uid://source')     # untracked: not copied
-            self.assertEqual(openbfme.mirror(source, target, files), 5)
+            self.assertEqual(mirror(), 5)
             self.assertEqual(sorted(p.relative_to(target).as_posix() for p in target.rglob('*') if p.is_file()), sorted(files))
             self.assertEqual((target/'scripts'/'a.gd').stat().st_mtime_ns, (source/'scripts'/'a.gd').stat().st_mtime_ns)
-            self.assertEqual(openbfme.mirror(source, target, files), 0)
+            self.assertEqual(mirror(), 0)
 
             written = ['.godot/uid_cache.bin', 'bin/openbfme.dll', 'scripts/a.gd.uid', 'icon.png.import']   # by Godot and the build
             for name in written:
                 (target/name).parent.mkdir(parents=True, exist_ok=True)
                 (target/name).write_bytes(b'generated')
             (target/'project.godot').write_bytes(b'project.godot')              # the same bytes, a newer time
-            self.assertEqual(openbfme.mirror(source, target, files), 1)         # the tracked .import is restored
+            self.assertEqual(mirror(), 1)         # the tracked .import is restored
             self.assertEqual((target/'icon.png.import').read_bytes(), b'icon.png.import')
             self.assertEqual((target/'scripts'/'a.gd.uid').read_bytes(), b'generated')
 
             (source/'scripts'/'a.gd').write_bytes(b'changed')
             files.remove('scripts/old/b.gd')
             (target/'scripts'/'old'/'b.gd.uid').write_bytes(b'generated')
-            self.assertEqual(openbfme.mirror(source, target, files), 3)         # a.gd copied, b.gd and its .uid deleted
+            self.assertEqual(mirror(), 3)         # a.gd copied, b.gd and its .uid deleted
             self.assertEqual((target/'scripts'/'a.gd').read_bytes(), b'changed')
             self.assertFalse((target/'scripts'/'old').exists())
             self.assertTrue(all((target/name).exists() for name in written))
@@ -122,7 +127,7 @@ class MirrorTests(unittest.TestCase):
             (source/'scripts'/'a.gd').mkdir()                                   # a file that became a folder
             (source/'scripts'/'a.gd'/'c.gd').write_bytes(b'c')
             files[files.index('scripts/a.gd')] = 'scripts/a.gd/c.gd'
-            self.assertEqual(openbfme.mirror(source, target, files), 4)         # icon.png, a.gd and its .uid deleted, c.gd copied
+            self.assertEqual(mirror(), 4)         # icon.png, a.gd and its .uid deleted, c.gd copied
             self.assertFalse((target/'icon.png').exists())
             self.assertEqual((target/'scripts'/'a.gd'/'c.gd').read_bytes(), b'c')
 
@@ -155,7 +160,79 @@ class BuildTests(unittest.TestCase):
                 build()                                                         # nothing changed since, but the import is due
                 build()
             self.assertEqual((len(links), len(imports)), (1, 3))
-            self.assertFalse((tmp/'build'/'import.pending').exists())
+            self.assertFalse((tmp/'logs'/'import-project.pending').exists())
+
+
+class AssembleTests(unittest.TestCase):
+    def test_the_viewer_gets_the_library_and_its_shaders_and_assembles_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp, imports = Path(tmp), []
+            files = {'studio/project.godot': b'studio', 'studio/scripts/viewer.gd': b'extends Node3D',
+                     'studio/.godot/uid_cache.bin': b'', 'src/godot/openbfme.gdextension': b'res://bin/',
+                     'src/godot/shaders/other.gdshader': b'', 'project/' + openbfme.DLL: b'dll',
+                     'src/godot/shaders/terrain.gdshader': b'#include "res://shaders/common.gdshaderinc"',
+                     'src/godot/shaders/common.gdshaderinc': b'#include "res://shaders/decals.gdshaderinc"',
+                     'src/godot/shaders/decals.gdshaderinc': b'', **{f'src/godot/shaders/{name}.gdshader': b''
+                                                                    for name in ('water_standing', 'road', 'river')}}
+            for name, data in files.items():
+                (tmp/name).parent.mkdir(parents=True, exist_ok=True)
+                (tmp/name).write_bytes(data)
+
+            def run(args, **kwargs):                                            # Godot's import
+                imports.append(args)
+                return subprocess.CompletedProcess(args, 0, '', '')
+
+            with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', VIEWER=tmp/'viewer', STUDIO=tmp/'studio',
+                                     LOGS=tmp/'logs', APPDATA=tmp/'appdata', build=lambda progress: ('gui', 'console')), \
+                    mock.patch.object(subprocess, 'run', run):
+                (tmp/'logs').mkdir()
+                self.assertEqual(sorted(openbfme.viewer_files()), sorted([
+                    'project.godot', 'scripts/viewer.gd', 'openbfme.gdextension', openbfme.DLL, 'shaders/terrain.gdshader',
+                    'shaders/common.gdshaderinc', 'shaders/decals.gdshaderinc', 'shaders/water_standing.gdshader',
+                    'shaders/road.gdshader', 'shaders/river.gdshader']))
+                openbfme.assemble(progress=lambda *_: None)
+                before = {p: p.stat().st_mtime_ns for p in (tmp/'viewer').rglob('*')}
+                openbfme.assemble(progress=lambda *_: None)                     # the same again: nothing copied or imported
+                self.assertEqual({p: p.stat().st_mtime_ns for p in (tmp/'viewer').rglob('*')}, before)
+                self.assertEqual(len(imports), 1)
+                self.assertEqual((tmp/'viewer'/openbfme.DLL).read_bytes(), b'dll')
+
+                (tmp/'studio'/'shaders').mkdir()
+                (tmp/'studio'/'shaders'/'road.gdshader').write_bytes(b'')       # the studio's own file under OpenBFME's name
+                self.assertRaises(RuntimeError, openbfme.viewer_files)
+
+
+class DifferencesTests(unittest.TestCase):
+    def test_clean_with_lfs_off_and_each_kind_of_dirt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, config = Path(tmp)/'repo', Path(tmp)/'gitconfig'
+            repo.mkdir()
+            config.write_text('')
+            alone = dict(GIT_CONFIG_GLOBAL=str(config), GIT_CONFIG_NOSYSTEM='1', GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t',
+                         GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t')             # neither the user's nor the system's
+            with mock.patch.dict(os.environ, alone):
+                def git(*args):
+                    return subprocess.run(['git', *args], cwd=repo, check=True, capture_output=True, text=True).stdout
+                (repo/'.gitattributes').write_text('*.png filter=lfs diff=lfs merge=lfs -text\n')
+                (repo/'.gitignore').write_text('bin/\n')
+                (repo/'icon.png').write_bytes(b'\x89PNG stored plain')                  # as upstream's four are
+                (repo/'a.gd').write_text('extends Node\n')
+                git('init', '-q')
+                git('add', '.')
+                git('commit', '-qm', 'one')
+                head = git('rev-parse', 'HEAD').strip()
+                git('config', 'filter.lfs.clean', 'sed s/PNG/LFS/')                    # Git LFS on: the PNG reads as changed
+                os.utime(repo/'icon.png', (time.time() + 60,)*2)
+                self.assertEqual(git('status', '--porcelain'), ' M icon.png\n')
+                self.assertEqual(openbfme.differences(repo, head), [])
+
+                self.assertEqual(openbfme.differences(repo, '0'*40), [f'at {head[:8]} instead of the recorded 00000000'])
+                (repo/'bin').mkdir()
+                (repo/'bin'/'openbfme.dll').write_bytes(b'')
+                (repo/'a.gd.uid').write_text('uid://a')
+                (repo/'a.gd').write_text('extends Node3D\n')
+                self.assertCountEqual(openbfme.differences(repo, head), [' M a.gd', '?? a.gd.uid', '!! bin/'])
+            self.assertEqual(openbfme.differences(Path(tmp)/'elsewhere', head), ['not checked out'])
 
 
 if __name__ == '__main__':
