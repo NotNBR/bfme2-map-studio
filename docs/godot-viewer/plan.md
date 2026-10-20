@@ -22,9 +22,10 @@
   `mw render` and the switch.
 - **Checked by:** two reviewing agents at the end of every phase, one for the
   design, one for cleanliness.
-- **Still to decide:** who writes the user-maps pull request, and whether
-  `mw play --godot` and battles may lose the features from the fork's open pull
-  requests until OpenBFME merges them.
+- **Pinning:** the submodule pins a commit of official `main`. When the studio
+  needs something `main` does not have yet, the pin moves to a commit that has
+  it, and back once OpenBFME merges it.
+- **Still to decide:** who writes the user-maps pull request.
 
 ## Where we are
 
@@ -71,17 +72,25 @@ Taken:
    reads BFME2's archives and the same map format; a few templates differ).
 4. `mw render` moves to Godot as well, with a flag to render in the original
    game instead, for comparison.
+5. **The pin.** By default the submodule pins a commit of official `main`. A
+   feature `main` lacks (the user-maps change until it is merged, or the user's
+   open pull requests: walls, siege, weather) comes in by pinning a commit that
+   has it, for as long as it takes OpenBFME to merge it. Every pin is pushed and
+   tagged, and the commit that moves the pin says why. So the features of the
+   fork's `studio/main` reach `mw play --godot` and `mw battle` only when a pin
+   brings them in.
+6. **The other sessions.** The sessions working on OpenBFME do so in the fork's
+   own clone, not here, and the plan does not wait for them. Two things still
+   touch them: they used to move the studio's pin to the fork's `studio/main`
+   (as in `1dbb65e`, `bedb715`), which the pin rule above replaces, so phase 0
+   writes it where every agent reads it; and phase 0 rebuilds the studio's
+   OpenBFME build, which interrupts an `mw play --godot` or `mw battle` running
+   at that moment. They get a one-line note before phase 0.
 
 Open:
 
 1. Who writes the user-maps pull request: the studio's session, or one of the
-   sessions working on OpenBFME (`open-bfme-2-3c`, `open-bfme-2-59`).
-2. Whether `mw play --godot`, `mw battle` and the Battle of Helm's Deep may
-   lose walls, siege, weather, cinematics and `--no-shroud` until OpenBFME
-   merges the user's pull requests for them. Proposing the studio-only changes
-   upstream too (`--no-shroud`, the camera tilt) would shorten that.
-3. When the sessions working on OpenBFME can pause for phase 0, which rebuilds
-   the engine and moves its library.
+   sessions working on OpenBFME.
 
 ## Architecture
 
@@ -172,7 +181,7 @@ Each phase ends with both reviewing agents' checks (below) passing.
 | 0.2 | Fork-side fixes offered upstream: the missing `.uid` files, the 4 images through LFS | the submodule's `git status` clean after an import |
 | 0.3 | The submodule pinned to that branch, `update = none` and `ignore = dirty` removed, `source()` checks out the recorded commit when it differs | a fresh `git clone --recursive` and `mw setup` in an empty folder |
 | 0.4 | OpenBFME's Godot import and the engine build moved to `local/openbfme/` | `git status --ignore-submodules=none` clean after a build and a test game |
-| 0.5 | `mw doctor` and `mw test` check the submodule's commit and cleanliness; `docs/licenses/THIRD_PARTY.md` names OpenBFME | the checks fail on a deliberately dirtied copy |
+| 0.5 | `mw doctor` and `mw test` check the submodule's commit and cleanliness; `docs/licenses/THIRD_PARTY.md` names OpenBFME; the pin rule (decision 5) written in the OpenBFME section of `docs/guide/testing-in-game.md`, where every agent reads it | the checks fail on a deliberately dirtied copy |
 | 0.6 | The studio's Godot project skeleton and its assembly under `local/openbfme/viewer/` | assembled twice in a row with the same result |
 
 ### Phase 1: proof and a first viewer
@@ -234,5 +243,6 @@ place (`docs/viewer.md`, `docs/guide/rendering.md`).
 - **Review time** for the user-maps pull request is OpenBFME's; the minimal
   fork branch carries the work meanwhile.
 - **No viewer without RotWK:** OpenBFME needs English RotWK 2.01 and BFME2 1.06.
-- **The other sessions:** phase 0 rebuilds the engine and moves its library,
-  under `mw play --godot` and `mw battle` while they run.
+- **The other sessions:** a pin moved to the fork's `studio/main` out of habit
+  would undo decision 5; the written rule and the note before phase 0 guard
+  against it.
