@@ -156,6 +156,7 @@ func _build_stage() -> void:
 		_frame.toolbar.test_game_chosen.connect(
 			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
 		_frame.toolbar.view_switched.connect(_switch_view)
+		_frame.toolbar.preview_chosen.connect(_preview)
 		_frame.toolbar.action.connect(_toolbar_action)
 		var entries := []
 		for view in VIEWS:
@@ -285,14 +286,15 @@ func _apply_views(keys: Array = []) -> void:
 			_switch_view(key, _views[key])
 
 
-## A new build, or another map (`new_map`): the scene and its surface read and the map built in place. The camera
-## stays for a new build; another map starts at its whole map.
-func _reload(path: String, new_map: bool) -> void:
+## A new build, another map (`new_map`) or a preview (`what` names it): the scene and its surface read and the map
+## built in place. The camera stays for a new build and a preview; another map starts at its whole map.
+func _reload(path: String, new_map: bool, what: String = "") -> void:
 	var started := Time.get_ticks_msec()
 	var previous := _scene_path
 	_scene_path = path
 	if _frame != null:
-		_frame.toast("busy", "Loading %s" % ("the new build" if not new_map else path.get_base_dir().get_file()), "", 30)
+		var loading := what if not what.is_empty() else "the new build" if not new_map else path.get_base_dir().get_file()
+		_frame.toast("busy", "Loading %s" % loading, "", 30)
 	if not _read_scene():
 		_scene_path = previous
 		_send({"type": "reload_failed", "error": "the scene could not be read"})
@@ -309,7 +311,7 @@ func _reload(path: String, new_map: bool) -> void:
 		_send({"type": "reload_failed", "error": "the map did not build"})
 		return
 	if _frame != null:
-		_frame.toast("done", "Loaded %s" % _scene.title, "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
+		_frame.toast("done", "Loaded %s" % (what if not what.is_empty() else _scene.title), "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
 	print("VIEWER reloaded %s in %d ms" % [_scene.map, Time.get_ticks_msec() - started])
 	_send({"type": "reloaded", "ms": Time.get_ticks_msec() - started})
 
@@ -471,7 +473,8 @@ func _serve_link() -> void:
 				DisplayServer.clipboard_set(message.text)
 				_frame.bar.set_status("Copied the marks for an agent: paste them into its prompt", 4)
 			"reload":
-				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)))
+				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)),
+					String(message.get("what", "")))
 			"menu":
 				_frame.toolbar.set_menu(message)
 			"walkable":
@@ -652,6 +655,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F1:
 				if _frame != null:
 					_frame.toggle_help()
+
+
+## A Preview entry: the companion writes the map's preview copy and has the viewer build it in place.
+func _preview(option: String, value: String) -> void:
+	_send({"type": "command", "name": "preview", option: value})
 
 
 ## A View switch (the menu or its key): the layer shown or hidden, the overlay drawn, the terrain built again (fog).

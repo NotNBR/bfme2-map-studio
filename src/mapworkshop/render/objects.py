@@ -301,9 +301,8 @@ class ObjectsMixin:
                 if kind and kind['model']:
                     textures(self.model_cache.load(kind['model'].lower()))
                     names.add(kind['texture'])
-        from mapworkshop.mapkit.weather import PRESETS, SUNS, sky_texture
-        sky = (SUNS[self.sun].get('sky') if self.sun else None) or \
-              (PRESETS[self.weather_preset].get('sky') if self.weather_preset else None)
+        from mapworkshop.mapkit.weather import sky as preset_sky, sky_texture
+        sky = preset_sky(self.weather_preset, self.sun)
         if sky:
             names.add(sky_texture(sky))
         for name in names:

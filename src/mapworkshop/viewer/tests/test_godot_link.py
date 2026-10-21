@@ -47,7 +47,7 @@ class CompanionTests(unittest.TestCase):
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
-        self.data = dict(map_path=str(self.map_path), title='Test')
+        self.data = dict(map_path=str(self.map_path), title='Test', preview=godot_link.OWN)
         self.companion = godot_link.Companion((tmp/'scene.json', self.data, None, FlatSurface()),
                                               progress=lambda line: None)
 
@@ -153,19 +153,40 @@ class CompanionTests(unittest.TestCase):
         time.sleep(0.01)
         self.map_path.write_bytes(b'rebuilt')
         self.assertEqual(self.companion.watch(), dict(type='reload', scene='scene.json', new_map=False))
-        prepare.assert_called_once_with('test')
+        prepare.assert_called_once_with(str(self.map_path), godot_link.OWN)
         self.assertIsNone(self.companion.watch())
 
     def test_another_map_is_prepared_and_the_viewer_told_to_read_it(self):
         other = Path(self.tmp.name)/'map mp other.map'
         other.write_bytes(b'')
         self.companion.prepare = mock.MagicMock(
-            return_value=(Path('other.json'), dict(map_path=str(other), title='Other'), None, FlatSurface()))
+            return_value=(Path('other.json'), dict(map_path=str(other), title='Other', preview=godot_link.OWN), None,
+                          FlatSurface()))
         with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
             replies = self.send(dict(type='command', name='open_map', map=str(other)))
         self.assertEqual(replies[0], dict(type='reload', scene='other.json', new_map=True))
         self.assertEqual(self.companion.map_path, other)
         self.assertEqual(self.companion.marks.items, [])               # that map's marks, not this one's
+
+    def test_a_preview_prepares_the_same_map_again_with_it(self):
+        preview = dict(weather='rain', sun='own')
+        self.companion.prepare = mock.MagicMock(
+            return_value=(Path('preview.json'), dict(self.data, map='map mp test studio preview', preview=preview),
+                          None, FlatSurface()))
+        loaded = self.companion.loaded
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
+            replies = self.send(dict(type='command', name='preview', weather='rain'))
+        self.companion.prepare.assert_called_once_with(str(self.map_path), preview)
+        self.assertEqual(replies[0], dict(type='reload', scene='preview.json', new_map=False, what='the preview: Rain'))
+        self.assertEqual(self.companion.preview, preview)
+        self.assertIs(self.companion.loaded, loaded)                   # the same map: its marks and analysis stay
+
+    def test_a_preview_that_fails_puts_the_menu_back(self):
+        self.companion.prepare = mock.MagicMock(side_effect=OSError('disk full'))
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
+            replies = self.send(dict(type='command', name='preview', sun='ember'))
+        self.assertEqual([r['type'] for r in replies[:2]], ['status', 'menu'])
+        self.assertEqual(self.companion.preview, godot_link.OWN)
 
     def test_build_and_test_in_game_start_the_studio_viewers_jobs(self):
         with mock.patch.object(self.companion.build, 'start') as build:

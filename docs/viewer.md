@@ -277,8 +277,18 @@ bottom with the status line and the camera's readout. It has:
 
 - the toolbar, as in [The toolbar](#the-toolbar): **Map** (the map projects,
   the game's maps, Open project folder), **Build** with its chip, **Test
-  In-Game** and the choice of what it starts, **View**, **Top view**, **Reset
-  view**, **Screenshot** and the frame rate;
+  In-Game** and the choice of what it starts, **Preview**, **View**, **Top
+  view**, **Reset view**, **Screenshot** and the frame rate;
+- **Preview**, as in [The toolbar](#the-toolbar): **Weather** and **Sun**,
+  with the button showing the choice. OpenBFME draws a map as its file and
+  `map.ini` say, so a preview is a copy of the map with the preset's world
+  weather, lighting, fog and sky, which the viewer opens in the map's place
+  (`<map> studio preview` in the user maps folder, removed when the viewer
+  closes; while it is open, OpenBFME's Skirmish list shows it too). A
+  screenshot (P) of a preview is named after the copy. Rain and snow bring
+  their fog, light and sky but no falling rain or snow, and the sky changes
+  only on the map's `WaterReflectionSkydome` objects. There is no
+  **Detail**: OpenBFME has no detail levels;
 - **View**, as in [The toolbar](#the-toolbar): objects (units included),
   water, roads, fog (the map's own; switching it builds the terrain again),
   Animate (the units' idle animations and the flow arrows), grid, map border,
@@ -305,10 +315,10 @@ bottom with the status line and the camera's readout. It has:
   screenshot into `godot/` in the profile's renders folder
   (`local/profiles/<profile>/renders/godot/`), **F1** the controls.
 
-Weather, the sky, Properties, Preview, Browse..., Photo mode and saved views
-are not there yet. Shadows, normal maps, cloud shadows, rain and snow, editor
-markers and the game object limits are not in the View menu: OpenBFME's
-library draws none of them as switches.
+Properties, Browse..., Photo mode and saved views are not there yet.
+Shadows, normal maps, cloud shadows, rain and snow, editor markers and the
+game object limits are not in the View menu: OpenBFME's library draws none of
+them as switches.
 
 A project opens from its last build, which goes into OpenBFME's user maps
 folder in `local/openbfme/appdata/`; a stock map opens from RotWK's archives,

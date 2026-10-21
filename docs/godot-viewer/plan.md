@@ -34,8 +34,9 @@
   on the same pixels as `mw render`. Phase 2 is done: marking for agents, the
   marks panel, Copy for agent and live reload, through a Python companion.
   Phase 3 is under way: the new layout and toolbar (Map, Build, Test In-Game,
-  View) and the View menu's layers and overlays (grid, map border, the
-  walkability estimate and the river flow arrows) are done.
+  View), the View menu's layers and overlays (grid, map border, the
+  walkability estimate and the river flow arrows) and Preview (the weather
+  and sun presets, as a copy of the map) are done.
 
 ## Where we are
 
@@ -150,7 +151,7 @@ running
 | Photo mode | today's lens: the frame from the studio's own camera maths (the sensor and frame rules of `render/photo.py`), the depth of field as a compositor effect porting `render/photo.py`'s blur (phase 1 found Godot's `CameraAttributesPhysical` unfit: see there) | the lens settings, as `mw render` resolves a view |
 | Saved views, Copy view | the same `local/views` JSON and `mw render` command | |
 | Walkability, river flow | drawn over the terrain | computed as today, sent as an image and line data |
-| Weather and sun presets | reload | the map's `map.ini` variant |
+| Weather and sun presets | the copy built in place | a copy of the map with the preset's world weather, lighting, sky domes and `map.ini` Weather |
 | Build, Test In-Game, Properties | buttons | today's code runs them |
 | Live reload | the map built again in place | tells Godot a build has finished |
 | `mw render` | the same scene in screenshot mode, on a hidden desktop as `mw capture` does | the command and the views |

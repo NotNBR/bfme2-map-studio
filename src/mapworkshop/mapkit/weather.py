@@ -22,7 +22,10 @@ fog beyond the gameplay view so only the distance hazes. Particles fall from
 SnowBoxHeight above the ground; a tall box keeps them near the camera.
 """
 
+import re
+
 WEATHER_CODES = dict(none=0, cloudy=1, rainy=2, cloudyrainy=3, sunny=4)
+WEATHER_BLOCK = r'(?ims)^\s*Weather\s*$(.*?)^\s*End\b'    # an INI text's Weather blocks, their keys in group 1
 
 # fog: (R, G, B), start, end. particles: snow-system settings. light: sun
 # diffuse multipliers (R, G, B) and an ambient multiplier; fill: new colour of
@@ -91,10 +94,43 @@ def apply_sun(lighting, name):
     return _apply_light(lighting, SUNS[name])
 
 
+def apply_sun_to_map(m, name):
+    """Adjust a map's GlobalLighting for a sun (apply_sun on the decoded chunk)."""
+    from mapworkshop.formats.lighting import decode, encode
+    chunk = m.chunk('GlobalLighting')
+    lighting = decode(chunk.data, chunk.version)
+    apply_sun(lighting, name)
+    chunk.data = encode(lighting, chunk.version)
+
+
 def sun_ini(name):
     """A Weather block with only the sun's fog, to override the weather's."""
     fog = SUNS[name].get('fog')
     return 'Weather\n' + '\n'.join(_fog_lines(fog)) + '\nEnd\n' if fog else ''
+
+
+def without_weather(text):
+    """An INI text without its Weather blocks (a preset's ini_block stands in their place)."""
+    return re.sub(WEATHER_BLOCK, '', text)
+
+
+def sky(weather=None, sun=None):
+    """The sky a weather preset and a sun bring: the sun's, else the preset's; None for the map's own (no
+    preset and no sun, or neither brings one)."""
+    return (SUNS[sun].get('sky') if sun in SUNS else None) or (PRESETS[weather].get('sky') if weather in PRESETS else None)
+
+
+def preview_choices():
+    """The viewers' Preview choices, {'weather': [(value, label)], 'sun': [...]}: 'map' and 'own' are the map's
+    own weather and the weather's own sun."""
+    return dict(weather=[('map', "Map's own")] + [(k, k.title()) for k in PRESETS],
+                sun=[('own', "Weather's own")] + [(k, v['label']) for k, v in SUNS.items()])
+
+
+def preview_labels(weather, sun):
+    """What a Preview choice shows on its button: the weather's label, and the sun's unless it is the weather's own."""
+    choices = {option: dict(entries) for option, entries in preview_choices().items()}
+    return [choices['weather'][weather]] + ([choices['sun'][sun]] if sun != 'own' else [])
 
 
 def sky_texture(sky):
@@ -106,9 +142,14 @@ def sky_texture(sky):
 SKYDOME_RADIUS, SKYDOME_BASE = 3835.0, 68.0
 
 
+def skydome_template(sky):
+    """The retail sky dome template of a sky ('GapOfRohan', ...)."""
+    return 'WaterReflectionSkydome_' + sky
+
+
 def sky_template(name):
     """The retail sky dome template for a preset."""
-    return 'WaterReflectionSkydome_' + PRESETS[name].get('sky', 'GapOfRohan')
+    return skydome_template(PRESETS[name].get('sky', 'GapOfRohan'))
 
 
 def add_sky(m, name, width, height, border=0.0, drop=0.0):

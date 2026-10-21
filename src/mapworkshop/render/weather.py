@@ -31,6 +31,7 @@ that put it on the GPU and draw it, sharing the renderer's state.
 import re
 
 import numpy as np
+from mapworkshop.mapkit.weather import WEATHER_BLOCK
 from mapworkshop.render import shaders
 
 DEFAULTS = dict(hardwarefogenable=False, hardwarefogcolor=(0, 0, 0), hardwarefogstart=0.0, hardwarefogend=1.0,
@@ -64,7 +65,7 @@ def parse(*texts):
     for text in texts:
         if not text:
             continue
-        for block in re.findall(r'(?ims)^\s*Weather\s*$(.*?)^\s*End\b', text):
+        for block in re.findall(WEATHER_BLOCK, text):
             for key, value in re.findall(r'(?im)^\s*(\w+)\s*=\s*([^\r\n]*)', block):
                 key = key.lower()
                 if key in DEFAULTS:

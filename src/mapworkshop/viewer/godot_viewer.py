@@ -18,6 +18,11 @@ While the viewer is open, the companion (viewer/godot_link.py) keeps the
 marks, the marks panel and Copy for agent, and reloads the map when it is
 built again.
 
+Preview shows the map with a weather preset or a sun (mapkit.weather) without
+changing it: the library draws a map as its file and map.ini say, so a copy of
+the map with the preset's lighting, fog and sky goes into the user maps folder
+as `<map> studio preview` (preview_map()), and the viewer opens that copy.
+
 A view (`--view`, the key=value words of `mw render --view`) is resolved here
 as mw render resolves it (on the terrain's own heights), and the viewer puts
 its camera at the eye and target it gets, so the camera projects a map point
@@ -27,6 +32,7 @@ camera then orbits from that view (viewer.camera.Camera.aim's orbit).
 
 import json
 import math
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -47,6 +53,8 @@ from mapworkshop.viewer import marks as marklib
 
 SCENES = openbfme.HOME/'scenes'
 SIZE = (1600, 1000)
+OWN = godot_link.OWN
+PREVIEW = ' studio preview'               # the name of a preview copy in the user maps folder: '<map> studio preview'
 FOV = 50.0            # degrees across the width, as the studio viewer's Edit camera (viewer.camera.Camera)
 
 
@@ -123,15 +131,65 @@ def pixel(view_projection, point, size):
     return float((ndc[0] + 1)/2*size[0]), float((1 - ndc[1])/2*size[1])
 
 
-def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None):
+def preview_map(map_path, name, weather='map', sun='own'):
+    """A copy of the map as Preview shows it, in the user maps folder, as the studio renderer previews it
+    (mapkit.weather): a weather preset's world weather and lighting, and its Weather block in place of the map's in
+    map.ini; a sun's light rig over it, and its fog after; the sky they bring on the map's WaterReflectionSkydome
+    objects (the studio viewer swaps the texture of every sky dome; a copy can only change these templates). The
+    map's map.str and solo.ini go with it. Returns the copy's name."""
+    from mapworkshop.mapkit import weather as presets
+    m = Map(map_path.read_bytes())
+    weather, sun = (None if weather == 'map' else weather), (None if sun == 'own' else sun)
+    if weather:
+        presets.apply_weather(m, weather)
+    if sun:
+        presets.apply_sun_to_map(m, sun)
+    sky = presets.sky(weather, sun)
+    if sky:
+        objects = m.objects()
+        for o in objects:
+            if o['template'].lower().startswith('waterreflectionskydome_'):
+                o['template'] = presets.skydome_template(sky)
+        m.set_objects(objects)
+    ini = map_path.with_name('map.ini')
+    text = ini.read_bytes().decode('latin-1') if ini.is_file() else ''      # byte for byte, whatever the code page
+    if weather:
+        text = presets.without_weather(text) + '\n' + presets.ini_block(weather)
+    if sun:
+        text += '\n' + presets.sun_ini(sun)                                # the last Weather block's keys win
+    copy = name + PREVIEW
+    folder = openbfme.user_maps()/copy
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder/f'{copy}.map').write_bytes(m.encode())
+    (folder/'map.ini').write_bytes(text.encode('latin-1'))
+    for other in ('map.str', 'solo.ini'):
+        if map_path.with_name(other).is_file():
+            shutil.copyfile(map_path.with_name(other), folder/other)
+    return copy
+
+
+def remove_previews():
+    """The preview copies out of the user maps folder (they would show in OpenBFME's Skirmish list)."""
+    for folder in openbfme.user_maps().glob('*' + PREVIEW):
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
+          preview=None):
     """Write the scene for map `name` (a project, stock map or .map file); (scene.json, its contents, the project or
-    None, the Surface). A probe without a z stands on the terrain."""
+    None, the Surface). A probe without a z stands on the terrain. `preview` ({weather, sun}, OWN's keys) opens a
+    preview copy of the map (preview_map) instead of the map."""
     map_path, native, user_map, owner = source(name)
     surface = Surface(Map(map_path.read_bytes()))
     folder = SCENES/native
     folder.mkdir(parents=True, exist_ok=True)
     (folder/'surface.f32').write_bytes(surface.heights.astype('<f4').tobytes())
-    data = dict(map=native, user_map=user_map, title=owner.title if owner else native, map_path=str(map_path),
+    preview = dict(OWN, **(preview or {}))
+    shown = native
+    if preview != OWN:
+        shown, user_map = preview_map(map_path, native, **preview), True
+    data = dict(map=shown, user_map=user_map, title=owner.title if owner else native, map_path=str(map_path),
+                preview=preview,
                 user_map_folder=str(openbfme.user_maps()) if user_map else '', size=list(size),
                 surface=dict(file='surface.f32', columns=surface.heights.shape[1], rows=surface.heights.shape[0],
                              border=surface.border, cell=10.0),
@@ -147,10 +205,11 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
     return folder/'scene.json', data, owner, surface
 
 
-def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None):
+def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
+            preview=None):
     """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written; what
-    scene() returns. The companion prepares the map again for a new build or another map."""
-    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views)
+    scene() returns. The companion prepares the map again for a new build, another map or another preview."""
+    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views, preview)
     if prepared[2] is not None:
         openbfme.install_user_map(prepared[2])
     return prepared
@@ -163,6 +222,7 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     code. `drive` (tests): scripted input the viewer plays headless, with the companion, before it closes. `views`:
     View switches to start with ({'grid': True, ...})."""
     started = time.perf_counter()
+    remove_previews()                     # any a viewer stopped before it could
     openbfme.assets(progress)
     gui, console = openbfme.assemble(progress)
     interactive = not (screenshot or check)
@@ -183,7 +243,8 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     # driven (tests): the viewer's output kept out of the caller's, and a hung viewer stopped after `timeout`
     quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) if drive else {}
     process = subprocess.Popen(args, env=env, cwd=openbfme.HOME, **quiet)
-    companion = godot_link.Companion(prepared, lambda other: prepare(other, size=size, port=port), progress)
+    companion = godot_link.Companion(
+        prepared, lambda other, preview=None: prepare(other, size=size, port=port, preview=preview), progress)
     try:
         companion.serve(link, process)
         return process.wait(timeout=(timeout or 600) if drive else None)
@@ -192,6 +253,7 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
         raise RuntimeError(f'the Godot viewer did not finish its scripted input within {timeout or 600} s')
     finally:
         link.close()
+        remove_previews()
 
 
 def main(args):

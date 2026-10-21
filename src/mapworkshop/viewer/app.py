@@ -110,7 +110,7 @@ import numpy as np
 
 from mapworkshop import game, project
 from mapworkshop.config import RENDERS, GAME_LABEL, save_setting, setting
-from mapworkshop.mapkit.weather import PRESETS, SUNS
+from mapworkshop.mapkit.weather import preview_choices, preview_labels
 from mapworkshop.render.camera import view_from_dict
 from mapworkshop.render.photo import Post, active, focal_from_fov, fov_from_focal, sensor
 from mapworkshop.viewer import marks as marklib
@@ -438,13 +438,12 @@ class Viewer:
         if menu == 'preview':
             # Values are 'option:value'; headings are (None, text, None).
             entry = lambda key, value, text: (f'{key}:{value}', text, o[key] == value)
+            choices = preview_choices()
             return ([(None, 'Preview only: these do not change the map', None), (None, '', None),
                      (None, 'Detail', None)] +
                     [entry('lod', v, v.title()) for v in ('low', 'medium', 'high')] +
-                    [(None, 'Weather', None), entry('weather', 'map', "Map's own")] +
-                    [entry('weather', v, v.title()) for v in PRESETS] +
-                    [(None, 'Sun', None), entry('sun', 'own', "Weather's own")] +
-                    [entry('sun', k, v['label']) for k, v in SUNS.items()] +
+                    [(None, 'Weather', None)] + [entry('weather', v, text) for v, text in choices['weather']] +
+                    [(None, 'Sun', None)] + [entry('sun', v, text) for v, text in choices['sun']] +
                     [(None, '', None), (None, "The map's own weather: Properties", None)])
         if menu == 'test_game':
             return [(None, 'Test In-Game starts', None),
@@ -475,9 +474,7 @@ class Viewer:
             status = hint
         else:
             status = ''
-        preview = [o['lod'].title(), "Map's own" if o['weather'] == 'map' else o['weather'].title()]
-        if o['sun'] != 'own':
-            preview.append(SUNS[o['sun']]['label'])
+        preview = [o['lod'].title(), *preview_labels(o['weather'], o['sun'])]
         return dict(map=self.session.title(), preview=' · '.join(preview), status=status,
                     test_game='OpenBFME' if self.test_game == 'openbfme' else GAME_LABEL,
                     build_chip=self.build_chip(),

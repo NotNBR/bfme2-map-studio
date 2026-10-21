@@ -1,7 +1,8 @@
 ## The toolbar across the top, as the studio viewer has it (docs/viewer.md, "The toolbar"): Map (the map projects, the
-## game's maps, Open project folder), Properties, Build with its chip, Test In-Game and what it starts, Preview, View
-## (the layers and overlays, check marks that keep the menu open), and at the right Top view, Reset view, Screenshot
-## and the frame rate. The lists come from the companion's menu message.
+## game's maps, Open project folder), Properties, Build with its chip, Test In-Game and what it starts, Preview (the
+## weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay open while
+## their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate. The lists come
+## from the companion's menu message.
 class_name Toolbar
 extends PanelContainer
 
@@ -13,6 +14,8 @@ signal command(name: String)
 signal test_game_chosen(choice: String)
 ## A View entry switched.
 signal view_switched(key: String, on: bool)
+## A Preview entry chosen: "weather" or "sun" and its value.
+signal preview_chosen(option: String, value: String)
 ## Top view, Reset view or Screenshot.
 signal action(name: String)
 
@@ -24,6 +27,8 @@ var _build_chip: Label
 var _test_game: OptionButton
 var _view: MenuButton
 var _views := []              # [key, title] of the View menu's entries, by item id
+var _preview: MenuButton
+var _previews := []           # [option, value] of the Preview menu's entries, by item id
 var _fps: Label
 var _build := {}              # the build chip's last message
 
@@ -55,11 +60,12 @@ func _ready() -> void:
 	_test_game.item_selected.connect(func(index: int) -> void: test_game_chosen.emit(_test_game.get_item_metadata(index)))
 	row.add_child(_test_game)
 	row.add_child(VSeparator.new())
-	var preview := MenuButton.new()
-	preview.text = "Preview"
-	preview.tooltip_text = "Detail, weather and sun: not in the Godot viewer yet"
-	preview.disabled = true
-	row.add_child(preview)
+	_preview = MenuButton.new()
+	_preview.text = "Preview"
+	_preview.tooltip_text = "Show the map with another weather or sun, without changing it"
+	_preview.get_popup().hide_on_checkable_item_selection = false
+	_preview.get_popup().id_pressed.connect(_on_preview)
+	row.add_child(_preview)
 	_view = MenuButton.new()
 	_view.text = "View"
 	_view.get_popup().hide_on_checkable_item_selection = false
@@ -113,6 +119,31 @@ func set_menu(menu: Dictionary) -> void:
 	for index in _test_game.item_count:
 		if _test_game.get_item_metadata(index) == menu.test_game:
 			_test_game.select(index)
+	_set_preview(menu.preview)
+
+
+## Preview's entries ({weather: [[value, title]], sun: [...], current: {weather, sun}, label}) and the button's text.
+func _set_preview(preview: Dictionary) -> void:
+	var popup := _preview.get_popup()
+	popup.clear()
+	_previews.clear()
+	popup.add_separator("Preview only: these do not change the map")
+	for option in [["weather", "Weather"], ["sun", "Sun"]]:
+		popup.add_separator(option[1])
+		for entry in preview[option[0]]:
+			popup.add_radio_check_item(entry[1], _previews.size())
+			popup.set_item_checked(popup.item_count - 1, preview.current[option[0]] == entry[0])
+			_previews.append([option[0], entry[0]])
+	_preview.text = "%s  ▾" % preview.label
+
+
+func _on_preview(id: int) -> void:
+	var popup := _preview.get_popup()
+	for i in popup.item_count:                     # the chosen one checked at once among its option's entries
+		var other := popup.get_item_id(i)
+		if popup.is_item_radio_checkable(i) and _previews[other][0] == _previews[id][0]:
+			popup.set_item_checked(i, other == id)
+	preview_chosen.emit(_previews[id][0], _previews[id][1])
 
 
 func _on_map(id: int) -> void:

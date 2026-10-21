@@ -13,6 +13,8 @@ does there:
   user maps folder, and the viewer builds the map again in place;
 - the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
   from the Map menu, Build, Test In-Game, the project folder;
+- Preview: the map again as a copy with a weather preset or a sun
+  (godot_viewer.preview_map), which the viewer opens in its place;
 - the View menu's overlays that need the map's analysis: the walkability
   estimate (render.overlays, worked out once per build in the background) and
   the river strips for the flow arrows (render.rivers).
@@ -27,7 +29,7 @@ From the viewer:
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
     command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
                                     open_folder, open_map {map}, test_game {choice}, overlay {overlay} ('walkable' or
-                                    'flow' switched on)
+                                    'flow' switched on), preview {weather, sun} (either)
     reloaded {ms} / reload_failed {error}
 
 To the viewer:
@@ -38,8 +40,10 @@ To the viewer:
     panel {lines}                   the marks panel: [text, style] (marking.summary_lines)
     status {text, seconds}          a line for the status bar
     clipboard {text}                Copy for agent's text (at once when the panel's summary is current, else once read)
-    reload {scene, new_map}         the build changed, or another map: read the scene and build the map
-    menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice
+    reload {scene, new_map, what}   the build changed, another map or a preview (`what`, for the toast): read the scene
+                                    and build the map
+    menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice, Preview's
+                                    choices, the current one and its label
     build {running, line, outcome}  the build chip
     walkable {image, size, cut_off} the walkability estimate: an RGBA image, one pixel per cell from the playable
                                     area's corner, its extent in map units and the cut-off areas; {error} if it failed
@@ -58,6 +62,7 @@ import numpy as np
 
 from mapworkshop.config import save_setting, setting
 from mapworkshop.formats.map import Map
+from mapworkshop.mapkit.weather import preview_choices, preview_labels
 from mapworkshop.viewer import jobs
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.camera import march
@@ -98,6 +103,9 @@ def marks_state(marks, surface, editor=None):
 def _ids(picks):
     """The picks with mark ids and handle indices as integers (JSON from GDScript has floats)."""
     return {k: int(v) if isinstance(v, float) else v for k, v in picks.items()}
+
+
+OWN = dict(weather='map', sun='own')     # Preview's choice when it shows the map as it is (the studio viewer's values)
 
 
 class Picks:
@@ -285,6 +293,7 @@ class Companion:
         """Hold `data`'s map: its marks, surface, summary and build watch (a new map drops the old selection)."""
         self.scene_path, self.data, self.owner, self.surface = scene_path, data, owner, surface
         self.map_path = Path(data['map_path'])
+        self.preview = data['preview']
         self.marks = marklib.Marks(self.map_path)
         self.world = World(surface)
         self.editor = MarkEditor(self.picks, self.world, self.status)
@@ -363,6 +372,8 @@ class Companion:
             out += self.open_map(message['map'])
         elif name == 'overlay':
             out += self.overlay(message['overlay'])
+        elif name == 'preview':
+            out += self.set_preview({k: message[k] for k in ('weather', 'sun') if message.get(k)})
         elif name == 'open_folder':
             if self.owner is None:
                 out.append(dict(type='status', text='a game map has no project folder', seconds=4))
@@ -424,9 +435,22 @@ class Companion:
         """Another map: readied (prepare), then the viewer reads its scene."""
         if self.prepare is None:
             return [dict(type='status', text='this viewer shows one map only', seconds=4)]
-        self._show(*self.prepare(name))
+        self._show(*self.prepare(name, self.preview))
         self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu()]
+
+    def set_preview(self, choice):
+        """Preview's weather or sun: the map prepared again as that preview (the same map: the marks, the analysis
+        and the camera stay), and the viewer told to build it."""
+        if self.prepare is None:
+            return [dict(type='status', text='this viewer shows the map as it is only', seconds=4)]
+        try:
+            self.scene_path, self.data = self.prepare(str(self.map_path), dict(self.preview, **choice))[:2]
+        except Exception as error:            # the menu back to what is shown
+            return [dict(type='status', text=f'the preview did not work: {error}', seconds=8), self.menu()]
+        self.preview = self.data['preview']
+        what = ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
+        return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=f'the preview: {what}'), self.menu()]
 
     def menu(self):
         """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game
@@ -437,9 +461,12 @@ class Companion:
                      key=lambda e: e[1].lower())
         stock = sorted(((str(m), map_title(m, {})) for m in game.stock_maps()), key=lambda e: e[1].lower())
         entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current)
+        preview = dict(preview_choices(), current=self.preview,
+                       label=' · '.join(preview_labels(self.preview['weather'], self.preview['sun'])))
         return dict(type='menu', title=self.data['title'], project=self.owner is not None,
                     projects=[entry(*e) for e in own], stock=[entry(*e) for e in stock],
-                    test_games=list(jobs.TEST_GAMES), test_game=setting('test_game', jobs.TEST_GAMES[0]))
+                    test_games=list(jobs.TEST_GAMES), test_game=setting('test_game', jobs.TEST_GAMES[0]),
+                    preview=preview)
 
     def state(self):
         return marks_state(self.marks, self.surface, self.editor)
@@ -524,7 +551,7 @@ class Companion:
             return None                       # still being written: look again next time
         self.stamp = stamp                    # this build, good or not: the next one is looked at again
         try:
-            scene_path, data, owner, surface = self.prepare(self.owner.id)
+            scene_path, data, owner, surface = self.prepare(str(self.map_path), self.preview)
             loaded = Loaded(self.map_path, surface, self.loaded.assets)
         except Exception as error:
             self.progress(f'{self.map_path.name} changed, but it cannot be read: {error!r}; the viewer keeps the last good one')

@@ -1,16 +1,23 @@
-"""The Godot viewer's Python side (viewer/godot_viewer.py): the surface it sends and views resolved as mw render
-resolves them; and, when OpenBFME is built, the viewer itself, headless: it opens a map through OpenBFME's library (a
-lab's build from the user maps folder, else a stock map) and its camera projects map points onto the pixels mw
-render's does."""
+"""The Godot viewer's Python side (viewer/godot_viewer.py): the surface it sends, views resolved as mw render
+resolves them and Preview's copies of a map; and, when OpenBFME is built, the viewer itself, headless: it opens a map
+through OpenBFME's library (a lab's build from the user maps folder, else a stock map) and its camera projects map
+points onto the pixels mw render's does."""
 import re
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
 
 from mapworkshop import project
+from mapworkshop.formats.lighting import decode
+from mapworkshop.formats.map import Map
+from mapworkshop.formats.sections import read
+from mapworkshop.mapkit import blank
 from mapworkshop.native import openbfme
 from mapworkshop.viewer import godot_viewer
+from mapworkshop.viewer import marks as marklib
 
 
 class FakeMap:
@@ -49,6 +56,63 @@ class SurfaceTests(unittest.TestCase):
             s = godot_viewer.Surface(FakeMap())
         self.assertAlmostEqual(float(s.height_at(5, 5)),
                                float(np.mean(FakeMap().heightmap()['elevations'][1:3, 1:3]*0.0390625)), places=4)
+
+
+class PreviewTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        patch = mock.patch.object(openbfme, 'user_maps', return_value=self.tmp/'Maps')
+        patch.start()
+        self.addCleanup(patch.stop)
+        m = blank.create(64, 64, 4)
+        blank.add_object(m, 'WaterReflectionSkydome_GapOfRohan', 200, 200)
+        self.source = self.tmp/'build'/'map mp test.map'
+        self.source.parent.mkdir()
+        self.source.write_bytes(m.encode())
+        self.source.with_name('map.ini').write_bytes(b'Weather\n  IsSnowing = yes\nEnd\n; caf\xe9 \x81\n')
+        self.source.with_name('map.str').write_text('MAP:TEST\n"Test"\nEND\n', encoding='cp1252')
+
+    def copy(self, name):
+        folder = self.tmp/'Maps'/name
+        return Map((folder/f'{name}.map').read_bytes()), (folder/'map.ini').read_bytes()
+
+    def test_a_weather_and_a_sun_go_into_a_copy_of_the_map(self):
+        name = godot_viewer.preview_map(self.source, 'map mp test', 'dusk', 'ember')
+        self.assertEqual(name, 'map mp test studio preview')
+        m, ini = self.copy(name)
+        own = Map(self.source.read_bytes())
+        self.assertEqual(dict((k, v) for k, _, v in read(m, 'WorldInfo'))['weather'], 4)        # dusk: SUNNY
+        lit = lambda mm: decode(mm.chunk('GlobalLighting').data, mm.chunk('GlobalLighting').version)
+        self.assertNotEqual(lit(m), lit(own))
+        self.assertEqual([o['template'] for o in m.objects()], ['WaterReflectionSkydome_MinasMorgul'])  # the sun's
+        self.assertNotIn(b'IsSnowing', ini)                       # the preset's Weather in place of the map's ...
+        self.assertIn(b'; caf\xe9 \x81', ini)                     # ... the rest kept, byte for byte
+        self.assertIn(b'HardwareFogStart = 4200', ini)
+        self.assertTrue(ini.endswith(b'HardwareFogStart = 5000\n  HardwareFogEnd = 17000\nEnd\n'))  # the sun's last
+        self.assertTrue((self.tmp/'Maps'/name/'map.str').is_file())
+        self.assertEqual(Map(self.source.read_bytes()).encode(), own.encode())          # the map itself unchanged
+
+    def test_a_sun_alone_keeps_the_maps_weather_under_its_fog(self):
+        m, ini = self.copy(godot_viewer.preview_map(self.source, 'map mp test', sun='ash'))
+        self.assertTrue(ini.startswith(b'Weather\n  IsSnowing = yes'))
+        self.assertTrue(ini.endswith(b'HardwareFogEnd = 17000\nEnd\n'))
+
+    def test_the_map_as_it_is_opens_itself_and_copies_are_removed(self):
+        with mock.patch.object(godot_viewer, 'source', return_value=(self.source, 'map mp test', True, None)), \
+                mock.patch.object(godot_viewer, 'SCENES', self.tmp/'scenes'), \
+                mock.patch.object(marklib, 'MARKS_DIR', self.tmp/'marks'):
+            data = godot_viewer.scene('test', preview=godot_viewer.OWN)[1]
+            self.assertEqual((data['map'], data['preview']), ('map mp test', godot_viewer.OWN))
+            self.assertFalse((self.tmp/'Maps').exists())
+            data = godot_viewer.scene('test', preview=dict(weather='haze'))[1]
+        self.assertEqual(data['map'], 'map mp test studio preview')
+        m, ini = self.copy(data['map'])
+        self.assertEqual([o['template'] for o in m.objects()], ['WaterReflectionSkydome_Celduin'])
+        (self.tmp/'Maps'/'map mp other').mkdir()
+        godot_viewer.remove_previews()
+        self.assertEqual([p.name for p in (self.tmp/'Maps').iterdir()], ['map mp other'])
 
 
 class FlatTerrain:

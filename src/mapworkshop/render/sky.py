@@ -12,9 +12,8 @@ class SkyMixin:
         """Give the map's sky domes the sun's or the weather preset's sky
         texture (all WaterReflectionSkydome models share one dome), or their
         own without either."""
-        from mapworkshop.mapkit.weather import PRESETS, SUNS, sky_texture
-        sky = (SUNS[self.sun].get('sky') if self.sun else None) or \
-              (PRESETS[self.weather_preset].get('sky') if self.weather_preset else None)
+        from mapworkshop.mapkit.weather import sky as preset_sky, sky_texture
+        sky = preset_sky(self.weather_preset, self.sun)
         for batch in getattr(self, 'batches', []):
             if 'sky_own' not in batch:
                 continue
