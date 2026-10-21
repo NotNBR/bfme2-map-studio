@@ -849,6 +849,14 @@ func _play_drive() -> void:
 			_send({"type": "tool", "tool": step.get("tool")})
 		"lens":
 			_lens_pick(String(step.field), step.value)         # as the camera bar's preset
+		"shot":                                            # Photo mode's camera and lens at once (videos): eye, target, lens
+			if step.has("eye"):
+				var at := _vec(step.eye)
+				_fly.place(at, _vec(step.target) - at, float(step.get("focus", _fly.focus)))
+				_fly.roll = float(step.get("roll", 0.0))
+			for field in ["focal", "aperture", "focus", "ev"]:
+				if step.has(field):
+					_lens_pick(field, step[field])
 		"view":
 			_switch_view(String(step.key), bool(step.on))      # as the View menu
 		"mode":

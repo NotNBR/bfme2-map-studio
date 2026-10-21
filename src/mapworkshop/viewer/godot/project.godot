@@ -1,4 +1,4 @@
-; The studio's map viewer on OpenBFME's library (docs/godot-viewer/plan.md). Never run from this folder:
+; The studio's map viewer on OpenBFME's library (docs/viewer.md). Never run from this folder:
 ; mapworkshop.native.openbfme.assemble() copies it, with OpenBFME's library and the shaders that library loads,
 ; into local/openbfme/viewer/, and Godot runs and imports it there.
 
@@ -14,3 +14,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+
+[editor]
+
+movie_writer/mjpeg_quality=0.95     ; --write-movie <file>.avi (scripted videos): near-lossless frames
