@@ -7,6 +7,10 @@
 ## drag, release and hover goes to the companion with the cursor's ray and what the overlay finds under it; the
 ## companion's MarkEditor answers with the marks to draw, the panel and the status. A new build reloads in place.
 ##
+## Photo mode (V, or the camera bar) swaps the Edit camera for the free one (FlyCamera) with its lens: the exposure
+## and the depth of field over the frame (PhotoEffect), the framing aids, screenshots cropped to the frame. A scene
+## view with an aperture or an exposure starts in it, so a screenshot shows what mw render's picture of the view does.
+##
 ## The scene's views ({key: on}) start the View switches other than they start by default (a screenshot of an overlay).
 ##
 ## The scene can also ask for a fixed view (mw render's, resolved in Python), points to project through it (probes:
@@ -43,6 +47,14 @@ var _overlays: Overlays
 var _objects_node: Node3D     # the object layer, beside the terrain so that the terrain alone can be built again
 var _views := {}              # View key -> on
 var _link: Link
+var _mode := "edit"           # "edit": the orbit camera; "photo": the free camera with its lens
+var _fly: FlyCamera
+var _photo: PhotoEffect
+var _captured := false        # Photo mode has the mouse: moving it looks around
+var _sliding := false         # a right drag in Photo mode
+var _thirds := false
+var _frame_choice := "free"   # the frame's aspect (Lens.FRAMES)
+var _focus_request := 0       # the PhotoEffect distance request being waited for (focus on the centre)
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
 var _frames := 0
 var _drag := ""               # while a button is held: "orbit", "pan", "marks" (the companion edits), "pending" (asked it)
@@ -134,6 +146,8 @@ func _build_stage() -> void:
 	add_child(_world_env)
 	_camera = Camera3D.new()
 	add_child(_camera)
+	_photo = PhotoEffect.new()
+	_photo.enabled = false
 	var layer := CanvasLayer.new()
 	for view in VIEWS:
 		_views[view[0]] = view[2]
@@ -158,6 +172,10 @@ func _build_stage() -> void:
 		_frame.toolbar.view_switched.connect(_switch_view)
 		_frame.toolbar.preview_chosen.connect(_preview)
 		_frame.toolbar.action.connect(_toolbar_action)
+		_frame.bar.mode_chosen.connect(_set_mode)
+		_frame.bar.lens_pick.connect(_lens_pick)
+		_frame.bar.lens_step.connect(_lens_step)
+		_frame.bar.thirds_toggled.connect(func(on: bool) -> void: _thirds = on)
 		var entries := []
 		for view in VIEWS:
 			entries.append([view[0], view[1], _views[view[0]]])
@@ -188,6 +206,11 @@ func _open_map() -> void:
 		_scene.map, done - started, mounted - started, report.terrain_ms, report.objects_ms, report.objects,
 		report.errors, (_overlay.state.get("marks", []) as Array).size()])
 	_orbit = OrbitCamera.new(_surface, Vector2(_scene.playable[0], _scene.playable[1]), float(_scene.fov))   # at its reset()
+	_fly = FlyCamera.new(_surface)
+	var shot := String(_scene.get("screenshot", ""))
+	_drive = (_scene.get("drive", []) as Array).duplicate()
+	_driving = not _drive.is_empty()
+	_drive_wait = 10
 	if _scene.has("view"):
 		# exactly where Python resolved the view, until a move hands it to the Edit camera, which orbits the view's
 		# target from the view's eye (Python worked the orbit out)
@@ -198,9 +221,15 @@ func _open_map() -> void:
 		_orbit.fov = v.fov
 		_orbit.set_goal(o.x, o.y, o.distance, o.heading, o.elevation)
 		_orbit.snap()
+		var lens: Dictionary = v.get("photo", {})
+		if not shot.is_empty():
+			_photo.taps = 256                          # as mw render's
+		if float(lens.get("aperture", 0.0) if lens.get("aperture") != null else 0.0) > 0.0 \
+				or absf(float(lens.get("ev", 0.0))) > 1e-6:
+			_place_view_photo(v)                       # the lens changes the picture (render.photo.active)
+			_set_mode("photo", false)
 	else:
 		_orbit.apply(_camera)
-	var shot := String(_scene.get("screenshot", ""))
 	var actual := Vector2i(get_viewport().get_visible_rect().size)
 	if (_scene.has("probes") or not shot.is_empty()) and actual != Vector2i(int(_scene.size[0]), int(_scene.size[1])):
 		_fail("the window is %dx%d, not the %dx%d asked for: the picture would not match mw render's" % [
@@ -208,9 +237,6 @@ func _open_map() -> void:
 		return
 	_probe()
 	_send({"type": "ready", "ms": done - started})
-	_drive = (_scene.get("drive", []) as Array).duplicate()
-	_driving = not _drive.is_empty()
-	_drive_wait = 10
 	if _scene.get("check", false) and shot.is_empty():
 		var layers := PackedStringArray()
 		if _objects_node != null:
@@ -301,7 +327,9 @@ func _reload(path: String, new_map: bool, what: String = "") -> void:
 		return
 	_orbit.surface = _surface
 	_orbit.playable = Vector2(_scene.playable[0], _scene.playable[1])
+	_fly.surface = _surface
 	if new_map:
+		_set_mode("edit")
 		_fixed = false
 		_orbit.fov = float(_scene.fov)
 		_orbit.reset()
@@ -311,7 +339,8 @@ func _reload(path: String, new_map: bool, what: String = "") -> void:
 		_send({"type": "reload_failed", "error": "the map did not build"})
 		return
 	if _frame != null:
-		_frame.toast("done", "Loaded %s" % (what if not what.is_empty() else _scene.title), "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
+		var loaded: String = what if not what.is_empty() else _scene.title
+		_frame.toast("done", "Loaded %s" % loaded, "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
 	print("VIEWER reloaded %s in %d ms" % [_scene.map, Time.get_ticks_msec() - started])
 	_send({"type": "reloaded", "ms": Time.get_ticks_msec() - started})
 
@@ -360,7 +389,9 @@ func _process(delta: float) -> void:
 		if _overlays != null:
 			_overlays.advance(delta)
 	_serve_link()
-	if _orbit != null:
+	if _orbit != null and _mode == "photo":
+		_process_photo(delta)
+	elif _orbit != null:
 		var forward := _axis(KEY_W, KEY_UP) - _axis(KEY_S, KEY_DOWN)
 		var right := _axis(KEY_D, KEY_RIGHT) - _axis(KEY_A, KEY_LEFT)
 		var turn := _axis(KEY_E) - _axis(KEY_Q)
@@ -389,10 +420,141 @@ func _process(delta: float) -> void:
 		get_tree().quit(0 if code == OK else 1)
 
 
+## A frame of Photo mode: the keys fly the camera, the lens goes to the effect, the bar and the framing aids show them.
+func _process_photo(delta: float) -> void:
+	delta = minf(delta, 0.1)                       # after a stall (a reload) the camera does not jump
+	var aspect := _aspect()
+	if not _driving:
+		var speed := (3.0 if Input.is_key_pressed(KEY_SHIFT) else 1.0) * (0.3 if Input.is_key_pressed(KEY_CTRL) else 1.0)
+		var down := 0.0 if Input.is_key_pressed(KEY_CTRL) else _axis(KEY_C)
+		_fly.drive(delta, _axis(KEY_W, KEY_UP) - _axis(KEY_S, KEY_DOWN), _axis(KEY_D, KEY_RIGHT) - _axis(KEY_A, KEY_LEFT),
+			_axis(KEY_SPACE) - down, _axis(KEY_E) - _axis(KEY_Q), speed)
+	_fly.update(delta)
+	_fly.apply(_camera, aspect)
+	_photo.focal = _fly.focal
+	_photo.aperture = _fly.aperture
+	_photo.focus = _fly.focus
+	_photo.ev = _fly.ev
+	_photo.sensor_width = _fly.sensor_width(aspect)
+	PhotoEffect.keep_last(_camera, _photo)
+	if _focus_request > 0 and _photo.answered >= _focus_request:
+		_focus_request = 0
+		var d := _photo.distance
+		if is_nan(d) or d <= 0.0 or d >= FlyCamera.FAR * 0.99:
+			_status("Nothing at the centre of the view to focus on", 3)
+		else:
+			_fly.focus = d
+			_status("Focus %s" % Lens.thousands(d), 2)
+	if _frame != null:
+		_frame.bar.set_readout(_fly.readout(aspect))
+		_frame.bar.set_photo({"focal": snappedf(_fly.focal, 0.1), "aperture": _fly.aperture, "focus": roundf(_fly.focus),
+			"ev": snappedf(_fly.ev, 0.01), "thirds": _thirds, "frame": _frame_choice,
+			"width": Lens.sensor(_fly.frame_aspect(aspect)).x})
+		var pf := _frame.photo_frame
+		pf.ratio = _fly.frame
+		pf.thirds = _thirds
+		pf.reticle = _fly.aperture > 0.0 and _captured
+
+
+func _aspect() -> float:
+	var size := get_viewport().get_visible_rect().size
+	return size.x / maxf(size.y, 1.0)
+
+
+func _status(text: String, seconds: float) -> void:
+	if _frame != null:
+		_frame.bar.set_status(text, seconds)
+
+
+## Edit or Photo, without moving the view: Photo starts where the orbit camera is (unless `place` is false: it is
+## placed already), with its lens as it was left; Edit orbits the ground Photo looks at.
+func _set_mode(mode: String, place := true) -> void:
+	if mode == _mode or _orbit == null:
+		if _frame != null:
+			_frame.bar.set_mode(_mode)
+		return
+	_mode = mode
+	_focus_request = 0
+	if mode == "photo":
+		if place and _fixed:
+			_place_view_photo(_scene.view)             # the scene's view as it is, its focal length and roll
+		elif place:
+			var et := _orbit.eye_target()
+			var ahead: Vector3 = et[1] - et[0]
+			_fly.place(et[0], ahead, ahead.length())
+		_fixed = false
+		_send({"type": "tool", "tool": null})
+		_fly.apply(_camera, _aspect())
+	else:
+		_orbit.aim(_fly.eye, _fly.forward(), _fly.pick_ahead())
+		_free()
+	_photo.enabled = mode == "photo"
+	_overlay.visible = mode == "edit"
+	_capture(mode == "photo")
+	if _frame != null:
+		_frame.set_photo_mode(mode == "photo")
+	print("VIEWER mode ", mode)
+
+
+## The free camera at the scene's view (Python resolved it): its eye towards its target, its roll and lens.
+func _place_view_photo(v: Dictionary) -> void:
+	var lens: Dictionary = v.get("photo", {})
+	_fly.place(_vec(v.eye), _vec(v.target) - _vec(v.eye), float(lens.get("focus", 0.0)))
+	_fly.roll = v.roll
+	_fly.focal = float(lens.get("focal", _fly.focal))
+	_fly.aperture = float(lens.aperture) if lens.get("aperture") != null else 0.0
+	_fly.ev = float(lens.get("ev", 0.0))
+
+
+## Photo mode takes the mouse (hidden, turning the view) or frees it; only in a window someone uses.
+func _capture(on: bool) -> void:
+	_captured = on and _frame != null and not _driving
+	_sliding = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if _captured else Input.MOUSE_MODE_VISIBLE
+
+
+## A lens field's preset, or the frame, from the camera bar.
+func _lens_pick(field: String, value: Variant) -> void:
+	match field:
+		"focal": _fly.focal = float(value)
+		"aperture": _fly.aperture = float(value)
+		"focus":
+			if value is String:
+				_focus_centre()
+			else:
+				_fly.focus = float(value)
+		"ev": _fly.ev = float(value)
+		"frame":
+			_frame_choice = String(value)
+			_fly.frame = Lens.frame_ratio(_frame_choice)
+
+
+## The wheel or a drag over a lens field (viewer/app.py's adjust_field).
+func _lens_step(field: String, notches: int) -> void:
+	match field:
+		"focal": _fly.zoom(notches)
+		"aperture":
+			var steps := Lens.APERTURES
+			var i := steps.find(_fly.aperture)
+			if i < 0:
+				i = 1
+				for k in range(1, steps.size()):
+					if absf(steps[k] - _fly.aperture) < absf(steps[i] - _fly.aperture):
+						i = k
+			_fly.aperture = steps[clampi(i + signi(notches), 0, steps.size() - 1)]
+		"focus": _fly.refocus(notches)
+		"ev": _fly.ev = clampf(snappedf(_fly.ev + 0.1 * notches, 0.01), -3.0, 3.0)
+
+
+## Focus on what is at the centre of the view, ground or object: the effect reads its distance with the next frame.
+func _focus_centre() -> void:
+	_focus_request = _photo.ask_distance(Vector2i(get_viewport().get_visible_rect().size / 2.0))
+
+
 ## The scene's scripted input (tests): each step after its frames, a mouse button, motion or key as Input gets them
 ## from the hand, at a map point the camera projects; "tool" arms a palette tool, "command" sends one as its button
-## does, "screenshot" saves the window as it is, controls and all; "wait" holds the next step back for its seconds.
-## Done, the viewer closes.
+## does, "lens" picks a lens field's preset as the camera bar does, "screenshot" saves the window as it is, controls
+## and all; "wait" holds the next step back for its seconds. Done, the viewer closes.
 func _play_drive() -> void:
 	if not _driving or _orbit == null:
 		return
@@ -437,6 +599,8 @@ func _play_drive() -> void:
 			Input.parse_input_event(k)
 		"tool":
 			_send({"type": "tool", "tool": step.get("tool")})
+		"lens":
+			_lens_pick(String(step.field), step.value)         # as the camera bar's preset
 		"command":
 			var command := step.duplicate()       # its name and arguments, as the toolbar sends them
 			command.erase("do")
@@ -468,10 +632,10 @@ func _serve_link() -> void:
 			"panel":
 				_frame.marks.set_panel(message.lines, _overlay.state.get("visible", true))
 			"status":
-				_frame.bar.set_status(message.text, float(message.get("seconds", 3)))
+				_status(message.text, float(message.get("seconds", 3)))
 			"clipboard":
 				DisplayServer.clipboard_set(message.text)
-				_frame.bar.set_status("Copied the marks for an agent: paste them into its prompt", 4)
+				_status("Copied the marks for an agent: paste them into its prompt", 4)
 			"reload":
 				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)),
 					String(message.get("what", "")))
@@ -480,10 +644,10 @@ func _serve_link() -> void:
 			"walkable":
 				if message.has("error"):
 					_switch_view("walkable", false)
-					_frame.bar.set_status("Walkability failed: %s" % message.error, 10)
+					_status("Walkability failed: %s" % message.error, 10)
 				elif _views.get("walkable", false):          # still on: it may have been switched off meanwhile
 					_overlays.set_walkable(String(message.image), Vector2(message.size[0], message.size[1]))
-					_frame.bar.set_status("Walkability ready: %d cut-off areas" % int(message.cut_off), 5)
+					_status("Walkability ready: %d cut-off areas" % int(message.cut_off), 5)
 			"flow":
 				if _views.get("flow", false):
 					_overlays.set_flow(message.strips, _views.get("border", false))
@@ -493,6 +657,8 @@ func _serve_link() -> void:
 				_frame.toast(String(message.kind), String(message.title), String(message.get("detail", "")),
 					float(message.get("seconds", 3)))
 			"window":
+				if message.minimized:
+					_capture(false)                    # the game is up: the mouse is the game's
 				var mode := DisplayServer.WINDOW_MODE_MINIMIZED if message.minimized else DisplayServer.WINDOW_MODE_WINDOWED
 				DisplayServer.window_set_mode(mode)
 	if _link.closed():
@@ -545,8 +711,11 @@ func _axis(a: Key, b: Key = KEY_NONE) -> float:
 	return 1.0 if Input.is_key_pressed(a) or (b != KEY_NONE and Input.is_key_pressed(b)) else 0.0
 
 
-func _save(path: String) -> Error:
+## The window's picture as a PNG, or only `crop` of it.
+func _save(path: String, crop := Rect2i()) -> Error:
 	var image := get_viewport().get_texture().get_image()
+	if crop.has_area():
+		image = image.get_region(crop)
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var code := image.save_png(path)
 	print("VIEWER screenshot %s: %s (%dx%d)" % [path, error_string(code), image.get_width(), image.get_height()])
@@ -557,17 +726,23 @@ func _save(path: String) -> Error:
 func _screenshot() -> void:
 	if _frame != null:
 		_frame.chrome = false
+	_photo.taps = 256                              # the blur's samples as mw render's
 	await RenderingServer.frame_post_draw
+	_photo.taps = 128
 	var stamp := Time.get_datetime_string_from_system().replace(":", "-")
-	var path := String(_scene.screenshots).path_join("%s %s.png" % [_scene.map, stamp])
-	var code := _save(path)
+	var photo := _mode == "photo"
+	var path := String(_scene.screenshots).path_join("%s%s %s.png" % [_scene.map, " photo" if photo else "", stamp])
+	var crop := Lens.frame_rect(Vector2i(get_viewport().get_visible_rect().size), _fly.frame) if photo else Rect2i()
+	var code := _save(path, crop)                  # Photo mode: the frame, with the lens
 	if _frame != null:
 		_frame.chrome = true
-		_frame.bar.set_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
+		_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _orbit == null:
+		return
+	if _mode == "photo" and _photo_input(event):
 		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
@@ -637,6 +812,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_T:
 				_free()
 				_orbit.toggle_top()
+			KEY_V: _set_mode("photo")
 			KEY_1: _switch_view("objects", not _shown("objects"))
 			KEY_2: _switch_view("water", not _shown("water"))
 			KEY_6: _switch_view("fog", not _shown("fog"))
@@ -660,6 +836,59 @@ func _unhandled_input(event: InputEvent) -> void:
 ## A Preview entry: the companion writes the map's preview copy and has the viewer build it in place.
 func _preview(option: String, value: String) -> void:
 	_send({"type": "command", "name": "preview", option: value})
+
+
+## Photo mode's mouse and keys (viewer/app.py's): with the mouse taken, it looks around, a right drag slides, the wheel
+## dollies (Alt: focal length, Shift: focus), a middle click focuses on the centre; a click takes the mouse back.
+## True when the event was Photo mode's; the View keys and P, F1 go on to the common handling.
+func _photo_input(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		if not _captured:
+			if b.pressed and b.button_index == MOUSE_BUTTON_LEFT:
+				_capture(true)
+			return true
+		match b.button_index:
+			MOUSE_BUTTON_RIGHT:
+				_sliding = b.pressed
+			MOUSE_BUTTON_MIDDLE:
+				if b.pressed:
+					_focus_centre()
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				if b.pressed:
+					var notches := 1.0 if b.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0
+					if b.alt_pressed:
+						_fly.zoom(notches)
+					elif b.shift_pressed:
+						_fly.refocus(notches)
+					else:
+						_fly.dolly(notches)
+		return true
+	if event is InputEventMouseMotion:
+		if _captured:
+			var m := event as InputEventMouseMotion
+			if _sliding:
+				_fly.slide(m.relative.x, m.relative.y)
+			else:
+				_fly.look(m.relative.x, m.relative.y)
+		return true
+	if event is InputEventKey and event.pressed and not event.echo:
+		match (event as InputEventKey).keycode:
+			KEY_V:
+				_set_mode("edit")
+			KEY_ESCAPE:
+				if _captured:
+					_capture(false)
+				else:
+					_set_mode("edit")              # the second Esc, as the studio's
+			KEY_R:
+				_fly.roll = 0.0
+			KEY_SPACE, KEY_HOME, KEY_T, KEY_DELETE, KEY_BACKSPACE, KEY_Z:
+				pass                       # flying keys, and the marks' and the Edit camera's: not in Photo mode
+			_:
+				return false
+		return true
+	return false
 
 
 ## A View switch (the menu or its key): the layer shown or hidden, the overlay drawn, the terrain built again (fog).
@@ -708,6 +937,8 @@ func _show(names: Array, on: bool) -> void:
 
 
 func _toolbar_action(name: String) -> void:
+	if name != "screenshot":
+		_set_mode("edit")
 	match name:
 		"top":
 			_free()

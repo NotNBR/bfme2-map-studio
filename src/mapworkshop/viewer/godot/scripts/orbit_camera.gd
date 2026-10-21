@@ -108,6 +108,24 @@ func drive(dt: float, forward: float, right: float, turn: float, tilt: float, zo
 	goal["y"] = clampf(goal.y, 0.0, playable.y)
 
 
+## Orbit the ground the free camera at `eye` looks at along `ahead` (Camera.aim): `hit`, or where its heading meets the
+## ground ahead when it looks above the horizon (`hit` INF). Snaps there; the tilt keeps within its limits.
+func aim(eye: Vector3, ahead: Vector3, hit: Vector3) -> void:
+	var heading := rad_to_deg(atan2(ahead.x, ahead.y))
+	if hit == Vector3.INF:
+		var flat := Vector2(ahead.x, ahead.y).normalized()
+		var reach := maxf(300.0, absf(eye.z - surface.height_at(eye.x, eye.y)) * 1.5)
+		var x := eye.x + flat.x * reach
+		var y := eye.y + flat.y * reach
+		hit = Vector3(x, y, surface.height_at(x, y))
+	var offset := eye - hit
+	var distance := offset.length()
+	var elevation := rad_to_deg(asin(clampf(offset.z / maxf(distance, 1e-6), -1.0, 1.0)))
+	set_goal(hit.x, hit.y, _clamp_distance(distance), heading, _clamp_elevation(elevation))
+	top = null
+	snap()
+
+
 ## The angle (radians, counter-clockwise) that lines a new rectangle up with the screen; 0 within 10 degrees of the
 ## map axes (Camera.screen_angle).
 func screen_angle() -> float:

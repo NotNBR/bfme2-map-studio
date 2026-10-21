@@ -141,6 +141,14 @@ class ViewTests(unittest.TestCase):
     def test_a_focal_length_frames_the_view(self):
         camera = godot_viewer.resolve('target=0,0 distance=800 focal=50 aperture=2', FlatTerrain(), (1500, 1000))
         self.assertAlmostEqual(camera['fov'], 2*np.degrees(np.arctan(18/50)), places=6)   # 36 mm wide at 3:2
+        # the lens, for Photo mode: focused on the target unless told
+        self.assertEqual(camera['photo'], dict(focal=50.0, aperture=2.0, ev=0.0, focus=800.0))
+
+    def test_without_an_aperture_the_lens_keeps_everything_sharp(self):
+        plain = godot_viewer.resolve('target=0,0 distance=800', FlatTerrain(), (1500, 1000))['photo']
+        self.assertEqual((plain['aperture'], plain['ev']), (None, 0.0))         # the viewer stays in Edit
+        self.assertEqual(godot_viewer.resolve('target=0,0 distance=800 ev=1', FlatTerrain(), (1500, 1000))['photo']['ev'],
+                         1.0)                                                    # an exposure alone: Photo mode
 
     def test_a_top_view_is_refused(self):
         with self.assertRaises(RuntimeError):
@@ -173,6 +181,18 @@ class LibraryTests(unittest.TestCase):
         apart = [float(v) for v in re.findall(r'([\d.]+) px apart', text)]
         self.assertEqual(len(apart), 2, text)
         self.assertLess(max(apart), 0.01, text)
+        self.assertNotIn('VIEWER mode', text)        # no lens: the Edit camera
+
+    def test_a_view_with_a_lens_opens_in_photo_mode_and_projects_as_mw_render(self):
+        view = 'target=200,300 distance=700 elevation=15 heading=200 focal=85 aperture=2 focus=500 roll=4'
+        code, lines = godot_viewer.run(lab(), view, probes=[(200, 300), (330, 380)], check=True,
+                                       progress=lambda line: None, timeout=300)
+        text = '\n'.join(line for line in lines if line.startswith('VIEWER'))
+        self.assertEqual(code, 0, text)
+        apart = [float(v) for v in re.findall(r'([\d.]+) px apart', text)]
+        self.assertEqual(len(apart), 2, text)
+        self.assertLess(max(apart), 0.01, text)    # the free camera, its focal length and roll, as mw render's
+        self.assertIn('VIEWER mode photo', text)
 
 
 if __name__ == '__main__':

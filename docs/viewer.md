@@ -305,17 +305,23 @@ bottom with the status line and the camera's readout. It has:
   the tools at the left, selecting, moving, resizing and rotating, Del,
   Ctrl+Z and Esc, the marks panel at the right and **Copy for agent**. The
   marks are the same file, so `mw marks` reads them as from the viewer above;
+- Photo mode, as in [Photo mode and the camera bar](#photo-mode-and-the-camera-bar),
+  with **Edit / Photo** at the left of the bar along the bottom, but no
+  Views or Copy view yet. Its depth of field and exposure are `mw render`'s,
+  run on the graphics card; a screenshot (P) in Photo mode is named
+  `<map> photo <time>.png`;
 - live reload, as in [Live reload](#live-reload): a new build of a project
   (`mw build`, `mw dev MAP --godot`) is built again in place, about three
   seconds after the build for a small map, and the camera stays. A build that
   cannot be read leaves the last good map and says so in the status line;
   stock maps are not watched;
 - **1** for the objects, **2** the water, **6** the fog, **7** walkable,
-  **8** the flow arrows, **G** the grid, **B** the map border, **M** the marks, **P** a
-  screenshot into `godot/` in the profile's renders folder
-  (`local/profiles/<profile>/renders/godot/`), **F1** the controls.
+  **8** the flow arrows, **G** the grid, **B** the map border, **M** the
+  marks, **V** Photo mode, **P** a screenshot into `godot/` in the profile's
+  renders folder (`local/profiles/<profile>/renders/godot/`), **F1** the
+  controls.
 
-Properties, Browse..., Photo mode and saved views are not there yet.
+Properties, Browse... and saved views are not there yet.
 Shadows, normal maps, cloud shadows, rain and snow, editor markers and the
 game object limits are not in the View menu: OpenBFME's library draws none of
 them as switches.
@@ -329,5 +335,6 @@ view, not a top view) and starts there, and the first move orbits from it:
 the view is worked out as `mw render` works it out, so the camera puts a map
 point on the same pixel as `mw render`'s. `--probe` prints that pixel from
 each, and `--screenshot` saves the view and closes; both need the window at
-the `--size` asked for. Photo mode is not ported yet: a view's `focal` frames
-the picture as `mw render` does, and `aperture` and `focus` change nothing.
+the `--size` asked for. A view with an `aperture` or an `ev` opens in Photo
+mode with that lens, so its screenshot has `mw render`'s depth of field and
+exposure.

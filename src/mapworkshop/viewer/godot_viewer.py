@@ -27,7 +27,9 @@ A view (`--view`, the key=value words of `mw render --view`) is resolved here
 as mw render resolves it (on the terrain's own heights), and the viewer puts
 its camera at the eye and target it gets, so the camera projects a map point
 onto the pixel mw render does: `--probe X,Y[,Z]` prints it from each. The Edit
-camera then orbits from that view (viewer.camera.Camera.aim's orbit).
+camera then orbits from that view (viewer.camera.Camera.aim's orbit). A view
+with an aperture or an exposure opens in Photo mode with its lens, so a
+screenshot of it has mw render's depth of field and exposure.
 """
 
 import json
@@ -105,8 +107,8 @@ def source(name):
 def resolve(view, terrain, size):
     """A view (key=value words or a render.camera view) resolved as mw render resolves it on the terrain's heights:
     eye, target, the field of view across the width, roll, near and far, the Edit camera's orbit around the target,
-    and the view-projection matrix it projects with. The lens keys only frame it (a focal length's field of view):
-    the Godot viewer has no depth of field yet."""
+    the lens (render.photo's settings: focal, aperture, focus, ev; with an aperture or an exposure the viewer opens in
+    Photo mode) and the view-projection matrix it projects with."""
     view = parse_view(view.split()) if isinstance(view, str) else view
     if view.kind != 'orbit':
         raise RuntimeError('the Godot viewer takes orbit views (target=X,Y ...), not top views')
@@ -121,6 +123,7 @@ def resolve(view, terrain, size):
                 orbit=dict(x=float(target[0]), y=float(target[1]), distance=distance,
                            heading=math.degrees(math.atan2(-offset[0], -offset[1])),
                            elevation=math.degrees(math.asin(max(-1.0, min(1.0, offset[2]/(distance or 1.0)))))),
+                photo={k: (float(v) if v is not None else None) for k, v in camera['photo'].items()},
                 view_projection=camera['view_projection'])
 
 

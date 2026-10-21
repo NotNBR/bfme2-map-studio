@@ -35,8 +35,10 @@
   marks panel, Copy for agent and live reload, through a Python companion.
   Phase 3 is under way: the new layout and toolbar (Map, Build, Test In-Game,
   View), the View menu's layers and overlays (grid, map border, the
-  walkability estimate and the river flow arrows) and Preview (the weather
-  and sun presets, as a copy of the map) are done.
+  walkability estimate and the river flow arrows), Preview (the weather
+  and sun presets, as a copy of the map) and Photo mode (the free camera, the
+  lens, frames and thirds, and `render/photo.py`'s depth of field as a
+  compositor effect) are done.
 
 ## Where we are
 
@@ -236,8 +238,8 @@ Found:
   treats a world unit as a metre (the studio's lens uses 10 map units to the
   metre) and blurs far less than `render/photo.py`: at f/1.4 a map 900 units
   away shows almost none. The viewer does not use it: a view's focal length
-  sets the camera's field of view, and Photo mode will get its depth of field
-  as a compositor effect, a port of `render/photo.py`'s blur (phase 3).
+  sets the camera's field of view, and Photo mode got its depth of field as a
+  compositor effect, a port of `render/photo.py`'s blur (phase 3).
 - **OpenBFME's terrain builder is slow on the largest maps** (12.7 s for Glacial
   Crossroads); worth measuring in OpenBFME and offering a fix upstream.
 
