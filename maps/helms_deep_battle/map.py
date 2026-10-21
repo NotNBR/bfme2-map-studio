@@ -98,7 +98,7 @@ from mapworkshop.mapkit.blank import add_object, set_world
 from mapworkshop.mapkit.pathing import polygon_cells, template_data
 from mapworkshop.mapkit.script_writer import Writer, arg
 from mapworkshop.mapkit.weather import apply_weather, ini_block
-from mapworkshop.render.terrain import TerrainData
+from mapworkshop.formats.terrain import Heights
 from mapworkshop.assets.models import ModelCache
 from mapworkshop.mapkit.lines import inside
 from maps.nanduhirion_battle.map import Ground, check_templates, owner
@@ -339,7 +339,7 @@ def defenders(m, assets, ground):
     """The defenders, (template, x, y, angle, z over the ground, role), and the points every 10 on the fortress's walking
     meshes, which it marks as blocked ground."""
     models, cache = ModelCache(assets), {}
-    terrain = lambda x, y, t=TerrainData(m): float(t.height_at(np.array([x]), np.array([y]))[0])   # as the game interpolates it
+    terrain = lambda x, y, t=Heights.of(m): float(t.height_at(np.array([x]), np.array([y]))[0])   # as the game interpolates it
     places = {group: [] for group in WALLS}
     shape = (ground.z.shape[0] - 2*ground.border, ground.z.shape[1] - 2*ground.border)
     outline = set()
@@ -576,7 +576,7 @@ def build(b):
           f'({cp(uruks)} command points), column and row spacing, gap and row gap {spacing}; {count} scripts')
     # the night of the battle in map.toml's weather (rain and lightning over the map's own night, no fog) under SKY
     m.set_objects([o for o in m.objects() if not o['template'].startswith('WaterReflectionSkydome')])
-    terrain, border = TerrainData(m), m.heightmap()['border']*10
+    terrain, border = Heights.of(m), m.heightmap()['border']*10
     xs, ys = np.meshgrid(np.arange(-border, 4000 + border, 40.), np.arange(-border, 4000 + border, 40.))
     lowest = float(terrain.height_at(xs.ravel(), ys.ravel()).min())
     centre = float(terrain.height_at(np.array([2000.]), np.array([2000.]))[0])
