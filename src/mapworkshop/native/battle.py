@@ -142,13 +142,12 @@ def plot(project, log, out, size=1100, gif=True):
     """tracks.png (every track, an x where it ended dead) and battle.gif (the positions line by line)
     over a top render of the project's map; one colour per template. Returns the paths."""
     from PIL import Image, ImageDraw
-    from mapworkshop.render.camera import TopView
-    from mapworkshop.render.engine import MapRenderer
-    from mapworkshop.assets.library import GameAssets
-    renderer = MapRenderer(project.map_file, assets=GameAssets.shared(), objects=True, clouds=False)
-    width, height = renderer.playable
-    scale = size / max(width, height)
-    bg = Image.fromarray(renderer.render(TopView(), (round(width*scale), round(height*scale))))
+    from mapworkshop.formats.map import Map
+    from mapworkshop.formats.terrain import playable_extent
+    from mapworkshop.render.godot import top_picture
+    bg = top_picture(project.map_file, size)
+    width, height = playable_extent(Map(project.map_file.read_bytes()).heightmap())
+    scale = bg.width / width
     bg = Image.blend(bg.convert('RGB'), Image.new('RGB', bg.size, (0, 0, 0)), 0.35)
     W, H = bg.size
     px = lambda x, y: (x*scale, H - y*scale)

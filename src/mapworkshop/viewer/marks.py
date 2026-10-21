@@ -298,12 +298,12 @@ def layer(o):
 
 def describe(data, near=150.0, assets=None, m=None, terrain=None):
     """The marks file with each mark's centre, terrain height, extent and the
-    map objects it covers. `m` and `terrain` (the map and its TerrainData)
+    map objects it covers. `m` and `terrain` (the map and its formats.terrain.Heights)
     skip reading the map file again when the caller has them loaded."""
     from mapworkshop.formats.map import Map
-    from mapworkshop.render.terrain import TerrainData
+    from mapworkshop.formats.terrain import Heights
     m = m or Map(Path(data['map_path']).read_bytes())
-    terrain = terrain or TerrainData(m)
+    terrain = terrain or Heights.of(m)
     objects = list(m.objects())
     ox = np.array([o['x'] for o in objects], float)
     oy = np.array([o['y'] for o in objects], float)

@@ -13,8 +13,9 @@
 ##
 ## The scene's views ({key: on}) start the View switches other than they start by default (a screenshot of an overlay).
 ##
-## Shots (mw render's pictures, and --screenshot): [{path, size, view (resolved as for the start) or top {center,
-## width, height, z}}], each saved in turn once it has settled, the viewer closing after the last; the overlays then
+## Shots (mw render's pictures, mw item's, and --screenshot): [{path, size, view (resolved as for the start) or top
+## {center, width, height, z}, background [r, g, b] (black), map (another user map of the same size, built for it)}],
+## each saved in turn once it has settled, the viewer closing after the last; the overlays then
 ## come in the scene (walkable, flow), worked out in Python, as there is no companion.
 ##
 ## The scene can also ask for a fixed view (mw render's, resolved in Python), points to project through it (probes:
@@ -444,7 +445,14 @@ static func _lens_changes(v: Dictionary) -> bool:
 ## when its lens changes the picture) or looking straight down on its top view's region, orthographic, north up.
 func _next_shot(frames: int) -> void:
 	var shot: Dictionary = _shots[0]
+	if shot.has("map") and String(shot.map) != String(_scene.map):
+		_scene.map = shot.map                          # mw item: each item on a map of its own
+		_scene.user_map = true
+		if _build_map().is_empty():
+			_shot_failed = true
 	get_window().size = Vector2i(int(shot.size[0]), int(shot.size[1]))
+	var bg: Array = shot.get("background", [0.0, 0.0, 0.0])
+	_world_env.environment.background_color = Color(bg[0], bg[1], bg[2])
 	_fixed = true
 	_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	if shot.has("top"):
@@ -1070,6 +1078,10 @@ func _switch_view(key: String, on: bool) -> void:
 			_show(["StandingWater", "Rivers"], on)
 		"roads":
 			_show(["Roads"], on)
+		"terrain":                                      # the ground, water and roads (mw item's pictures leave them out)
+			if _root != null:
+				_root.visible = on
+			_overlays.visible = on                         # and what lies on the ground
 		"fog":
 			if on != was and _root != null:
 				_build_terrain()

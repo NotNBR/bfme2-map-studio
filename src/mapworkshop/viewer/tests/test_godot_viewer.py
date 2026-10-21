@@ -16,6 +16,7 @@ from mapworkshop.formats.map import Map
 from mapworkshop.formats.sections import read
 from mapworkshop.mapkit import blank
 from mapworkshop.native import openbfme
+from mapworkshop.render import godot
 from mapworkshop.viewer import godot_viewer
 from mapworkshop.viewer import marks as marklib
 
@@ -33,8 +34,8 @@ LAKE = dict(water_height=300, points=[(-5, -5), (15, -5), (15, 15), (-5, 15)])
 
 class SurfaceTests(unittest.TestCase):
     def test_standing_water_raises_the_samples_it_covers(self):
-        with mock.patch.object(godot_viewer, 'records', return_value=[LAKE]):
-            s = godot_viewer.Surface(FakeMap())
+        with mock.patch.object(godot, 'records', return_value=[LAKE]):
+            s = godot.Surface(FakeMap())
         heights = FakeMap().heightmap()['elevations']*0.0390625
         self.assertEqual(s.playable, (30.0, 40.0))
         # samples (0, 0) and (10, 10) in map units are inside the lake; their terrain is lower, so they are its level
@@ -45,15 +46,15 @@ class SurfaceTests(unittest.TestCase):
         self.assertAlmostEqual(float(s.terrain.height_at(0, 0)), float(heights[1, 1]))
 
     def test_views_resolve_on_the_terrain_under_the_water(self):
-        with mock.patch.object(godot_viewer, 'records', return_value=[LAKE]):
-            s = godot_viewer.Surface(FakeMap())
-        camera = godot_viewer.resolve('target=0,0 distance=500', s.terrain, (1600, 1000))
+        with mock.patch.object(godot, 'records', return_value=[LAKE]):
+            s = godot.Surface(FakeMap())
+        camera = godot.resolve('target=0,0 distance=500', s.terrain, (1600, 1000))
         # as mw render: the target stands on the terrain (sample (1, 1): 6 * 256 * 0.0390625), not on the lake
         self.assertAlmostEqual(camera['target'][2], 60.0)
 
     def test_without_water_it_is_the_terrain(self):
-        with mock.patch.object(godot_viewer, 'records', return_value=[]):
-            s = godot_viewer.Surface(FakeMap())
+        with mock.patch.object(godot, 'records', return_value=[]):
+            s = godot.Surface(FakeMap())
         self.assertAlmostEqual(float(s.height_at(5, 5)),
                                float(np.mean(FakeMap().heightmap()['elevations'][1:3, 1:3]*0.0390625)), places=4)
 
@@ -79,7 +80,7 @@ class PreviewTests(unittest.TestCase):
         return Map((folder/f'{name}.map').read_bytes()), (folder/'map.ini').read_bytes()
 
     def test_a_weather_and_a_sun_go_into_a_copy_of_the_map(self):
-        name = godot_viewer.preview_map(self.source, 'map mp test', 'dusk', 'ember')
+        name = godot.preview_map(self.source, 'map mp test', 'dusk', 'ember')
         self.assertEqual(name, 'map mp test studio preview')
         m, ini = self.copy(name)
         own = Map(self.source.read_bytes())
@@ -95,23 +96,23 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(Map(self.source.read_bytes()).encode(), own.encode())          # the map itself unchanged
 
     def test_a_sun_alone_keeps_the_maps_weather_under_its_fog(self):
-        m, ini = self.copy(godot_viewer.preview_map(self.source, 'map mp test', sun='ash'))
+        m, ini = self.copy(godot.preview_map(self.source, 'map mp test', sun='ash'))
         self.assertTrue(ini.startswith(b'Weather\n  IsSnowing = yes'))
         self.assertTrue(ini.endswith(b'HardwareFogEnd = 17000\nEnd\n'))
 
     def test_the_map_as_it_is_opens_itself_and_copies_are_removed(self):
-        with mock.patch.object(godot_viewer, 'source', return_value=(self.source, 'map mp test', True, None)), \
-                mock.patch.object(godot_viewer, 'SCENES', self.tmp/'scenes'), \
+        with mock.patch.object(godot, 'source', return_value=(self.source, 'map mp test', True, None)), \
+                mock.patch.object(godot, 'SCENES', self.tmp/'scenes'), \
                 mock.patch.object(marklib, 'MARKS_DIR', self.tmp/'marks'):
-            data = godot_viewer.scene('test', preview=godot_viewer.OWN)[1]
-            self.assertEqual((data['map'], data['preview']), ('map mp test', godot_viewer.OWN))
+            data = godot.scene('test', preview=godot.OWN)[1]
+            self.assertEqual((data['map'], data['preview']), ('map mp test', godot.OWN))
             self.assertFalse((self.tmp/'Maps').exists())
-            data = godot_viewer.scene('test', preview=dict(weather='haze'))[1]
+            data = godot.scene('test', preview=dict(weather='haze'))[1]
         self.assertEqual(data['map'], 'map mp test studio preview')
         m, ini = self.copy(data['map'])
         self.assertEqual([o['template'] for o in m.objects()], ['WaterReflectionSkydome_Celduin'])
         (self.tmp/'Maps'/'map mp other').mkdir()
-        godot_viewer.remove_previews()
+        godot.remove_copies()
         self.assertEqual([p.name for p in (self.tmp/'Maps').iterdir()], ['map mp other'])
 
 
@@ -123,18 +124,18 @@ class FlatTerrain:
 
 
 class ShotTests(unittest.TestCase):
-    """mw render's pictures as the viewer takes them (godot_viewer.shot_of)."""
+    """mw render's pictures as the viewer takes them (godot.shot_of)."""
 
     def test_a_top_view_is_the_region_from_above_at_its_scale(self):
         from mapworkshop.render.camera import TopView
-        shot = godot_viewer.shot_of(dict(path='top.png', view=TopView(), scale=2.0), FlatTerrain(), None)
+        shot = godot.shot_of(dict(path='top.png', view=TopView(), scale=2.0), FlatTerrain(), None)
         self.assertEqual(shot['size'], [200, 160])                      # 2 pixels per 10-unit cell
         self.assertEqual(shot['top'], dict(center=[500.0, 400.0], width=1000.0, height=800.0, z=2020.0))
-        bordered = godot_viewer.shot_of(dict(path='top.png', view=TopView(border=True), scale=1.0), FlatTerrain(), None)
+        bordered = godot.shot_of(dict(path='top.png', view=TopView(border=True), scale=1.0), FlatTerrain(), None)
         self.assertEqual(bordered['size'], [108, 88])                   # every sample, the border too
 
     def test_an_orbit_view_is_resolved_at_its_size(self):
-        shot = godot_viewer.shot_of(dict(path='a.png', view=godot_viewer.parse_view(['target=100,100', 'distance=500']),
+        shot = godot.shot_of(dict(path='a.png', view=godot.parse_view(['target=100,100', 'distance=500']),
                                          size=(800, 600)), FlatTerrain(), None)
         self.assertEqual(shot['size'], [800, 600])
         self.assertEqual(shot['view']['target'], [100.0, 100.0, 20.0])
@@ -156,7 +157,7 @@ class MainTests(unittest.TestCase):
 class EngineTests(unittest.TestCase):
     def test_a_view_becomes_the_games_cinematic_shot(self):
         from mapworkshop.render import cli
-        shot = cli.game_shot('a', godot_viewer.parse_view(['target=300,200', 'distance=1000', 'elevation=30',
+        shot = cli.game_shot('a', godot.parse_view(['target=300,200', 'distance=1000', 'elevation=30',
                                                            'heading=90']), FlatTerrain())
         self.assertEqual((shot['x'], shot['y']), (300.0, 200.0))
         self.assertAlmostEqual(shot['distance'], 1000.0)
@@ -174,7 +175,7 @@ class EngineTests(unittest.TestCase):
 
 class ViewTests(unittest.TestCase):
     def test_a_view_resolves_to_its_eye_target_field_of_view_and_orbit(self):
-        camera = godot_viewer.resolve('target=500,600 distance=1000 elevation=30 heading=90 fov=40', FlatTerrain(),
+        camera = godot.resolve('target=500,600 distance=1000 elevation=30 heading=90 fov=40', FlatTerrain(),
                                       (1600, 1000))
         self.assertAlmostEqual(camera['fov'], 40.0, places=6)
         self.assertEqual(camera['target'], [500.0, 600.0, 20.0])
@@ -186,25 +187,25 @@ class ViewTests(unittest.TestCase):
         self.assertAlmostEqual(camera['orbit']['heading'], 90.0, places=6)
         self.assertAlmostEqual(camera['orbit']['elevation'], 30.0, places=6)
         self.assertAlmostEqual(camera['orbit']['distance'], 1000.0, places=6)
-        x, y = godot_viewer.pixel(camera['view_projection'], camera['target'], (1600, 1000))
+        x, y = godot.pixel(camera['view_projection'], camera['target'], (1600, 1000))
         self.assertAlmostEqual(x, 800.0, places=6)
         self.assertAlmostEqual(y, 500.0, places=6)
 
     def test_a_focal_length_frames_the_view(self):
-        camera = godot_viewer.resolve('target=0,0 distance=800 focal=50 aperture=2', FlatTerrain(), (1500, 1000))
+        camera = godot.resolve('target=0,0 distance=800 focal=50 aperture=2', FlatTerrain(), (1500, 1000))
         self.assertAlmostEqual(camera['fov'], 2*np.degrees(np.arctan(18/50)), places=6)   # 36 mm wide at 3:2
         # the lens, for Photo mode: focused on the target unless told
         self.assertEqual(camera['photo'], dict(focal=50.0, aperture=2.0, ev=0.0, focus=800.0))
 
     def test_without_an_aperture_the_lens_keeps_everything_sharp(self):
-        plain = godot_viewer.resolve('target=0,0 distance=800', FlatTerrain(), (1500, 1000))['photo']
+        plain = godot.resolve('target=0,0 distance=800', FlatTerrain(), (1500, 1000))['photo']
         self.assertEqual((plain['aperture'], plain['ev']), (None, 0.0))         # the viewer stays in Edit
-        self.assertEqual(godot_viewer.resolve('target=0,0 distance=800 ev=1', FlatTerrain(), (1500, 1000))['photo']['ev'],
+        self.assertEqual(godot.resolve('target=0,0 distance=800 ev=1', FlatTerrain(), (1500, 1000))['photo']['ev'],
                          1.0)                                                    # an exposure alone: Photo mode
 
     def test_a_top_view_is_refused(self):
         with self.assertRaises(RuntimeError):
-            godot_viewer.resolve('kind=top', FlatTerrain(), (1600, 1000))
+            godot.resolve('kind=top', FlatTerrain(), (1600, 1000))
 
 
 def lab():
@@ -238,7 +239,7 @@ class LibraryTests(unittest.TestCase):
     def test_mw_render_on_the_godot_viewer_saves_each_view_unseen(self):
         from mapworkshop.render.camera import TopView
         with tempfile.TemporaryDirectory() as tmp:
-            outputs = godot_viewer.render(lab(), [('near', godot_viewer.parse_view(['target=200,300', 'distance=600'])),
+            outputs = godot.render(lab(), [('near', godot.parse_view(['target=200,300', 'distance=600'])),
                                                   ('top', TopView())], tmp, (640, 400), 0.5, progress=lambda line: None)
             self.assertEqual([o['file'] for o in outputs], ['near.png', 'top.png'])
             from PIL import Image

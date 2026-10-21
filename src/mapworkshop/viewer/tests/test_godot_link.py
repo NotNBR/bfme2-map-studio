@@ -13,6 +13,7 @@ from unittest import mock
 import numpy as np
 
 from mapworkshop.native import openbfme
+from mapworkshop.render import godot
 from mapworkshop.viewer import godot_link, godot_viewer
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer import views as viewlib
@@ -20,7 +21,7 @@ from mapworkshop.viewer.marking import MarkEditor
 
 
 class FlatSurface:
-    """Ground at height 50 everywhere, as godot_viewer.Surface answers it."""
+    """Ground at height 50 everywhere, as render.godot.Surface answers it."""
 
     def __init__(self):
         self.terrain = self
@@ -421,8 +422,8 @@ class DrivenViewerTests(unittest.TestCase):
             code = godot_viewer.run('blend-lab', 'target=500,500 distance=1400 elevation=60', drive=drive,
                                     progress=lambda line: None, timeout=300)
             self.assertEqual(code, 0)
-            map_path = godot_viewer.source('blend-lab')[0]
-            godot = json.loads(marklib.marks_path(map_path).read_text(encoding='utf-8'))
+            map_path = godot.source('blend-lab')[0]
+            drawn = json.loads(marklib.marks_path(map_path).read_text(encoding='utf-8'))
             # the same marks through MarkEditor driven directly, a camera picking those points
             studio_marks = marklib.Marks(Path(tmp)/'studio.map')        # a marks file of its own
             ground, status = Ground(), mock.MagicMock()
@@ -439,10 +440,10 @@ class DrivenViewerTests(unittest.TestCase):
                 editor.move(None)
                 editor.release()
             self.assertEqual(studio_marks.get(1)['points'], [[420.0, 400.0]])     # the circle moved by the drag
-            self.assertEqual(godot['marks'], studio_marks.plain())
+            self.assertEqual(drawn['marks'], studio_marks.plain())
             describe = lambda marks: marklib.text(marklib.describe(dict(map_path=str(map_path), map=map_path.stem,
                                                                         updated='now', marks=marks)))
-            self.assertEqual(describe(godot['marks']), describe(studio_marks.plain()))
+            self.assertEqual(describe(drawn['marks']), describe(studio_marks.plain()))
 
 
 if __name__ == '__main__':

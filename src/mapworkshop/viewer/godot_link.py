@@ -59,7 +59,7 @@ To the viewer:
                                     area's corner, its extent in map units and the cut-off areas; {error} if it failed
     flow {strips}                   the river strips: [{vertices: [x, y, z, u, v] * n, triangles, length}]
     views {items, free}             the saved views: [{name, slot, mode, thumbnail}], the first free slot
-    view {mode, name, ...}          go to a saved view, resolved as godot_viewer.resolve resolves a view
+    view {mode, name, ...}          go to a saved view, resolved as render.godot.resolve resolves a view
     toast {kind, title, detail, seconds}, window {minimized}
 """
 
@@ -76,6 +76,8 @@ from mapworkshop import project
 from mapworkshop.config import save_setting, setting
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.weather import preview_choices, preview_labels
+from mapworkshop.render import godot
+from mapworkshop.render.godot import OWN
 from mapworkshop.viewer import jobs
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.jobs import MarksSummary
@@ -152,7 +154,6 @@ def _ids(picks):
     return {k: int(v) if isinstance(v, float) else v for k, v in picks.items()}
 
 
-OWN = dict(weather='map', sun='own')     # Preview's choice when it shows the map as it is (the Python viewer's values)
 
 
 class Picks:
@@ -258,31 +259,9 @@ class Loaded:
         return self.assets
 
 
-def flow_strips(m):
-    """The map's river strips for the flow arrows, every one as OpenBFME draws them: vertices [x, y, z, u, v] flat
-    (u across the strip from 0 to 1, v along it), triangles flat, length in v (render.rivers.strips)."""
-    from mapworkshop.render import rivers
-    return [dict(vertices=vertices[:, [0, 1, 2, 4, 5]].round(2).ravel().tolist(),
-                 triangles=triangles.ravel().tolist(), length=float(vertices[-1, 5]))
-            for _, (vertices, triangles) in rivers.strips(m)]
-
-
 def walkability(loaded, map_ini, path):
-    """The walkability estimate of the map as render.overlays works it out, its image saved at
-    `path`: the viewer's walkable message."""
-    from types import SimpleNamespace
-    from PIL import Image
-    from mapworkshop.assets.models import ModelCache
-    from mapworkshop.mapkit import walkable
-    from mapworkshop.render.overlays import OverlaysMixin
-    assets = loaded.game_assets()
-    text = map_ini.read_text(encoding='cp1252', errors='replace') if map_ini.is_file() else ''
-    result, rgba = OverlaysMixin.compute_walkability(SimpleNamespace(
-        map=loaded.map, pathing_assets=assets, map_ini=text, model_cache=ModelCache(assets)))
-    Image.fromarray(rgba, 'RGBA').save(path)
-    h, w = rgba.shape[:2]
-    return dict(type='walkable', image=str(path), size=[w*walkable.CELL, h*walkable.CELL],
-                cut_off=len(result['cut_off']))
+    """The walkability estimate of the loaded map (render.godot.walkability), once its game files are loaded."""
+    return godot.walkability(loaded.map, loaded.game_assets(), map_ini, path)
 
 
 class Link:
@@ -490,7 +469,7 @@ class Companion:
         return [dict(type='status', text='Computing walkability...', seconds=60)]
 
     def flow_strips(self):
-        return flow_strips(self.loaded.map)
+        return godot.flow_strips(self.loaded.map)
 
     def _browse(self, folder):
         """Browse...: a .map file chosen in the system's file dialog (on this thread), opened by the serving loop."""
@@ -595,7 +574,6 @@ class Companion:
     def apply_view(self, message):
         """Go to a saved view (by name, or by slot: Ctrl+1-9), in its mode."""
         from mapworkshop.render.camera import view_from_dict
-        from mapworkshop.viewer.godot_viewer import SIZE, resolve     # godot_viewer imports this module
         self.views.load()
         if message.get('slot'):
             slot = int(message['slot'])
@@ -609,7 +587,7 @@ class Companion:
                 return [dict(type='status', text=f'no view called {message.get("view")}', seconds=4)]
         try:
             view = view_from_dict(entry['spec'])
-            camera = resolve(view, self.surface.terrain, message.get('size') or SIZE)
+            camera = godot.resolve(view, self.surface.terrain, message.get('size') or godot.SIZE)
         except (ValueError, RuntimeError) as error:
             return [dict(type='status', text=f'{entry["name"]}: {error}', seconds=6)]
         camera.pop('view_projection')

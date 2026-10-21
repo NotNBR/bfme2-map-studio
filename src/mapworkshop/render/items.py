@@ -12,8 +12,9 @@ model's outline cut at a height, its outline seen from above, or its named
 points, in the object's own frame (render.footprint).
 
 An item stands alone on a plain background (white unless --background) with
-a soft ground shadow, lit by the game's renderer: the same models, materials
-and textures as in the map renders. Each image is cropped to
+a soft ground shadow, drawn by the viewer on OpenBFME's library
+(render.godot): the same models, materials and textures as in the
+game. Each image is cropped to
 the object and its shadow and scaled to fill the tile, so a scale bar in its
 corner gives the size (map units, measured at the object's centre; exact in
 top views). `--heading` (the way the camera faces: 0 north, 90 east) and
@@ -115,24 +116,21 @@ def parse_views(text):
 
 
 class ItemRenderer:
-    """Renders templates one at a time on a private GPU context; models and
-    textures loaded once are kept for the next item."""
+    """Renders templates through the viewer (render.godot.shoot): each one on a small flat map of its own,
+    the ground hidden, every item of a run in one run of the viewer. Each picture is taken on white and on black,
+    which gives the object's colour and coverage exactly (translucent leaves and glass too), and its shadow from a
+    look straight down at it."""
 
-    def __init__(self, assets=None, lod='high'):
-        import moderngl
+    def __init__(self, assets=None):
         from mapworkshop.assets.library import GameAssets
+        from mapworkshop.assets.models import ModelCache
         self.assets = assets or GameAssets()
-        self.ctx = moderngl.create_standalone_context(require=430)
-        self.ctx.gc_mode = 'auto'      # free each item's GPU objects once it is done
-        self.shared = {}
-        self.lod = lod
+        self.models = ModelCache(self.assets)
 
     def measure(self, template):
         """Model, scale and the box of the model as placed: (min, max) in map units."""
-        from mapworkshop.assets.models import ModelCache
         info = self.assets.template_model(template)
-        cache = self.shared.setdefault('model_cache', ModelCache(self.assets))
-        model = cache.load(info['model']) if info else None
+        model = self.models.load(info['model']) if info else None
         if not model:
             return None
         low, high = (np.asarray(v, float) * info['scale'] for v in model['bounds'])
@@ -141,98 +139,145 @@ class ItemRenderer:
 
     def render(self, template, views=('3q',), size=640, background=(1., 1., 1.), rotation=0.,
                heading=None, elevation=None, distance=None, shadow=True, scale_bar=True):
-        """{view: dict(image=RGBA uint8 size x size, pixels_per_unit)} for one
-        template, cropped to the object and its shadow, and its measurements."""
+        """{view: dict(image=RGBA uint8 size x size, pixels_per_unit)} for one template, cropped to the object and
+        its shadow, and its measurements; (None, None) when its model cannot be loaded."""
+        return self.render_all([template], views, size, background, rotation, heading, elevation, distance, shadow,
+                               scale_bar)[template]
+
+    def render_all(self, templates, views=('3q',), size=640, background=(1., 1., 1.), rotation=0., heading=None,
+                   elevation=None, distance=None, shadow=True, scale_bar=True, progress=lambda line: None):
+        """render() for each template, all in one run of the viewer: {template: (images, measured)}."""
+        import shutil
+        from mapworkshop.formats.map import Map
         from mapworkshop.mapkit.blank import add_object, create
         from mapworkshop.render.camera import OrbitView, TopView
-        from mapworkshop.render.engine import MapRenderer
-        measured = self.measure(template)
-        if measured is None:
-            return None, None
-        low, high = measured['low'], measured['high']
-        angle = math.radians(rotation)
-        # A sphere around the foot point that holds the model's box at any
-        # rotation (turning about the vertical keeps each corner's reach).
-        reach = max(math.hypot(x, y) for x in (low[0], high[0]) for y in (low[1], high[1]))
-        radius = max(math.hypot(reach, (high[2] - low[2]) / 2), 20.)
-        cells = max(64, math.ceil(radius * 4 / 10))
-        m = create(cells, cells, 3, elevation=GROUND)
+        from mapworkshop.render import godot
+        out, plans = {}, []
+        for template in templates:
+            measured = self.measure(template)
+            if measured is None:
+                out[template] = (None, None)
+                continue
+            low, high = measured['low'], measured['high']
+            # A sphere around the foot point that holds the model's box at any rotation (turning about the
+            # vertical keeps each corner's reach).
+            reach = max(math.hypot(x, y) for x in (low[0], high[0]) for y in (low[1], high[1]))
+            plans.append(dict(template=template, measured=measured,
+                              radius=max(math.hypot(reach, (high[2] - low[2]) / 2), 20.)))
+        if not plans:
+            return out
+        cells = max(max(64, math.ceil(p['radius'] * 4 / 10)) for p in plans)     # every map alike: one surface
         cx = cy = cells * 5.
-        add_object(m, template, cx, cy, angle)
-        renderer = MapRenderer(m.encode(), assets=self.assets, ctx=self.ctx, shared=self.shared, lod=self.lod,
-                               clouds=False, macro=False)
-        renderer.visible.update(terrain=False, weather=False)
-        centre = (cx, cy, GROUND + float(low[2] + high[2]) / 2)
-        # The shadow lies under the model's lowest point: bridges and docks
-        # reach below the ground they stand on.
-        floor = GROUND + min(0., float(low[2]))
         work = min(2048, max(512, round(size * OVERSAMPLE)))
-        images = {}
-        for name in views:
-            if name == 'top':
-                view = TopView(region=(cx - radius, cy - radius, cx + radius, cy + radius))
-                per_unit = work / (2 * radius)
-            else:
-                h, e = VIEWS[name] if name in VIEWS else (float(v) for v in name.split('/'))
-                if name == '3q':
-                    h = h if heading is None else heading
-                    e = e if elevation is None else elevation
-                d = distance or radius / math.sin(math.radians(FOV / 2)) * 1.06
-                view = OrbitView(target=centre, distance=d, elevation=e, heading=h, fov=FOV)
-                per_unit = work / 2 / math.tan(math.radians(FOV / 2)) / d
-            image, content = self._compose(renderer, view, work, background, shadow, (cx, cy), radius, floor)
-            image, zoom = fit(image, content, size, background)
-            if scale_bar:
-                draw_scale_bar(image, per_unit * zoom, background)
-            images[name] = dict(image=image, pixels_per_unit=round(per_unit * zoom, 4))
-        return images, measured
+        folder = godot.SCENES/'items'
+        shutil.rmtree(folder, ignore_errors=True)
+        folder.mkdir(parents=True)
+        godot.remove_copies()
+        shots = []
+        try:
+            for i, plan in enumerate(plans):
+                m = create(cells, cells, 3, elevation=GROUND)
+                add_object(m, plan['template'], cx, cy, math.radians(rotation))
+                path = folder/f'item {i}.map'
+                path.write_bytes(m.encode())
+                plan['map'] = godot.loose_map(path)
+                low, high, radius = plan['measured']['low'], plan['measured']['high'], plan['radius']
+                plan['centre'] = (cx, cy, GROUND + float(low[2] + high[2]) / 2)
+                # The shadow lies under the model's lowest point: bridges and docks reach below the ground.
+                plan['floor'] = GROUND + min(0., float(low[2]))
+                plan['views'] = {}
+                for name in views:
+                    if name == 'top':
+                        view = TopView(region=(cx - radius, cy - radius, cx + radius, cy + radius))
+                        per_unit = work / (2 * radius)
+                    else:
+                        h, e = VIEWS[name] if name in VIEWS else (float(v) for v in name.split('/'))
+                        if name == '3q':
+                            h = h if heading is None else heading
+                            e = e if elevation is None else elevation
+                        d = distance or radius / math.sin(math.radians(FOV / 2)) * 1.06
+                        view = OrbitView(target=plan['centre'], distance=d, elevation=e, heading=h, fov=FOV)
+                        per_unit = work / 2 / math.tan(math.radians(FOV / 2)) / d
+                    plan['views'][name] = (view, per_unit)
+                    shots += _pair(folder/f'{i} {name}', view, (work, work), plan['map'])
+                if shadow:
+                    span = radius * 1.6
+                    plan['shadow'] = TopView(region=(cx - span, cy - span, cx + span, cy + span))
+                    shots += _pair(folder/f'{i} shadow', plan['shadow'], (SHADOW_SIZE, SHADOW_SIZE), plan['map'])
+            progress(f'Rendering {len(plans)} item(s) in the Godot viewer...')
+            godot.shoot(folder/'item 0.map', shots, (work, work), dict(terrain=False, fog=False),
+                               progress=progress)
+            terrain = godot.Surface(Map((folder/'item 0.map').read_bytes())).terrain
+            for i, plan in enumerate(plans):
+                images = {}
+                for name, (view, per_unit) in plan['views'].items():
+                    colour, alpha = _matte(folder/f'{i} {name}')
+                    darkness = None
+                    if shadow:
+                        _, top = _matte(folder/f'{i} shadow')
+                        darkness = _shadow(top, plan['shadow'], view, terrain, (work, work), plan['floor'],
+                                           plan['radius']) * SHADOW
+                    image, content = _compose(colour, alpha, darkness, background)
+                    image, zoom = fit(image, content, size, background)
+                    if scale_bar:
+                        draw_scale_bar(image, per_unit * zoom, background)
+                    images[name] = dict(image=image, pixels_per_unit=round(per_unit * zoom, 4))
+                out[plan['template']] = (images, plan['measured'])
+        finally:
+            godot.remove_copies()
+            shutil.rmtree(folder, ignore_errors=True)
+        return out
 
-    def _matte(self, renderer, view, size):
-        """The objects' premultiplied colour and coverage, from a render on
-        white and one on black (exact for translucent leaves and glass too)."""
-        white = renderer.render(view, size, background=(1., 1., 1.)).astype(np.float32) / 255
-        black = renderer.render(view, size, background=(0., 0., 0.)).astype(np.float32) / 255
-        alpha = np.clip(1 - (white - black).mean(axis=2), 0, 1)
-        return black, alpha
 
-    def _shadow(self, renderer, view, size, centre, radius, floor):
-        """A soft contact shadow: the object's footprint seen from above,
-        blurred and laid onto the ground under it in this view."""
-        from mapworkshop.render.camera import TopView
-        cx, cy = centre
-        span = radius * 1.6
-        n = 256
-        _, top = self._matte(renderer, TopView(region=(cx - span, cy - span, cx + span, cy + span)), (n, n))
-        mask = Image.fromarray(np.uint8(top * 255)).filter(ImageFilter.GaussianBlur(n * radius * .05 / (2 * span) + 2))
-        camera = view.resolve(renderer.terrain, size[0] / size[1])
-        world = [(cx - span, cy + span), (cx + span, cy + span), (cx + span, cy - span), (cx - span, cy - span)]
-        pixels = []
-        for x, y in world:
-            clip = camera['view_projection'] @ np.array([x, y, floor, 1.])
-            if clip[3] <= 0:
-                return np.zeros(size[::-1], np.float32)
-            ndc = clip[:3] / clip[3]
-            pixels.append(((ndc[0] + 1) / 2 * size[0], (1 - ndc[1]) / 2 * size[1]))
-        source = [(0, 0), (n, 0), (n, n), (0, n)]
-        coeffs = _perspective(pixels, source)
-        laid = mask.transform(size, Image.Transform.PERSPECTIVE, coeffs, Image.Resampling.BILINEAR)
-        return np.asarray(laid, np.float32) / 255
+SHADOW_SIZE = 256       # pixels of the look straight down that gives the shadow
 
-    def _compose(self, renderer, view, size, background, shadow, centre, radius, floor):
-        """The object and its shadow on the background (RGBA uint8), and the
-        pixels that show either (for cropping)."""
-        size = (size, size)
-        colour, alpha = self._matte(renderer, view, size)
-        darkness = self._shadow(renderer, view, size, centre, radius, floor) * SHADOW if shadow else np.zeros(size[::-1], np.float32)
-        content = (alpha > .02) | (darkness > .03)
-        if background is None:
-            # Transparent: the shadow as black at its strength, the object over it.
-            cover = alpha + (1 - alpha) * darkness
-            rgb = np.where(cover[..., None] > 1e-4, colour / np.maximum(cover, 1e-4)[..., None], 0)
-            return np.uint8(np.clip(np.dstack([rgb, cover]), 0, 1) * 255 + .5), content
-        ground = np.asarray(background, np.float32)[None, None, :] * (1 - darkness)[..., None]
-        rgb = colour + ground * (1 - alpha)[..., None]
-        return np.uint8(np.dstack([np.clip(rgb, 0, 1), np.ones(size[::-1])]) * 255 + .5), content
+
+def _pair(stem, view, size, map_name):
+    """The two shots of one view on one item's map, on white and on black."""
+    return [dict(path=f'{stem} {tone}.png', view=view, size=size, map=map_name, background=[v] * 3)
+            for tone, v in (('white', 1.0), ('black', 0.0))]
+
+
+def _matte(stem):
+    """The object's premultiplied colour and its coverage, from its pictures on white and on black."""
+    white = np.asarray(Image.open(f'{stem} white.png').convert('RGB'), np.float32) / 255
+    black = np.asarray(Image.open(f'{stem} black.png').convert('RGB'), np.float32) / 255
+    alpha = np.clip(1 - (white - black).mean(axis=2), 0, 1)
+    return black, alpha
+
+
+def _shadow(top, region_view, view, terrain, size, floor, radius):
+    """A soft contact shadow: the object's footprint seen from above (`top`, its coverage over `region_view`'s
+    region), blurred and laid onto the ground under it in `view`."""
+    n = top.shape[0]
+    x0, y0, x1, y1 = region_view.region
+    span = (x1 - x0) / 2
+    mask = Image.fromarray(np.uint8(top * 255)).filter(ImageFilter.GaussianBlur(n * radius * .05 / (2 * span) + 2))
+    camera = view.resolve(terrain, size[0] / size[1])
+    pixels = []
+    for x, y in [(x0, y1), (x1, y1), (x1, y0), (x0, y0)]:
+        clip = camera['view_projection'] @ np.array([x, y, floor, 1.])
+        if clip[3] <= 0:
+            return np.zeros(size[::-1], np.float32)
+        ndc = clip[:3] / clip[3]
+        pixels.append(((ndc[0] + 1) / 2 * size[0], (1 - ndc[1]) / 2 * size[1]))
+    source = [(0, 0), (n, 0), (n, n), (0, n)]
+    laid = mask.transform(size, Image.Transform.PERSPECTIVE, _perspective(pixels, source), Image.Resampling.BILINEAR)
+    return np.asarray(laid, np.float32) / 255
+
+
+def _compose(colour, alpha, darkness, background):
+    """The object and its shadow on the background (RGBA uint8), and the pixels that show either (for cropping)."""
+    darkness = darkness if darkness is not None else np.zeros(alpha.shape, np.float32)
+    content = (alpha > .02) | (darkness > .03)
+    if background is None:
+        # Transparent: the shadow as black at its strength, the object over it.
+        cover = alpha + (1 - alpha) * darkness
+        rgb = np.where(cover[..., None] > 1e-4, colour / np.maximum(cover, 1e-4)[..., None], 0)
+        return np.uint8(np.clip(np.dstack([rgb, cover]), 0, 1) * 255 + .5), content
+    ground = np.asarray(background, np.float32)[None, None, :] * (1 - darkness)[..., None]
+    rgb = colour + ground * (1 - alpha)[..., None]
+    return np.uint8(np.dstack([np.clip(rgb, 0, 1), np.ones(alpha.shape)]) * 255 + .5), content
 
 
 def _fill(background):
@@ -346,7 +391,6 @@ def _common(parser):
     parser.add_argument('--background', default='white',
                         help='white (default), transparent, or a colour as #rrggbb')
     parser.add_argument('--no-shadow', action='store_true', help='Leave out the soft ground shadow')
-    parser.add_argument('--lod', choices=['low', 'medium', 'high'], default='high', help='Game detail level (high)')
     parser.add_argument('--out', type=Path, help=f'PNG to write (default: in {OUT.relative_to(ROOT).as_posix()}/)')
 
 
@@ -398,7 +442,7 @@ def main_item(argv=None):
         print('\n'.join(catalog.describe(assets, args.template, catalog.load(assets, progress=lambda text: print(text, flush=True)))))
         return 0
     started = time.time()
-    renderer = ItemRenderer(lod=args.lod)
+    renderer = ItemRenderer()
     names, skipped = select(renderer.assets, [args.template])
     if not names:
         raise SystemExit(f'mw item: {skipped[0][0]}: {skipped[0][1]}')
@@ -471,7 +515,7 @@ def main(argv=None):
         parser.error(str(error))
     background = _background(args.background)
     started = time.time()
-    renderer = ItemRenderer(lod=args.lod)
+    renderer = ItemRenderer()
     source = None
     if args.from_map:
         from mapworkshop.render.cli import resolve_map
@@ -482,9 +526,10 @@ def main(argv=None):
     print(f'Rendering {len(names)} item{"s" if len(names) != 1 else ""} x {len(views)} view{"s" if len(views) != 1 else ""}...',
           flush=True)
     tiles, items = [], []
-    for i, name in enumerate(names, 1):
-        images, measured = renderer.render(name, views, args.tile, background, args.rotation, args.heading,
-                                           args.elevation, args.distance, not args.no_shadow)
+    rendered = renderer.render_all(names, views, args.tile, background, args.rotation, args.heading, args.elevation,
+                                   args.distance, not args.no_shadow, progress=lambda line: print(line, flush=True))
+    for name in names:
+        images, measured = rendered[name]
         if images is None:
             skipped.append((name, 'the model could not be loaded'))
             continue
@@ -493,8 +538,6 @@ def main(argv=None):
         for view in views:
             second = _size_text(measured) + ('' if len(views) == 1 else f'  ·  {view}')
             tiles.append((images[view]['image'], [name, second]))
-        if i % 10 == 0:
-            print(f'  {i}/{len(names)}', flush=True)
     columns = args.columns or (len(views) if len(views) > 1 else max(1, min(8, math.ceil(math.sqrt(len(tiles))))))
     label = ' '.join(args.patterns) or ''
     if args.from_map:

@@ -95,7 +95,7 @@ def placed(m, patterns=(), layer=None, near=None):
     name, layer, x, y, ground (the terrain there), z (its origin's height on
     the map: the ground plus the object's own z), angle (radians,
     counter-clockwise from east))."""
-    from mapworkshop.render.terrain import TerrainData
+    from mapworkshop.formats.terrain import Heights
     terrain = None
     found = []
     for o in m.objects():
@@ -109,7 +109,7 @@ def placed(m, patterns=(), layer=None, near=None):
                                 for text in (o['template'], name) if text):
             continue
         if terrain is None:
-            terrain = TerrainData(m)
+            terrain = Heights.of(m)
         ground = float(terrain.height_at(np.array([o['x']]), np.array([o['y']]))[0])
         found.append(dict(index=o['index'], template=o['template'], name=name, layer=props.get('objectLayer', ''),
                           x=round(o['x'], 1), y=round(o['y'], 1), ground=round(ground, 1),

@@ -172,10 +172,10 @@ STUDIO_ONLY = (('--lod', lambda a: a.lod != 'medium', 'OpenBFME has no detail le
 
 
 def godot(parser, args, views, size):
-    """The pictures from the Godot viewer (viewer.godot_viewer.render), with render.json beside them. It needs
+    """The pictures from the Godot viewer (render.godot.render), with render.json beside them. It needs
     OpenBFME built (the first run builds it) and the game files it plays from (English RotWK 2.01, BFME2 1.06)."""
     import sys
-    from mapworkshop.viewer.godot_viewer import render
+    from mapworkshop.render.godot import render
     for option, used, why in STUDIO_ONLY:
         if used(args):
             parser.error(f'{option} needs --engine studio: {why}')
@@ -227,7 +227,7 @@ def game(parser, args, views):
     from mapworkshop import project
     from mapworkshop.formats.map import Map
     from mapworkshop.native.capture import capture
-    from mapworkshop.viewer.godot_viewer import Surface
+    from mapworkshop.render.godot import Surface
     for option, used, why in GAME_FIXED:
         if used(args):
             parser.error(f'{option}: not with --engine game: {why}')

@@ -8,9 +8,9 @@ maps/README.md lists every map project; the guides (docs/guide/) show every
 (native.openbfme.differences()).
 
 Layers, bottom up; a package imports only from its own layer or below. The
-game's files (assets) sit below mapkit, which builds maps from them; render
-sits above both, as it draws what mapkit makes (its weather presets, bridges,
-walkability). Command entry points (`cli.py`, `__main__.py`) may import from
+game's files (assets) sit below mapkit, which builds maps from them; render,
+the pictures, sits with the projects and the game runtime, as it draws the
+projects' builds through OpenBFME (native.openbfme) and what mapkit makes. Command entry points (`cli.py`, `__main__.py`) may import from
 any layer. Nothing in src/ imports the map projects (maps/) or misc/.
 """
 import ast
@@ -23,7 +23,7 @@ from urllib.parse import unquote
 
 from mapworkshop.config import ROOT
 
-LAYERS = dict(config=0, formats=1, assets=2, video=2, mapkit=3, render=4, game=5, project=5, templates=5, selftest=5,
+LAYERS = dict(config=0, formats=1, assets=2, video=2, mapkit=3, render=5, game=5, project=5, templates=5, selftest=5,
               native=5, viewer=6, cli=7, __main__=7)
 
 

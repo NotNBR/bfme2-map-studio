@@ -215,3 +215,23 @@ def terrain_records(m, blend=None):
                 declared_blend_count=value['blend_count'], declared_cliff_count=value['cliff_count'],
                 edge_texture_cells=value['edge_texture_cells'], edge_textures=value['edge_textures'],
                 blends=blends, cliffs=cliffs, cliff_mapping_offset=value['offsets']['cliff_records'])
+
+
+class Heights:
+    """A height map's samples in map units with `border` samples around the playable area, and their heights at map
+    points (height_at). Heights.of(m): a map's own terrain."""
+
+    def __init__(self, heights, border, playable):
+        self.heights, self.border, self.playable = heights, border, playable
+        self.height, self.width = heights.shape                 # samples
+        self.max_height = float(heights.max())
+
+    @classmethod
+    def of(cls, m):
+        hm = m.heightmap()
+        return cls((hm['elevations']*0.0390625).astype(np.float32), hm['border'], playable_extent(hm))
+
+    def height_at(self, x, y):
+        return height_at(self.heights, self.border, x, y)
+
+

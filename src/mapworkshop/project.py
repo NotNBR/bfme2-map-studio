@@ -203,17 +203,13 @@ def _write_minimap(folder, name, image):
 
 
 def render_minimap(path):
-    """A top-down render of the map for its minimap, or None without a GPU."""
+    """A top-down picture of the map at `path` for its minimap (viewer.godot_viewer.top_picture), or None when the
+    viewer cannot draw it (OpenBFME not built, no game files)."""
     try:
         import numpy as np
         from PIL import Image
-        from mapworkshop.render.camera import TopView
-        from mapworkshop.render.engine import MapRenderer
-        from mapworkshop.assets.library import GameAssets
-        renderer = MapRenderer(path, assets=GameAssets.shared(), objects=True, clouds=False)
-        width, height = renderer.playable
-        top = renderer.render(TopView(), (1350, max(1, round(1350*height/width))))
-        image = Image.fromarray(top).resize((256, 256), Image.Resampling.LANCZOS)
+        from mapworkshop.render.godot import top_picture
+        image = top_picture(path, 1350).resize((256, 256), Image.Resampling.LANCZOS)
         return Image.fromarray(np.clip(np.asarray(image, float)*1.35 + 8, 0, 255).astype('uint8'))
     except Exception as error:
         print('Minimap render unavailable:', error)
