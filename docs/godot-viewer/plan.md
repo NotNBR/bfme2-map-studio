@@ -27,7 +27,7 @@
   it, and back once OpenBFME merges it.
 - **Where it stands:** the user-maps pull request is open
   ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)), and phase 0
-  is done: the submodule pins `studio-2026-10-21-1` in the user's public fork
+  is done: the submodule pins `studio-2026-10-21-2` in the user's public fork
   (official `main` plus a short, listed set of commits), nothing is written
   into it, and `mw test` checks that. Phase 1 is done: `mw view MAP --godot`
   opens a map in about two seconds, with the Edit camera, and puts map points

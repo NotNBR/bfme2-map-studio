@@ -285,11 +285,12 @@ engine change goes to OpenBFME as a pull request; the few the studio alone
 needs are commits on the pinned tag, listed below, each with what replaces it.
 This is decision 5 of the [Godot viewer plan](../godot-viewer/plan.md#decisions).
 
-The pin is `studio-2026-10-21-1`: OpenBFME's `main` (`1ee8f2e9`) with
+The pin is `studio-2026-10-21-2`: OpenBFME's `main` (`1ee8f2e9`) with
 
 | Commits | For | Until |
 |---|---|---|
 | user maps ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)) | the studio's Godot viewer opens a build from the user maps folder | OpenBFME merges it |
+| rivers as the game draws them ([#79](https://github.com/Open-BFME/openbfme-godot/pull/79)) | the viewer's and `mw render`'s rivers: their texture, ripples, colour and additive blending | OpenBFME merges it |
 | siege, walkable walls, big battles ([#64](https://github.com/Open-BFME/openbfme-godot/pull/64), with [#63](https://github.com/Open-BFME/openbfme-godot/pull/63) and [#62](https://github.com/Open-BFME/openbfme-godot/pull/62)) | Helm's Deep's assault, and the battle log's siege phases | OpenBFME merges them |
 | extra archives (`OPENBFME_EXTRA_ARCHIVES`) | `mw play --godot`, `--check` and `mw battle` mount a studio map | games on a user map (part 2 of the user-maps change) |
 | `--no-shroud` | `mw play --godot` draws the map revealed | OpenBFME takes it as a debug option, or a pin without it and `--fog` as the default |

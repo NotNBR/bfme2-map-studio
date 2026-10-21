@@ -95,13 +95,14 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 These are differences in the drawing itself, not in the viewer. They matter
 for phase 4, where `mw render` moves onto the Godot viewer:
 
-- **Rivers**: the Deeping Stream is lit pale at night where the studio
-  renderer draws it dark (`open`, `view`, `top`; it is the river, not a road:
-  it stays with the roads switched off). Water Lab's rivers are dark and flat
-  under Rain and Ember, where the studio draws their texture and foam (`rain`,
-  `ember`, `flow`), and of the nine short rivers at its north-west corner
-  OpenBFME draws two; the game draws all nine, as its minimap shows
-  (`mw render --top`, all three engines).
+- **Rivers**: OpenBFME drew rivers with stand-in UVs and colour, and its
+  additive ones (all of Water Lab's pools and streams) mixed, so the Deeping
+  Stream came out pale at night and Water Lab's rivers dark and flat. Since the
+  pin `studio-2026-10-21-2`
+  ([#79](https://github.com/Open-BFME/openbfme-godot/pull/79)) it draws them
+  as the game's drawRiverWater does; next to a game capture of Water Lab the
+  strip's texture, ripples and scroll match, and the pools stay lighter than
+  in the game, from OpenBFME's stand-in for the standing water under them.
 - **Fog**: Dusk with Ember hazes Water Lab far less than the studio renderer
   does from 4,200 units away (seen while building Preview; at the `ember`
   pair's 2,600 units both show little). The map.ini values are the same, so the
