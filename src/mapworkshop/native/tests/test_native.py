@@ -65,6 +65,13 @@ class StubTests(unittest.TestCase):
                          'exit, exit code 0x29a, first fault at image+0xe10d8')
 
 
+class HiddenDesktopTests(unittest.TestCase):
+    def test_a_command_runs_on_a_hidden_desktop_and_gives_its_exit_code(self):
+        import os
+        code = debugger.run_hidden(['cmd.exe', '/c', 'exit 3'], dict(os.environ), Path.cwd(), timeout=30)
+        self.assertEqual(code, 3)
+
+
 class RuntimeTests(unittest.TestCase):
     def test_archives_and_movies_are_linked_the_rest_copied(self):
         self.assertTrue(runtime.linked(PurePath('W3D.big')))

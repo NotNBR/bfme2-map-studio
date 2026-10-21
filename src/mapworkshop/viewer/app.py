@@ -695,7 +695,7 @@ class Viewer:
         _, spec = self.view_spec()
         owner, source = self.session.owner, self.session.source
         command = render_command(owner.id if owner else f'"{source}"', 'view', spec, self.preview(),
-                                 label=owner.id if owner else Path(source).stem)
+                                 label=owner.id if owner else Path(source).stem, engine='studio')
         glfw.set_clipboard_string(self.window, command)
         # mw render has no switch for the water layer.
         hidden = '' if self.renderer.visible['water'] else ' (with water: mw render always draws it)'

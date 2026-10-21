@@ -139,6 +139,44 @@ def hidden_desktop():
     return handle, (station.value or 'WinSta0') + '\\' + name
 
 
+def run_hidden(command, env, cwd, timeout):
+    """Run `command` (a list) on a hidden desktop of its own, as the headless game runs: no window appears and the
+    focus stays where it is (the Godot viewer renders there through Vulkan). `env` is its whole environment. Waits
+    for it and returns its exit code; ends it after `timeout` seconds and raises TimeoutError."""
+    import subprocess
+    k = kernel32()
+    k.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+    k.GetExitCodeProcess.argtypes = [wt.HANDLE, ctypes.POINTER(wt.DWORD)]
+    u = ctypes.WinDLL('user32', use_last_error=True)
+    u.CloseDesktop.argtypes = [wt.HANDLE]
+    desktop, name = hidden_desktop()
+    si, pi = STARTUPINFO(), PROCESS_INFORMATION()
+    si.cb = ctypes.sizeof(si)
+    si.d = name
+    block = ctypes.create_unicode_buffer(''.join(f'{key}={value}\0' for key, value in env.items()) + '\0')
+    line = ctypes.create_unicode_buffer(subprocess.list2cmdline([str(part) for part in command]))
+    CREATE_UNICODE_ENVIRONMENT, CREATE_NO_WINDOW = 0x400, 0x08000000
+    try:
+        if not k.CreateProcessW(None, line, None, None, False, CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, block,
+                                str(cwd), ctypes.byref(si), ctypes.byref(pi)):
+            raise RuntimeError(f'Starting {command[0]} failed (Windows error {ctypes.get_last_error()})')
+        try:
+            waited = k.WaitForSingleObject(pi.hProcess, int(timeout*1000))
+            if waited == 0x102:                                                    # WAIT_TIMEOUT
+                k.TerminateProcess(pi.hProcess, 1)
+                raise TimeoutError(f'{Path(command[0]).name} did not finish within {timeout} s')
+            if waited != 0:                                                        # WAIT_OBJECT_0
+                raise RuntimeError(f'Waiting for {command[0]} failed (Windows error {ctypes.get_last_error()})')
+            code = wt.DWORD()
+            k.GetExitCodeProcess(pi.hProcess, ctypes.byref(code))
+            return code.value
+        finally:
+            k.CloseHandle(pi.hProcess)
+            k.CloseHandle(pi.hThread)
+    finally:
+        u.CloseDesktop(desktop)
+
+
 def combine(handlers):
     """One breakpoint handler that runs several: each keeps running while it
     returns True (or a remote call with 'keep'); their remote calls run as

@@ -211,8 +211,8 @@ map places about 9,900 trees and 2,000 shrubs, far past the game's tree and
 shrub buffers ([objects and vegetation](../../docs/game/renderer/objects.md)):
 the game draws only the first 1,200 trees and 2,000 shrubs in map order.
 Forest trees are placed nearest the bases first, so the stands around the
-bases are the ones the game draws; `mw render --vegetation-limits` shows
-that view. Cold wind, creaking woods and occasional rockfalls supply local
+bases are the ones the game draws; `mw render --engine studio
+--vegetation-limits` shows that view. Cold wind, creaking woods and occasional rockfalls supply local
 ambient sound.
 
 Eight capture sites follow the eight circles in the supplied overhead image

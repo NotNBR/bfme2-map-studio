@@ -13,6 +13,10 @@
 ##
 ## The scene's views ({key: on}) start the View switches other than they start by default (a screenshot of an overlay).
 ##
+## Shots (mw render's pictures, and --screenshot): [{path, size, view (resolved as for the start) or top {center,
+## width, height, z}}], each saved in turn once it has settled, the viewer closing after the last; the overlays then
+## come in the scene (walkable, flow), worked out in Python, as there is no companion.
+##
 ## The scene can also ask for a fixed view (mw render's, resolved in Python), points to project through it (probes:
 ## each printed with where Python puts it), a screenshot to save, or a check (headless: open the map, print the
 ## result, quit). Without --scene it only checks that the assembly brought what it needs, prints "VIEWER ready" or
@@ -21,7 +25,8 @@ extends Node3D
 
 const CLASSES := ["RetailFileSystem", "MapTerrainBuilder", "MapObjectBuilder", "PathfindView"]
 const SHADERS := ["terrain", "water_standing", "road", "river"]
-const WARMUP_FRAMES := 24     # frames before a screenshot: the objects' first poses and the streamed textures
+const WARMUP_FRAMES := 24     # frames before the first shot: the objects' first poses and the streamed textures
+const SHOT_FRAMES := 12       # and before each further shot: the new view's textures and the window's new size
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
 ## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; the studio viewer's keys)
 const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
@@ -55,6 +60,9 @@ var _sliding := false         # a right drag in Photo mode
 var _thirds := false
 var _frame_choice := "free"   # the frame's aspect (Lens.FRAMES)
 var _focus_request := 0       # the PhotoEffect distance request being waited for (focus on the centre)
+var _shots := []              # the scene's shots still to take
+var _shot_wait := 0           # frames until the current shot is saved
+var _shot_failed := false
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
 var _frames := 0
 var _drag := ""               # while a button is held: "orbit", "pan", "marks" (the companion edits), "pending" (asked it)
@@ -114,7 +122,7 @@ func _fail(message: String) -> void:
 	print("VIEWER failed: ", message)
 	if _frame != null:
 		_frame.toast("failed", "The map could not be shown", message, 30)
-	if _headless() or not String(_scene.get("screenshot", "")).is_empty() or _scene.get("check", false):
+	if _headless() or not (_scene.get("shots", []) as Array).is_empty() or _scene.get("check", false):
 		get_tree().quit(1)
 
 
@@ -216,7 +224,9 @@ func _open_map() -> void:
 		report.errors, (_overlay.state.get("marks", []) as Array).size()])
 	_orbit = OrbitCamera.new(_surface, Vector2(_scene.playable[0], _scene.playable[1]), float(_scene.fov))   # at its reset()
 	_fly = FlyCamera.new(_surface)
-	var shot := String(_scene.get("screenshot", ""))
+	_shots = (_scene.get("shots", []) as Array).duplicate()
+	if not _shots.is_empty():
+		_photo.taps = 256                              # as mw render's
 	_drive = (_scene.get("drive", []) as Array).duplicate()
 	_driving = not _drive.is_empty()
 	_drive_wait = 10
@@ -230,23 +240,21 @@ func _open_map() -> void:
 		_orbit.fov = v.fov
 		_orbit.set_goal(o.x, o.y, o.distance, o.heading, o.elevation)
 		_orbit.snap()
-		var lens: Dictionary = v.get("photo", {})
-		if not shot.is_empty():
-			_photo.taps = 256                          # as mw render's
-		if float(lens.get("aperture", 0.0) if lens.get("aperture") != null else 0.0) > 0.0 \
-				or absf(float(lens.get("ev", 0.0))) > 1e-6:
+		if _lens_changes(v):
 			_place_view_photo(v)                       # the lens changes the picture (render.photo.active)
 			_set_mode("photo", false)
 	else:
 		_orbit.apply(_camera)
 	var actual := Vector2i(get_viewport().get_visible_rect().size)
-	if (_scene.has("probes") or not shot.is_empty()) and actual != Vector2i(int(_scene.size[0]), int(_scene.size[1])):
+	if _scene.has("probes") and actual != Vector2i(int(_scene.size[0]), int(_scene.size[1])):
 		_fail("the window is %dx%d, not the %dx%d asked for: the picture would not match mw render's" % [
 			actual.x, actual.y, int(_scene.size[0]), int(_scene.size[1])])
 		return
 	_probe()
 	_send({"type": "ready", "ms": done - started})
-	if _scene.get("check", false) and shot.is_empty():
+	if not _shots.is_empty():
+		_next_shot(WARMUP_FRAMES)
+	if _scene.get("check", false) and _shots.is_empty():
 		var layers := PackedStringArray()
 		if _objects_node != null:
 			layers.append(_objects_node.name)
@@ -423,10 +431,64 @@ func _process(delta: float) -> void:
 		_hover = false
 	_play_drive()
 	_frames += 1
-	var shot := String(_scene.get("screenshot", ""))
-	if not shot.is_empty() and _frames == WARMUP_FRAMES and _root != null:
-		var code := _save(shot)
-		get_tree().quit(0 if code == OK else 1)
+	_take_shot()
+
+
+## Whether a view's lens changes the picture (render.photo.active): an aperture or an exposure.
+static func _lens_changes(v: Dictionary) -> bool:
+	var lens: Dictionary = v.get("photo", {})
+	return (lens.get("aperture") != null and float(lens.aperture) > 0.0) or absf(float(lens.get("ev", 0.0))) > 1e-6
+
+
+## The next shot in place, saved after `frames` frames: the window at its size, the camera at its view (Photo mode
+## when its lens changes the picture) or looking straight down on its top view's region, orthographic, north up.
+func _next_shot(frames: int) -> void:
+	var shot: Dictionary = _shots[0]
+	get_window().size = Vector2i(int(shot.size[0]), int(shot.size[1]))
+	_fixed = true
+	_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	if shot.has("top"):
+		_set_mode("edit")
+		_fixed = true                                  # after _set_mode, which frees the Edit camera
+		var t: Dictionary = shot.top
+		var from := Surface.to_godot(Vector3(t.center[0], t.center[1], t.z))
+		_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		_camera.keep_aspect = Camera3D.KEEP_WIDTH
+		_camera.size = float(t.width)
+		_camera.near = 1.0
+		_camera.far = float(t.z) + 500.0
+		_camera.look_at_from_position(from, from + Vector3.DOWN, Vector3(0, 0, -1))      # north up
+	elif shot.has("view"):
+		var v: Dictionary = shot.view
+		if _lens_changes(v):
+			_place_view_photo(v)
+			_set_mode("photo", false)
+		else:
+			_set_mode("edit")
+			_fixed = true
+			OrbitCamera.place(_camera, _vec(v.eye), _vec(v.target), v.fov, v.roll, v.near, v.far)
+	_shot_wait = frames
+
+
+## The current shot saved once it has settled, then the next; the viewer closes after the last.
+func _take_shot() -> void:
+	if _shots.is_empty() or _root == null:
+		return
+	_shot_wait -= 1
+	if _shot_wait > 0:
+		return
+	var shot: Dictionary = _shots.pop_front()
+	var want := Vector2i(int(shot.size[0]), int(shot.size[1]))
+	var actual := Vector2i(get_viewport().get_visible_rect().size)
+	if actual != want:
+		print("VIEWER failed: the window is %dx%d, not the %dx%d asked for" % [actual.x, actual.y, want.x, want.y])
+		_shot_failed = true
+	elif _save(String(shot.path)) != OK:
+		_shot_failed = true
+	if _shots.is_empty():
+		get_tree().quit(1 if _shot_failed else 0)
+	else:
+		_next_shot(SHOT_FRAMES)
 
 
 ## A frame of Photo mode: the keys fly the camera, the lens goes to the effect, the bar and the framing aids show them.
@@ -498,7 +560,7 @@ func _set_mode(mode: String, place := true) -> void:
 		_orbit.aim(_fly.eye, _fly.forward(), _fly.pick_ahead())
 		_free()
 	_photo.enabled = mode == "photo"
-	_overlay.visible = mode == "edit"
+	_overlay.visible = mode == "edit" and _views.get("marks", true)
 	_capture(mode == "photo")
 	if _frame != null:
 		_frame.set_photo_mode(mode == "photo")
@@ -1017,14 +1079,23 @@ func _switch_view(key: String, on: bool) -> void:
 		"border":
 			_overlays.set_border(on)
 		"walkable", "flow":
-			if on:
+			if on and _link == null and _scene.has(key):
+				# worked out in Python with the scene (mw render's pictures, no companion)
+				if key == "walkable":
+					var w: Dictionary = _scene.walkable
+					_overlays.set_walkable(String(w.image), Vector2(w.size[0], w.size[1]))
+				else:
+					_overlays.set_flow(_scene.flow, _views.get("border", false))
+			elif on:
 				_send({"type": "command", "name": "overlay", "overlay": key})
 			elif key == "walkable":
 				_overlays.set_walkable("", Vector2.ONE)
 			else:
 				_overlays.set_flow([], false)
 		"marks":
-			if _link != null and bool(_overlay.state.get("visible", true)) != on:
+			if _link == null:
+				_overlay.visible = on and _mode == "edit"    # no companion: mw render's pictures leave them out
+			elif bool(_overlay.state.get("visible", true)) != on:
 				_send({"type": "command", "name": "toggle"})
 	if _frame != null:
 		_frame.toolbar.set_view(key, on)

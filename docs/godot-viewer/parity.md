@@ -96,9 +96,12 @@ for phase 4, where `mw render` moves onto the Godot viewer:
 - **No falling rain or snow**: the studio renderer draws the map's own rain on
   Helm's Deep (`view`, `lens` pairs) and the presets' (`rain`).
 - **Rivers**: the Deeping Stream is lit pale at night where the studio
-  renderer draws it dark (`open`, `view`, `top`). Water Lab's rivers are dark
-  and flat under Rain and Ember, where the studio draws their texture and
-  foam (`rain`, `ember`, `flow`).
+  renderer draws it dark (`open`, `view`, `top`; it is the river, not a road:
+  it stays with the roads switched off). Water Lab's rivers are dark and flat
+  under Rain and Ember, where the studio draws their texture and foam (`rain`,
+  `ember`, `flow`), and of the nine short rivers at its north-west corner
+  OpenBFME draws two; the game draws all nine, as its minimap shows
+  (`mw render --top`, all three engines).
 - **Fog**: Dusk with Ember hazes Water Lab far less than the studio renderer
   does from 4,200 units away (seen while building Preview; at the `ember`
   pair's 2,600 units both show little). The map.ini values are the same, so the

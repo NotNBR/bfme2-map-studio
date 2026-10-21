@@ -225,6 +225,15 @@ class Loaded:
         return self.assets
 
 
+def flow_strips(m):
+    """The map's river strips for the flow arrows, every one as OpenBFME draws them: vertices [x, y, z, u, v] flat
+    (u across the strip from 0 to 1, v along it), triangles flat, length in v (render.rivers.strips)."""
+    from mapworkshop.render import rivers
+    return [dict(vertices=vertices[:, [0, 1, 2, 4, 5]].round(2).ravel().tolist(),
+                 triangles=triangles.ravel().tolist(), length=float(vertices[-1, 5]))
+            for _, (vertices, triangles) in rivers.strips(m)]
+
+
 def walkability(loaded, map_ini, path):
     """The walkability estimate of the map as the studio viewer works it out (render.overlays), its image saved at
     `path`: the viewer's walkable message."""
@@ -448,12 +457,7 @@ class Companion:
         return [dict(type='status', text='Computing walkability...', seconds=60)]
 
     def flow_strips(self):
-        """The map's river strips for the flow arrows, every one as OpenBFME draws them: vertices [x, y, z, u, v] flat
-        (u across the strip from 0 to 1, v along it), triangles flat, length in v (render.rivers.strips)."""
-        from mapworkshop.render import rivers
-        return [dict(vertices=vertices[:, [0, 1, 2, 4, 5]].round(2).ravel().tolist(),
-                     triangles=triangles.ravel().tolist(), length=float(vertices[-1, 5]))
-                for _, (vertices, triangles) in rivers.strips(self.loaded.map)]
+        return flow_strips(self.loaded.map)
 
     def _browse(self, folder):
         """Browse...: a .map file chosen in the system's file dialog (on this thread), opened by the serving loop."""

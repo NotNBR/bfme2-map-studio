@@ -23,6 +23,11 @@ changing it: the library draws a map as its file and map.ini say, so a copy of
 the map with the preset's lighting, fog and sky goes into the user maps folder
 as `<map> studio preview` (preview_map()), and the viewer opens that copy.
 
+mw render's pictures (render(), `mw render --engine godot`, the default) are
+shots: the viewer opens the map once on a hidden desktop of its own
+(debugger.run_hidden), so no window shows, and saves each view in turn; the
+walkability and the river strips come worked out in the scene.
+
 A view (`--view`, the key=value words of `mw render --view`) is resolved here
 as mw render resolves it (on the terrain's own heights), and the viewer puts
 its camera at the eye and target it gets, so the camera projects a map point
@@ -65,6 +70,8 @@ class Heights:
 
     def __init__(self, heights, border, playable):
         self.heights, self.border, self.playable = heights, border, playable
+        self.height, self.width = heights.shape                 # samples, as render.terrain.Terrain's
+        self.max_height = float(heights.max())
 
     def height_at(self, x, y):
         return height_at(self.heights, self.border, x, y)
@@ -177,13 +184,15 @@ def remove_previews():
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
-          preview=None, fps='60'):
+def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=None, drive=None, views=None,
+          preview=None, fps='60', extra=None, m=None):
     """Write the scene for map `name` (a project, stock map or .map file); (scene.json, its contents, the project or
     None, the Surface). A probe without a z stands on the terrain. `preview` ({weather, sun}, OWN's keys) opens a
-    preview copy of the map (preview_map) instead of the map."""
+    preview copy of the map (preview_map) instead of the map. `shots`: [{path, view (a render.camera view, None for
+    the start's), size, or for a top view without one `scale` (pixels per cell)}], resolved here on the terrain.
+    `extra` goes into the scene as it is (mw render's overlays); `m` is the map read already."""
     map_path, native, user_map, owner = source(name)
-    surface = Surface(Map(map_path.read_bytes()))
+    surface = Surface(m or Map(map_path.read_bytes()))
     folder = SCENES/native
     folder.mkdir(parents=True, exist_ok=True)
     (folder/'surface.f32').write_bytes(surface.heights.astype('<f4').tobytes())
@@ -197,22 +206,43 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
                 surface=dict(file='surface.f32', columns=surface.heights.shape[1], rows=surface.heights.shape[0],
                              border=surface.border, cell=10.0),
                 playable=list(surface.playable), fov=FOV, marks=godot_link.marks_state(marklib.Marks(map_path), surface),
-                check=check, screenshot=str(Path(screenshot).resolve()) if screenshot else '',
-                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {}, fps=fps)
+                check=check, screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {},
+                fps=fps, **(extra or {}))
     if view:
         camera = resolve(view, surface.terrain, size)
         data['view'] = {k: v for k, v in camera.items() if k != 'view_projection'}
         points = [list(p) if len(p) == 3 else [*p, float(surface.terrain.height_at(*p))] for p in probes]
         data['probes'] = [dict(point=p, pixel=pixel(camera['view_projection'], p, size)) for p in points]
+    data['shots'] = [shot_of(s, surface.terrain, data.get('view')) for s in shots]
     (folder/'scene.json').write_text(json.dumps(data, indent=1), encoding='utf-8')
     return folder/'scene.json', data, owner, surface
 
 
-def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
-            preview=None, fps='60'):
-    """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written; what
-    scene() returns. The companion prepares the map again for a new build, another map or another preview."""
-    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views, preview, fps)
+def shot_of(shot, terrain, start):
+    """A shot as the viewer takes it: {path, size} and its resolved view, or a top view's region (centre, width,
+    height) seen from above the highest ground, as render.camera.TopView resolves it."""
+    from mapworkshop.render.camera import TopView
+    view, out = shot.get('view'), dict(path=str(Path(shot['path']).resolve()))
+    if isinstance(view, TopView):
+        x0, y0, x1, y1 = view.bounds(terrain)
+        out['size'] = list(shot.get('size') or (round((x1-x0)/10*shot['scale']), round((y1-y0)/10*shot['scale'])))
+        out['top'] = dict(center=[(x0+x1)/2, (y0+y1)/2], width=x1-x0, height=y1-y0,
+                          z=float(view.resolve(terrain)['eye'][2]))
+        return out
+    out['size'] = list(shot['size'])
+    if view is not None:
+        camera = resolve(view, terrain, shot['size'])
+        out['view'] = {k: v for k, v in camera.items() if k != 'view_projection'}
+    elif start is not None:
+        out['view'] = start
+    return out
+
+
+def prepare(name, view=None, **options):
+    """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written (scene()'s
+    options); what scene() returns. The companion prepares the map again for a new build, another map or another
+    preview."""
+    prepared = scene(name, view, **options)
     if prepared[2] is not None:
         openbfme.install_user_map(prepared[2])
     return prepared
@@ -232,17 +262,20 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     interactive = not (screenshot or check)
     link = godot_link.Link() if interactive else None
     port = link.port if link else None
-    prepared = prepare(name, view, probes, screenshot, size, check, port, drive, views, preview, fps)
+    shots = [dict(path=screenshot, size=size)] if screenshot else []
+    prepared = prepare(name, view, probes=probes, shots=shots, size=size, check=check, port=port, drive=drive,
+                       views=views, preview=preview, fps=fps)
     path, data = prepared[:2]
-    env = openbfme.environment([])
     headless = (check and not screenshot) or (drive and not any(step['do'] == 'screenshot' for step in drive))
     args = [str(gui if interactive and not drive else console), *(['--headless'] if headless else []),
             '--path', str(openbfme.VIEWER), '--', f'--scene={path}']
     progress(f'Opening {data["title"]} in the Godot viewer ({time.perf_counter() - started:.1f} s to prepare)...')
     if not interactive:
-        result = subprocess.run(args, env=env, cwd=openbfme.HOME, capture_output=True, text=True, encoding='utf-8',
-                                errors='replace', timeout=timeout or 600)
-        return result.returncode, (result.stdout + result.stderr).splitlines()
+        try:
+            return unseen(args, path.parent, headless, timeout)
+        finally:
+            remove_previews()
+    env = openbfme.environment([])
 
     # driven (tests): the viewer's output kept out of the caller's, and a hung viewer stopped after `timeout`
     quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) if drive else {}
@@ -258,6 +291,60 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     finally:
         link.close()
         remove_previews()
+
+
+def unseen(args, folder, headless, timeout=None):
+    """Run the viewer without showing it: headless (it draws nothing), or on a hidden desktop when it draws
+    pictures. Returns (exit code, its output lines)."""
+    from mapworkshop.native.debugger import run_hidden
+    env = openbfme.environment([])
+    if headless:
+        result = subprocess.run(args, env=env, cwd=openbfme.HOME, capture_output=True, text=True, encoding='utf-8',
+                                errors='replace', timeout=timeout or 600)
+        return result.returncode, (result.stdout + result.stderr).splitlines()
+    log = folder/'viewer.log'
+    log.unlink(missing_ok=True)
+    code = run_hidden([args[0], '--log-file', str(log), *args[1:]], env, openbfme.HOME, timeout or 600)
+    return code, log.read_text(encoding='utf-8', errors='replace').splitlines() if log.is_file() else []
+
+
+def render(name, views, out, size=(1600, 1200), top_scale=2.0, switches=None, preview=None, progress=print):
+    """mw render on the Godot viewer: each (name, view) as out/<name>.png, in one run of the viewer on a hidden
+    desktop. `switches`: the View switches mw render has (objects, fog, grid, border, walkable, flow); the
+    walkability and the river strips are worked out here; the marks are left out. Returns [{name, file, size,
+    view}]."""
+    from mapworkshop.assets.library import GameAssets
+    from mapworkshop.render.camera import TopView
+    switches = dict(dict(marks=False), **(switches or {}))      # the marks are the viewer's, not the map's
+    remove_previews()
+    openbfme.assets(progress)
+    gui, console = openbfme.assemble(progress)
+    out = Path(out).resolve()                     # the viewer runs elsewhere
+    out.mkdir(parents=True, exist_ok=True)
+    map_path, native = source(name)[:2]
+    m = Map(map_path.read_bytes())
+    extra = {}
+    if switches.get('walkable'):
+        progress('Computing walkability...')
+        loaded = godot_link.Loaded(map_path, Surface(m), GameAssets())
+        (SCENES/native).mkdir(parents=True, exist_ok=True)
+        extra['walkable'] = godot_link.walkability(loaded, map_path.with_name('map.ini'), SCENES/native/'walkable.png')
+    if switches.get('flow'):
+        extra['flow'] = godot_link.flow_strips(m)
+    shots = [dict(path=out/f'{n}.png', view=v, size=None if isinstance(v, TopView) else size, scale=top_scale)
+             for n, v in views]
+    try:
+        path, data = prepare(name, shots=shots, size=size, views=switches, preview=preview, extra=extra, m=m)[:2]
+        progress(f'Rendering {len(shots)} view(s) of {data["title"]} in the Godot viewer...')
+        code, lines = unseen([str(console), '--path', str(openbfme.VIEWER), '--', f'--scene={path}'], path.parent,
+                             False)
+    finally:
+        remove_previews()
+    failed = [line for line in lines if line.startswith('VIEWER failed')]
+    if code != 0 or failed:
+        raise RuntimeError('; '.join(failed) or f'the Godot viewer ended with {code}: see {path.parent/"viewer.log"}')
+    return [dict(name=n, file=f'{n}.png', size=shot['size'], view=v.describe())
+            for (n, v), shot in zip(views, data['shots'])]
 
 
 def main(args):

@@ -38,7 +38,9 @@
   estimate and the river flow arrows), Preview (the weather and sun presets,
   as a copy of the map), Photo mode (the free camera, the lens, frames and
   thirds, and `render/photo.py`'s depth of field as a compositor effect), the
-  saved views and Copy view, and Properties. Next is phase 4.
+  saved views and Copy view, and Properties. Phase 4 is under way: `mw render`
+  draws with the Godot viewer by default, unseen on a hidden desktop, and
+  `--engine studio` and `--engine game` choose the studio renderer or the game.
 
 ## Where we are
 

@@ -97,12 +97,12 @@ def _slug(text, default):
     return re.sub(r'[^\w-]+', '-', text.strip().lower()).strip('-') or default
 
 
-def render_command(map_arg, name, spec, preview=None, label=None):
+def render_command(map_arg, name, spec, preview=None, label=None, engine=None):
     """The `mw render` command that renders a view of `map_arg` (a project id
     or a quoted path) into local/renders/<label>-views/ (label: the project
     id, or the map file's name), with the options that reproduce the viewer's
-    `preview` (render_flags)."""
-    flags = ''.join(' ' + flag for flag in render_flags(preview or {}))
+    `preview` (render_flags), and `--engine` when one is given."""
+    flags = ''.join(' ' + flag for flag in [*([f'--engine {engine}'] if engine else []), *render_flags(preview or {})])
     return (f'mw render --map {map_arg} --out local/renders/{_slug(label or map_arg, "map")}-views{flags} '
             f'--view {_slug(name, "view")} {render_words(spec)}')
 

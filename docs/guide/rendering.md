@@ -1,10 +1,30 @@
 # Rendering maps
 
-`mw render` draws a map offscreen on the GPU, without starting the game. It
-reads terrain textures, models and INIs from the installed BFME2 archives and
-the extracted game data, so previews use the same art as the game. The
-[viewer](../viewer.md) uses the same renderer. Use them for fast iteration, and
-check what matters in the game itself ([testing in the game](testing-in-game.md)).
+`mw render` draws pictures of a map without starting the game. Use it for fast
+iteration, and check what matters in the game itself
+([testing in the game](testing-in-game.md)). `--engine` picks what draws them:
+
+- **godot** (the default): the [Godot viewer](../viewer.md#the-godot-viewer)
+  on OpenBFME's library, a port of the game's own engine, started unseen on a
+  hidden desktop of its own (no window appears, the focus stays where it is).
+  It opens the map once and takes every view in turn: a few seconds to open,
+  then about a second a view. It needs OpenBFME and its game files, English
+  RotWK 2.01 and BFME2 1.06 ([OpenBFME](testing-in-game.md#openbfme-mw-play---godot));
+  the first run builds OpenBFME, which takes minutes. OpenBFME has no detail levels, shadows, normal
+  maps, cloud shadows or falling rain and snow, and no switches for units,
+  editor markers or the object limits, so `--lod`, `--normal-maps`,
+  `--no-clouds`, `--vegetation-limits`, `--editor-markers`, `--no-units` and
+  `--time` need `--engine studio`. Where its pictures differ from the studio
+  renderer's is listed in [the Godot viewer's checklist](../godot-viewer/parity.md#how-openbfme-draws-the-map-differently).
+- **studio**: the studio's Python renderer, offscreen on the GPU, which
+  reads terrain textures, models and INIs from the installed archives and
+  the extracted game data. [What it reproduces](#what-it-reproduces) was
+  measured against the game.
+- **game**: the game itself, through [`mw capture`](testing-in-game.md#screenshots-from-the-game-mw-capture):
+  each orbit view of a project's build as a cinematic shot from above its
+  target, at the game's own resolution and field of view, HUD included; no top
+  views, and none of the options that change the picture (the game draws the
+  map as it is).
 
 ```powershell
 mw render --map greywater-marches --out local/renders/greywater `
@@ -14,9 +34,10 @@ mw render --map greywater-marches --out local/renders/greywater `
   --top
 ```
 
-`--map` takes a map project, a stock map name or a `.map` file. Each run
-writes one PNG per view plus `render.json` (map hash, camera settings, missing
-assets and texture-size errors). Rendering a set of views takes a few seconds.
+`--map` takes a map project, a stock map name or a `.map` file (the Godot
+engine opens stock maps under the RotWK profile only). Each run writes one PNG
+per view plus `render.json` (map hash, the engine, camera settings; with the
+studio engine also missing assets and texture-size errors).
 
 To render single objects or a collage of them, see `mw item` and `mw items` in
 [finding assets](finding-assets.md#looking-mw-item-and-mw-items).
@@ -66,6 +87,7 @@ Reusable view sets go in a JSON file passed with `--views`:
 
 | Option | Does |
 |---|---|
+| `--engine godot\|studio\|game` | what draws the pictures (above); godot by default |
 | `--lod low\|medium\|high` | the game detail level to imitate (default medium, as test games run): Medium has no terrain normal maps and uses stencil volume shadows; High adds normal maps and shadow mapping |
 | `--weather PRESET`, `--sun NAME` | the viewer's weather presets (clear, haze, rain, snow, dusk) and light rigs (ember, copper, blood, sulphur, ash, violet) over the map's own |
 | `--no-weather` | ignore the map.ini Weather block (fog, falling rain or snow) |
@@ -82,8 +104,9 @@ Reusable view sets go in a JSON file passed with `--views`:
 
 ## What it reproduces
 
-The renderer ports the game's own drawing: its effect files, its terrain
-compositing, its shadow volumes, its tree buffers and particle systems.
+This section is about the studio engine. The renderer ports the game's own
+drawing: its effect files, its terrain compositing, its shadow volumes, its
+tree buffers and particle systems.
 [How the game draws a map](../game/renderer/README.md) records each part,
 what is ported and what is approximated; read it before changing the
 renderer or when a render and a game screenshot disagree. In short, not drawn:

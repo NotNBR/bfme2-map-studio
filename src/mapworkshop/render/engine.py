@@ -374,8 +374,8 @@ class MapRenderer(MaterialsMixin, LightingMixin, TerrainMixin, WaterMixin, River
             self._draw_particles(vp, camera, eye, time)
 
 
-    def top_size(self, view, scale=2.0, border=False):
-        """Pixel size for a TopView at `scale` pixels per terrain cell."""
+    def top_size(self, view, scale=2.0, border=None):
+        """Pixel size for a TopView at `scale` pixels per terrain cell (its own border unless `border`)."""
         x0, y0, x1, y1 = view.bounds(self.terrain, border)
         return round((x1-x0)/10*scale), round((y1-y0)/10*scale)
 

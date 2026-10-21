@@ -116,8 +116,48 @@ class PreviewTests(unittest.TestCase):
 
 
 class FlatTerrain:
+    border, width, height, playable, max_height = 4, 109, 89, (1000.0, 800.0), 20.0
+
     def height_at(self, x, y):
         return np.zeros_like(np.asarray(x, float)) + 20.0
+
+
+class ShotTests(unittest.TestCase):
+    """mw render's pictures as the viewer takes them (godot_viewer.shot_of)."""
+
+    def test_a_top_view_is_the_region_from_above_at_its_scale(self):
+        from mapworkshop.render.camera import TopView
+        shot = godot_viewer.shot_of(dict(path='top.png', view=TopView(), scale=2.0), FlatTerrain(), None)
+        self.assertEqual(shot['size'], [200, 160])                      # 2 pixels per 10-unit cell
+        self.assertEqual(shot['top'], dict(center=[500.0, 400.0], width=1000.0, height=800.0, z=2020.0))
+        bordered = godot_viewer.shot_of(dict(path='top.png', view=TopView(border=True), scale=1.0), FlatTerrain(), None)
+        self.assertEqual(bordered['size'], [108, 88])                   # every sample, the border too
+
+    def test_an_orbit_view_is_resolved_at_its_size(self):
+        shot = godot_viewer.shot_of(dict(path='a.png', view=godot_viewer.parse_view(['target=100,100', 'distance=500']),
+                                         size=(800, 600)), FlatTerrain(), None)
+        self.assertEqual(shot['size'], [800, 600])
+        self.assertEqual(shot['view']['target'], [100.0, 100.0, 20.0])
+        self.assertTrue(Path(shot['path']).is_absolute())               # the viewer runs in another folder
+
+
+class EngineTests(unittest.TestCase):
+    def test_a_view_becomes_the_games_cinematic_shot(self):
+        from mapworkshop.render import cli
+        shot = cli.game_shot('a', godot_viewer.parse_view(['target=300,200', 'distance=1000', 'elevation=30',
+                                                           'heading=90']), FlatTerrain())
+        self.assertEqual((shot['x'], shot['y']), (300.0, 200.0))
+        self.assertAlmostEqual(shot['distance'], 1000.0)
+        self.assertAlmostEqual(shot['pitch'], 30.0)                     # below the horizon
+        self.assertAlmostEqual(shot['heading'], 90.0)                   # facing east, as the view
+
+    def test_the_godot_engine_refuses_what_openbfme_cannot_draw(self):
+        from mapworkshop.render import cli
+        with mock.patch('sys.stderr'), self.assertRaises(SystemExit):
+            cli.main(['--map', 'water-lab', '--out', 'x', '--top', '--lod', 'high'])
+        with mock.patch.object(cli, 'godot', return_value=0) as godot:
+            self.assertEqual(cli.main(['--map', 'water-lab', '--out', 'x', '--top']), 0)   # the default engine
+        godot.assert_called_once()
 
 
 class ViewTests(unittest.TestCase):
@@ -182,6 +222,19 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(len(apart), 2, text)
         self.assertLess(max(apart), 0.01, text)
         self.assertNotIn('VIEWER mode', text)        # no lens: the Edit camera
+
+    def test_mw_render_on_the_godot_viewer_saves_each_view_unseen(self):
+        from mapworkshop.render.camera import TopView
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = godot_viewer.render(lab(), [('near', godot_viewer.parse_view(['target=200,300', 'distance=600'])),
+                                                  ('top', TopView())], tmp, (640, 400), 0.5, progress=lambda line: None)
+            self.assertEqual([o['file'] for o in outputs], ['near.png', 'top.png'])
+            from PIL import Image
+            with Image.open(Path(tmp)/'near.png') as near:
+                self.assertEqual(near.size, (640, 400))
+                self.assertGreater(max(near.convert('L').getextrema()), 0)   # drawn, not black
+            with Image.open(Path(tmp)/'top.png') as top:
+                self.assertEqual(list(top.size), outputs[1]['size'])           # half a pixel per cell
 
     def test_a_view_with_a_lens_opens_in_photo_mode_and_projects_as_mw_render(self):
         view = 'target=200,300 distance=700 elevation=15 heading=200 focal=85 aperture=2 focus=500 roll=4'
