@@ -59,6 +59,22 @@ def mesh(cross_sections, water_height):
     return vertices, triangles
 
 
+def strips(m, water_level=None):
+    """The map's RiverAreas records with their meshes, [(area, mesh)]: those the
+    game draws at a WaterLOD (0-3), or every one (water_level None, as
+    OpenBFME draws them)."""
+    try:
+        areas = records(m, 'RiverAreas')
+    except ValueError:
+        return []
+    out = []
+    for area in areas:
+        strip = mesh(area['cross_sections'], area['water_height'])
+        if strip is not None and (water_level is None or drawn(area.get('min_lod'), water_level)):
+            out.append((area, strip))
+    return out
+
+
 def drawn(min_lod, water_level):
     """Whether the game draws a river with this minimum LOD name at a WaterLOD
     (0-3); an empty or unknown name counts as Low."""
@@ -113,17 +129,8 @@ class RiversMixin:
     def _prepare_rivers(self):
         """RiverAreas strips as meshes (render.rivers), with their textures;
         rivers whose minimum LOD is above the WaterLOD are left out, as in game."""
-        from mapworkshop.render import rivers
-        self.rivers, self._prepared_rivers = [], []
-        try:
-            areas = records(self.map, 'RiverAreas')
-        except ValueError:
-            areas = []
-        for area in areas:
-            mesh = rivers.mesh(area['cross_sections'], area['water_height'])
-            if mesh is None or not rivers.drawn(area.get('min_lod'), self.water_level):
-                continue
-            self._prepared_rivers.append((area, mesh))
+        self.rivers, self._prepared_rivers = [], strips(self.map, self.water_level)
+        for area, _ in self._prepared_rivers:
             for name in (area['texture'], area['noise'], area['alpha_edge'], area['sparkle']):
                 self._prepare_image(name)
         if self._prepared_rivers:

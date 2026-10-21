@@ -14,7 +14,10 @@ Marks (the rail at the left)
   Click a mark to select it, drag it to move it, drag its handles to resize or rotate it (Shift snaps to 15 degrees)
   Del  delete the selected mark     Ctrl+Z  undo     Esc  step back: drawing, selection, tool
 
-  1  objects     2  water     M  marks     P  screenshot     F1  these controls"""
+View
+  1  objects     2  water     6  fog     7  walkable     8  river flow arrows     G  grid     B  map border     M  marks
+
+  P  screenshot     F1  these controls"""
 
 var toolbar: Toolbar
 var marks: MarksUI

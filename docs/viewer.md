@@ -277,8 +277,17 @@ bottom with the status line and the camera's readout. It has:
 
 - the toolbar, as in [The toolbar](#the-toolbar): **Map** (the map projects,
   the game's maps, Open project folder), **Build** with its chip, **Test
-  In-Game** and the choice of what it starts, **View** (objects, water,
-  marks), **Top view**, **Reset view**, **Screenshot** and the frame rate;
+  In-Game** and the choice of what it starts, **View**, **Top view**, **Reset
+  view**, **Screenshot** and the frame rate;
+- **View**, as in [The toolbar](#the-toolbar): objects (units included),
+  water, roads, fog (the map's own; switching it builds the terrain again),
+  Animate (the units' idle animations and the flow arrows), grid, map border,
+  walkable, river flow arrows and marks. Walkable and the flow arrows are the
+  estimate and the strips described above, worked out by the companion in
+  Python: walkable once per build, taking as long as in the viewer above, with
+  the bar saying when it is ready; the arrows cover every river, as OpenBFME
+  draws them all. Without **Map border** the ground outside the playable area
+  fades to black, in the top view too, and the water and roads there stay;
 - the Edit camera, as in [Moving around](#moving-around): left drag orbits,
   right or middle drag pans, the wheel zooms, a double-click flies there,
   W A S D, Q / E, R / F, Z / X, Space or Home and T;
@@ -291,12 +300,15 @@ bottom with the status line and the camera's readout. It has:
   seconds after the build for a small map, and the camera stays. A build that
   cannot be read leaves the last good map and says so in the status line;
   stock maps are not watched;
-- **1** for the objects, **2** the water, **M** the marks, **P** a screenshot
-  into `godot/` in the profile's renders folder
+- **1** for the objects, **2** the water, **6** the fog, **7** walkable,
+  **8** the flow arrows, **G** the grid, **B** the map border, **M** the marks, **P** a
+  screenshot into `godot/` in the profile's renders folder
   (`local/profiles/<profile>/renders/godot/`), **F1** the controls.
 
-Weather, the sky, shadows, Properties, Preview, Browse..., Photo mode, saved
-views and the overlays are not there yet.
+Weather, the sky, Properties, Preview, Browse..., Photo mode and saved views
+are not there yet. Shadows, normal maps, cloud shadows, rain and snow, editor
+markers and the game object limits are not in the View menu: OpenBFME's
+library draws none of them as switches.
 
 A project opens from its last build, which goes into OpenBFME's user maps
 folder in `local/openbfme/appdata/`; a stock map opens from RotWK's archives,

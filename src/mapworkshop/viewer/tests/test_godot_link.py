@@ -179,6 +179,37 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual([m['type'] for m in self.companion.job_messages()], ['status', 'build'])
         self.assertEqual(self.companion.job_messages(), [])            # nothing new
 
+    def test_the_flow_overlay_sends_each_river_strip(self):
+        area = dict(cross_sections=[0, 0, 0, 100, 300, 0, 300, 100, 600, 0, 600, 100], water_height=20.0)
+        with mock.patch('mapworkshop.render.rivers.records', return_value=[area]):
+            replies = self.send(dict(type='command', name='overlay', overlay='flow'))
+        strip = replies[0]['strips'][0]
+        self.assertEqual(replies[0]['type'], 'flow')
+        self.assertEqual(len(strip['vertices']), 6*5)                   # three cross-sections, two banks
+        self.assertEqual(strip['vertices'][:5], [0.0, 100.0, 20.0, 1.0, 0.0])      # the second bank: u 1, v 0
+        self.assertEqual(len(strip['triangles']), 4*3)
+        self.assertEqual(strip['length'], 4.5)       # v per section: (half the outline less an end) / end / sections
+
+    def test_the_walkable_overlay_is_worked_out_once_in_the_background(self):
+        ready = dict(type='walkable', image='walkable.png', size=[2000, 2000], cut_off=0)
+        self.companion.loaded.walkable, self.companion.loaded.walking = None, False
+        at_once = mock.MagicMock(side_effect=lambda target, daemon: mock.MagicMock(start=target))
+        with mock.patch.object(godot_link, 'walkability', return_value=ready) as work, \
+                mock.patch.object(godot_link.threading, 'Thread', at_once):
+            self.assertEqual(self.send(dict(type='command', name='overlay', overlay='walkable'))[0]['type'], 'status')
+            self.assertEqual(self.companion.job_messages()[0], ready)
+            self.assertEqual(self.send(dict(type='command', name='overlay', overlay='walkable')), [ready])
+        work.assert_called_once()                                       # once per build
+
+    def test_a_walkability_that_fails_says_so_and_can_be_tried_again(self):
+        self.companion.loaded.walkable, self.companion.loaded.walking = None, False
+        at_once = mock.MagicMock(side_effect=lambda target, daemon: mock.MagicMock(start=target))
+        with mock.patch.object(godot_link, 'walkability', side_effect=RuntimeError('no game files')), \
+                mock.patch.object(godot_link.threading, 'Thread', at_once):
+            self.send(dict(type='command', name='overlay', overlay='walkable'))
+        self.assertEqual(self.companion.job_messages()[0], dict(type='walkable', error='no game files'))
+        self.assertFalse(self.companion.loaded.walking)
+
 
 class LinkTests(unittest.TestCase):
     def test_json_lines_both_ways(self):

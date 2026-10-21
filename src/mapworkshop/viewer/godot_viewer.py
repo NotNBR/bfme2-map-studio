@@ -123,7 +123,7 @@ def pixel(view_projection, point, size):
     return float((ndc[0] + 1)/2*size[0]), float((1 - ndc[1])/2*size[1])
 
 
-def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None):
+def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None):
     """Write the scene for map `name` (a project, stock map or .map file); (scene.json, its contents, the project or
     None, the Surface). A probe without a z stands on the terrain."""
     map_path, native, user_map, owner = source(name)
@@ -137,7 +137,7 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
                              border=surface.border, cell=10.0),
                 playable=list(surface.playable), fov=FOV, marks=godot_link.marks_state(marklib.Marks(map_path), surface),
                 check=check, screenshot=str(Path(screenshot).resolve()) if screenshot else '',
-                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [])
+                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {})
     if view:
         camera = resolve(view, surface.terrain, size)
         data['view'] = {k: v for k, v in camera.items() if k != 'view_projection'}
@@ -147,27 +147,28 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
     return folder/'scene.json', data, owner, surface
 
 
-def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None):
+def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None):
     """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written; what
     scene() returns. The companion prepares the map again for a new build or another map."""
-    prepared = scene(name, view, probes, screenshot, size, check, port, drive)
+    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views)
     if prepared[2] is not None:
         openbfme.install_user_map(prepared[2])
     return prepared
 
 
 def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, progress=print, timeout=None,
-        drive=None):
+        drive=None, views=None):
     """Prepare and start the viewer on map `name`. With a screenshot or check, wait for it and return
     (exit code, the viewer's output lines); otherwise serve it as its companion until it closes and return its exit
-    code. `drive` (tests): scripted input the viewer plays headless, with the companion, before it closes."""
+    code. `drive` (tests): scripted input the viewer plays headless, with the companion, before it closes. `views`:
+    View switches to start with ({'grid': True, ...})."""
     started = time.perf_counter()
     openbfme.assets(progress)
     gui, console = openbfme.assemble(progress)
     interactive = not (screenshot or check)
     link = godot_link.Link() if interactive else None
     port = link.port if link else None
-    prepared = prepare(name, view, probes, screenshot, size, check, port, drive)
+    prepared = prepare(name, view, probes, screenshot, size, check, port, drive, views)
     path, data = prepared[:2]
     env = openbfme.environment([])
     headless = (check and not screenshot) or (drive and not any(step['do'] == 'screenshot' for step in drive))

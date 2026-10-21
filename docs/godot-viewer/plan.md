@@ -33,6 +33,9 @@
   opens a map in about two seconds, with the Edit camera, and puts map points
   on the same pixels as `mw render`. Phase 2 is done: marking for agents, the
   marks panel, Copy for agent and live reload, through a Python companion.
+  Phase 3 is under way: the new layout and toolbar (Map, Build, Test In-Game,
+  View) and the View menu's layers and overlays (grid, map border, the
+  walkability estimate and the river flow arrows) are done.
 
 ## Where we are
 

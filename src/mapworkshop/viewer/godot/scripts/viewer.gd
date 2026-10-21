@@ -7,6 +7,8 @@
 ## drag, release and hover goes to the companion with the cursor's ray and what the overlay finds under it; the
 ## companion's MarkEditor answers with the marks to draw, the panel and the status. A new build reloads in place.
 ##
+## The scene's views ({key: on}) start the View switches other than they start by default (a screenshot of an overlay).
+##
 ## The scene can also ask for a fixed view (mw render's, resolved in Python), points to project through it (probes:
 ## each printed with where Python puts it), a screenshot to save, or a check (headless: open the map, print the
 ## result, quit). Without --scene it only checks that the assembly brought what it needs, prints "VIEWER ready" or
@@ -17,7 +19,10 @@ const CLASSES := ["RetailFileSystem", "MapTerrainBuilder", "MapObjectBuilder", "
 const SHADERS := ["terrain", "water_standing", "road", "river"]
 const WARMUP_FRAMES := 24     # frames before a screenshot: the objects' first poses and the streamed textures
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
-const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["marks", "Marks (M)", true]]
+## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; the studio viewer's keys)
+const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
+	["fog", "Fog (6)", true], ["animate", "Animate", true], ["grid", "Grid (G)", false], ["border", "Map border (B)", false],
+	["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true]]
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
@@ -34,6 +39,9 @@ var _sun: DirectionalLight3D
 var _orbit: OrbitCamera
 var _overlay: MarkOverlay
 var _frame: Frame             # the toolbar, the marks rail and panel, the camera bar: with the companion only
+var _overlays: Overlays
+var _objects_node: Node3D     # the object layer, beside the terrain so that the terrain alone can be built again
+var _views := {}              # View key -> on
 var _link: Link
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
 var _frames := 0
@@ -127,6 +135,12 @@ func _build_stage() -> void:
 	_camera = Camera3D.new()
 	add_child(_camera)
 	var layer := CanvasLayer.new()
+	for view in VIEWS:
+		_views[view[0]] = view[2]
+	for key in _scene.get("views", {}):           # the scene's own switches (screenshots of an overlay)
+		_views[key] = bool(_scene.views[key])
+	_overlays = Overlays.new()
+	add_child(_overlays)
 	_overlay = MarkOverlay.new()
 	_overlay.camera = _camera
 	_overlay.state = _scene.get("marks", {})
@@ -143,7 +157,10 @@ func _build_stage() -> void:
 			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
 		_frame.toolbar.view_switched.connect(_switch_view)
 		_frame.toolbar.action.connect(_toolbar_action)
-		_frame.toolbar.set_views(VIEWS)
+		var entries := []
+		for view in VIEWS:
+			entries.append([view[0], view[1], _views[view[0]]])
+		_frame.toolbar.set_views(entries)
 		_link = Link.new()
 		var code := _link.open(int(_scene.port))
 		if code != OK:
@@ -195,7 +212,9 @@ func _open_map() -> void:
 	_drive_wait = 10
 	if _scene.get("check", false) and shot.is_empty():
 		var layers := PackedStringArray()
-		for layer in ["MapObjects", "StandingWater", "Rivers"]:
+		if _objects_node != null:
+			layers.append(_objects_node.name)
+		for layer in ["StandingWater", "Rivers", "Roads"]:
 			if _root.has_node(layer):
 				layers.append(layer)
 		print("VIEWER layers: ", ", ".join(layers))
@@ -208,22 +227,17 @@ func _open_map() -> void:
 ## that does not build leaves the last good one; its objects then go with it (the object builder holds one map).
 func _build_map() -> Dictionary:
 	var started := Time.get_ticks_msec()
-	if _terrain == null:
-		_terrain = ClassDB.instantiate("MapTerrainBuilder")
 	var user_map: bool = _scene.user_map
-	var built: Node3D = _terrain.build_map(_fs, _scene.map, {"user_map": user_map, "fog": false, "markers": false})
-	var report: Dictionary = _terrain.get_report()
-	if built == null:
-		_fail("the terrain did not build: %s" % [report.errors])
+	if not _build_terrain():
 		return {}
-	if _root != null:
-		remove_child(_root)
-		_root.queue_free()
+	var report: Dictionary = _terrain.get_report()
 	if _sun != null:
 		_sun.queue_free()
 		_sun = null
-	_root = built
-	add_child(_root)
+	if _objects_node != null:
+		remove_child(_objects_node)
+		_objects_node.queue_free()
+		_objects_node = null
 	var built_terrain := Time.get_ticks_msec()
 	if _objects == null:
 		_objects = ClassDB.instantiate("MapObjectBuilder")
@@ -236,10 +250,39 @@ func _build_map() -> Dictionary:
 	if objects == null:
 		_fail("the objects did not build: %s" % [object_report.errors])
 		return {}
-	_root.add_child(objects)
+	_objects_node = objects
+	add_child(objects)
 	_apply_lighting(object_report)
+	_overlays.build(_surface, Vector2(_scene.playable[0], _scene.playable[1]), int(_scene.surface.border))
+	_apply_views()
 	return {"terrain_ms": built_terrain - started, "objects_ms": Time.get_ticks_msec() - built_terrain,
 		"objects": int(object_report.objects.total), "errors": report.errors.size() + object_report.errors.size()}
+
+
+## The terrain (water, rivers, roads) in place of the one before, which stays when it does not build. False when
+## it did not (after saying why).
+func _build_terrain() -> bool:
+	if _terrain == null:
+		_terrain = ClassDB.instantiate("MapTerrainBuilder")
+	var options := {"user_map": _scene.user_map, "fog": _views.get("fog", true), "markers": false}
+	var built: Node3D = _terrain.build_map(_fs, _scene.map, options)
+	if built == null:
+		_fail("the terrain did not build: %s" % [_terrain.get_report().errors])
+		return false
+	if _root != null:
+		remove_child(_root)
+		_root.queue_free()
+	_root = built
+	add_child(_root)
+	return true
+
+
+## The View switches on what was just built (`keys`, else all): the layers shown, the overlays drawn and, from the
+## companion, worked out.
+func _apply_views(keys: Array = []) -> void:
+	for key in (keys if not keys.is_empty() else _views.keys()):
+		if key != "fog":
+			_switch_view(key, _views[key])
 
 
 ## A new build, or another map (`new_map`): the scene and its surface read and the map built in place. The camera
@@ -309,8 +352,11 @@ func _apply_lighting(rep: Dictionary) -> void:
 
 
 func _process(delta: float) -> void:
-	if _objects != null:
-		_objects.advance(delta)
+	if _views.get("animate", true):
+		if _objects != null:
+			_objects.advance(delta)
+		if _overlays != null:
+			_overlays.advance(delta)
 	_serve_link()
 	if _orbit != null:
 		var forward := _axis(KEY_W, KEY_UP) - _axis(KEY_S, KEY_DOWN)
@@ -410,7 +456,8 @@ func _serve_link() -> void:
 				_frame.marks.show_tool(message.get("tool"))
 				_frame.bar.set_hint(message.get("hint"))
 				_frame.marks.show_panel(message.get("visible", true))      # M hides the panel with the marks
-				_frame.toolbar.set_view("marks", message.get("visible", true))
+				_views["marks"] = bool(message.get("visible", true))
+				_frame.toolbar.set_view("marks", _views["marks"])
 				var cursor = message.get("cursor")
 				Input.set_default_cursor_shape(CURSORS.get(cursor, Input.CURSOR_ARROW) if cursor != null else Input.CURSOR_ARROW)
 			"press_result":
@@ -427,6 +474,16 @@ func _serve_link() -> void:
 				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)))
 			"menu":
 				_frame.toolbar.set_menu(message)
+			"walkable":
+				if message.has("error"):
+					_switch_view("walkable", false)
+					_frame.bar.set_status("Walkability failed: %s" % message.error, 10)
+				elif _views.get("walkable", false):          # still on: it may have been switched off meanwhile
+					_overlays.set_walkable(String(message.image), Vector2(message.size[0], message.size[1]))
+					_frame.bar.set_status("Walkability ready: %d cut-off areas" % int(message.cut_off), 5)
+			"flow":
+				if _views.get("flow", false):
+					_overlays.set_flow(message.strips, _views.get("border", false))
 			"build":
 				_frame.toolbar.set_build(bool(message.running), message.get("line"), message.get("outcome"))
 			"toast":
@@ -579,6 +636,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				_orbit.toggle_top()
 			KEY_1: _switch_view("objects", not _shown("objects"))
 			KEY_2: _switch_view("water", not _shown("water"))
+			KEY_6: _switch_view("fog", not _shown("fog"))
+			KEY_G: _switch_view("grid", not _shown("grid"))
+			KEY_B: _switch_view("border", not _shown("border"))
+			KEY_7: _switch_view("walkable", not _shown("walkable"))
+			KEY_8: _switch_view("flow", not _shown("flow"))
 			KEY_M:
 				if _link != null:
 					_send({"type": "command", "name": "toggle"})
@@ -592,13 +654,33 @@ func _unhandled_input(event: InputEvent) -> void:
 					_frame.toggle_help()
 
 
-## A View switch (the menu or its key): the layer shown or hidden.
+## A View switch (the menu or its key): the layer shown or hidden, the overlay drawn, the terrain built again (fog).
 func _switch_view(key: String, on: bool) -> void:
+	var was: bool = _views.get(key, false)
+	_views[key] = on
 	match key:
 		"objects":
-			_show(["MapObjects"], on)
+			if _objects_node != null:
+				_objects_node.visible = on
 		"water":
 			_show(["StandingWater", "Rivers"], on)
+		"roads":
+			_show(["Roads"], on)
+		"fog":
+			if on != was and _root != null:
+				_build_terrain()
+				_apply_views(["water", "roads"])               # the layers in the terrain; the rest stays as it is
+		"grid":
+			_overlays.set_grid(on)
+		"border":
+			_overlays.set_border(on)
+		"walkable", "flow":
+			if on:
+				_send({"type": "command", "name": "overlay", "overlay": key})
+			elif key == "walkable":
+				_overlays.set_walkable("", Vector2.ONE)
+			else:
+				_overlays.set_flow([], false)
 		"marks":
 			if _link != null and bool(_overlay.state.get("visible", true)) != on:
 				_send({"type": "command", "name": "toggle"})
@@ -607,10 +689,7 @@ func _switch_view(key: String, on: bool) -> void:
 
 
 func _shown(key: String) -> bool:
-	var node: Node3D = null
-	if _root != null:
-		node = _root.get_node_or_null({"objects": "MapObjects", "water": "StandingWater"}.get(key, ""))
-	return node == null or node.visible
+	return _views.get(key, false)
 
 
 func _show(names: Array, on: bool) -> void:

@@ -12,7 +12,10 @@ does there:
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
   user maps folder, and the viewer builds the map again in place;
 - the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
-  from the Map menu, Build, Test In-Game, the project folder.
+  from the Map menu, Build, Test In-Game, the project folder;
+- the View menu's overlays that need the map's analysis: the walkability
+  estimate (render.overlays, worked out once per build in the background) and
+  the river strips for the flow arrows (render.rivers).
 
 From the viewer:
 
@@ -23,7 +26,8 @@ From the viewer:
                                     focus: {z, distance, angle} of the Edit camera
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
     command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
-                                    open_folder, open_map {map}, test_game {choice}
+                                    open_folder, open_map {map}, test_game {choice}, overlay {overlay} ('walkable' or
+                                    'flow' switched on)
     reloaded {ms} / reload_failed {error}
 
 To the viewer:
@@ -37,6 +41,9 @@ To the viewer:
     reload {scene, new_map}         the build changed, or another map: read the scene and build the map
     menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice
     build {running, line, outcome}  the build chip
+    walkable {image, size, cut_off} the walkability estimate: an RGBA image, one pixel per cell from the playable
+                                    area's corner, its extent in map units and the cut-off areas; {error} if it failed
+    flow {strips}                   the river strips: [{vertices: [x, y, z, u, v] * n, triangles, length}]
     toast {kind, title, detail, seconds}, window {minimized}
 """
 
@@ -170,12 +177,48 @@ class Loaded:
         self.map = Map(map_path.read_bytes())
         self.terrain = surface.terrain
         self.assets = assets
+        self.walkable = None              # the walkable message, once worked out (Companion.overlay)
+        self.walking = False              # being worked out
+        self._loaded = threading.Event()
+        self._error = None
         if assets is None:
             threading.Thread(target=self._load_assets, daemon=True).start()
+        else:
+            self._loaded.set()
 
     def _load_assets(self):
         from mapworkshop.assets.library import GameAssets
-        self.assets = GameAssets()
+        try:
+            self.assets = GameAssets()
+        except Exception as error:
+            self._error = error
+        finally:
+            self._loaded.set()
+
+    def game_assets(self):
+        """The game's assets, once loaded; raises what stopped them loading."""
+        self._loaded.wait()
+        if self.assets is None:
+            raise RuntimeError(f'the game files did not load: {self._error}')
+        return self.assets
+
+
+def walkability(loaded, map_ini, path):
+    """The walkability estimate of the map as the studio viewer works it out (render.overlays), its image saved at
+    `path`: the viewer's walkable message."""
+    from types import SimpleNamespace
+    from PIL import Image
+    from mapworkshop.assets.models import ModelCache
+    from mapworkshop.mapkit import walkable
+    from mapworkshop.render.overlays import OverlaysMixin
+    assets = loaded.game_assets()
+    text = map_ini.read_text(encoding='cp1252', errors='replace') if map_ini.is_file() else ''
+    result, rgba = OverlaysMixin.compute_walkability(SimpleNamespace(
+        map=loaded.map, pathing_assets=assets, map_ini=text, model_cache=ModelCache(assets)))
+    Image.fromarray(rgba, 'RGBA').save(path)
+    h, w = rgba.shape[:2]
+    return dict(type='walkable', image=str(path), size=[w*walkable.CELL, h*walkable.CELL],
+                cut_off=len(result['cut_off']))
 
 
 class Link:
@@ -318,6 +361,8 @@ class Companion:
             (self.editor.delete_selected if name == 'delete' else self.editor.clear)()
         elif name == 'open_map':
             out += self.open_map(message['map'])
+        elif name == 'overlay':
+            out += self.overlay(message['overlay'])
         elif name == 'open_folder':
             if self.owner is None:
                 out.append(dict(type='status', text='a game map has no project folder', seconds=4))
@@ -333,6 +378,43 @@ class Companion:
                 save_setting('test_game', message['choice'])
             out.append(self.menu())
         return out
+
+    def overlay(self, key):
+        """An overlay of the View menu switched on that Python works out: 'flow', each river strip's mesh at once;
+        'walkable', the walkability estimate, worked out once per build in the background and sent when it is
+        ready (the viewer drops it if the overlay was switched off meanwhile)."""
+        if key == 'flow':
+            return [dict(type='flow', strips=self.flow_strips())]
+        if key != 'walkable':
+            return []
+        loaded = self.loaded
+        if loaded.walkable is not None:
+            return [loaded.walkable]
+        if not loaded.walking:
+            loaded.walking = True
+            path = Path(self.scene_path).parent/f'walkable-{int(time.time()*1000)}.png'     # one per build
+            map_ini = self.map_path.with_name('map.ini')
+
+            def work():
+                try:
+                    message = walkability(loaded, map_ini, path)
+                except Exception as error:
+                    message = dict(type='walkable', error=str(error))
+                    loaded.walking = False                 # switching it on again tries again
+                else:
+                    loaded.walkable = message
+                if loaded is self.loaded:                  # still the map shown
+                    self.toasts.append(message)
+            threading.Thread(target=work, daemon=True).start()
+        return [dict(type='status', text='Computing walkability...', seconds=60)]
+
+    def flow_strips(self):
+        """The map's river strips for the flow arrows, every one as OpenBFME draws them: vertices [x, y, z, u, v] flat
+        (u across the strip from 0 to 1, v along it), triangles flat, length in v (render.rivers.strips)."""
+        from mapworkshop.render import rivers
+        return [dict(vertices=vertices[:, [0, 1, 2, 4, 5]].round(2).ravel().tolist(),
+                     triangles=triangles.ravel().tolist(), length=float(vertices[-1, 5]))
+                for _, (vertices, triangles) in rivers.strips(self.loaded.map)]
 
     def _played(self, event):
         """Test In-Game's events: the viewer minimises while the game is up and comes back when it closes."""
@@ -402,10 +484,8 @@ class Companion:
         loaded = self.loaded
 
         def work():
-            while loaded.assets is None:
-                time.sleep(0.05)
             try:
-                result = marklib.describe(data, assets=loaded.assets, m=loaded.map, terrain=loaded.terrain)
+                result = marklib.describe(data, assets=loaded.game_assets(), m=loaded.map, terrain=loaded.terrain)
                 self.copied = dict(type='clipboard', text=marklib.agent_text(result))
             except Exception as error:
                 self.copied = dict(type='status', text=f'the marks could not be read: {error}', seconds=5)
