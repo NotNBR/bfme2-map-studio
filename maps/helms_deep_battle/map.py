@@ -48,9 +48,10 @@ night of the battle:
   Each battalion stands a little off its spot and off north (JITTER).
   The film's order of battle (TESTUDO): at the causeway's foot
   the battering rams inside a column of shield-bearing swordsmen; before the
-  Deeping Wall the rest of the swordsmen in the front rows, a siege ladder
-  one row before every LADDER_EVERY column; before the culvert, instead of a
-  ladder, the bomb: a mine carrier (MINE) and the torch-bearing berserker
+  Deeping Wall the rest of the swordsmen in the front rows, siege ladders in
+  every LADDER_EVERY column, in the gap behind its front row and every
+  LADDER_ROWS rows further back; before the culvert, instead of the
+  ladders, the bomb: a mine carrier (MINE) and the torch-bearing berserker
   (BERSERKER); the pikes the mass behind them and before the Hornburg. About
   40,100 command points in all. None is recruitable by the AI, so the
   scripts alone move them.
@@ -154,11 +155,12 @@ BASE_CLEAR = 450                # and this round Isengard's start
 # The siege: siege ladders (4 command points) dock against a walk-on-top wall (their SpecialAbilitySiegeDeploy takes
 # STRUCTURE +WALK_ON_TOP_OF_WALL), and Uruk battalions (CAN_USE_SIEGE_TOWER) climb them; battering rams (25) break gates
 LADDER, RAM = 'IsengardSiegeLadder', 'IsengardBatteringRam'
-LADDER_EVERY = 1                # a ladder one row before the front, every this many columns facing the Deeping Wall
+LADDER_EVERY = 1                # ladders in every this many columns facing the Deeping Wall,
+LADDER_ROWS = 1, 5              # in the gap before this row (the front 0) and again every this many rows behind it
 # The film's order of battle: the ram goes up the causeway inside a column of shield-bearing swordsmen (a testudo), at the
 # causeway's foot (TESTUDO: its files and ranks, the rams in the middle file's front ranks); the rest of the swordsmen form
-# the front rows before the Deeping Wall, behind the ladders, to scale it; the pikes are the mass behind and before the
-# Hornburg. Before the culvert, instead of a ladder, the bomb: a mine carrier, which plants its charge against what it
+# the front rows before the Deeping Wall, among the ladders, to scale it; the pikes are the mass behind and before the
+# Hornburg. Before the culvert, instead of the ladders, the bomb: a mine carrier, which plants its charge against what it
 # attacks, and the torch-bearing berserker who lights it (the charge burns off: IsengardDeployedExplosiveMine)
 CAUSEWAY_FOOT = (2830, 1840)
 TESTUDO = 3, 6
@@ -458,18 +460,22 @@ def host(m, ground, walls):
         x, y = ground.spot(x, y, 25, 60, reach=60)
         ram = f == (TESTUDO[0] - 1)//2 and r < RAMS
         out.append((RAM if ram else SWORD, x, y, math.atan2(gy - y, gx - x), 'Main Gate', 'ram' if ram else 'sword'))
-    # one row before the front of the Deeping Wall's columns: a ladder each, and before the culvert the bomb
+    # in the Deeping Wall's columns: one row before the front the bomb, before the culvert; the ladders in the gaps
+    # between rows (a ladder lies across its column, 5 deep), before row LADDER_ROWS[0] and every LADDER_ROWS[1] behind
     columns = sorted({p[0] for p in spots if ahead_of(p[0]) != 'Main Gate'})
     culvert = min(columns, key=lambda x: abs(x - targets['Culvert'][0]))
+    first, every = LADDER_ROWS
     for c, x in enumerate(columns):
-        y = max(p[1] for p in spots if p[0] == x) + dy
-        if not (ahead(x, y) and ground.fits(x, y, 25, 40)):
-            continue
+        rows = sorted((p[1] for p in spots if p[0] == x), reverse=True)    # the column's spots, the front first
         if x == culvert:
-            out.append((MINE, float(x - dx/4), float(y), math.pi/2, 'Culvert', 'mine'))
-            out.append((BERSERKER, float(x + dx/4), float(y), math.pi/2, 'Culvert', 'berserker'))
+            y = rows[0] + dy
+            if ahead(x, y) and ground.fits(x, y, 25, 40):
+                out.append((MINE, float(x - dx/4), float(y), math.pi/2, 'Culvert', 'mine'))
+                out.append((BERSERKER, float(x + dx/4), float(y), math.pi/2, 'Culvert', 'berserker'))
         elif c % LADDER_EVERY == 0:
-            out.append((LADDER, float(x), float(y), math.pi/2, ahead_of(x, DEEP_TARGETS), 'ladder'))
+            for y in (y + dy/2 for y in rows[first::every]):
+                if ahead(x, y) and ground.fits(x, y, 25, 40):
+                    out.append((LADDER, float(x), float(y), math.pi/2, ahead_of(x, DEEP_TARGETS), 'ladder'))
     return out, (round(dx), round(dy), round(dx - BATTALION[0]), round(dy - BATTALION[1]))
 
 
