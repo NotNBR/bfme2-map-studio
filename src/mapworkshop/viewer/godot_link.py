@@ -10,7 +10,9 @@ does there:
 - what the marks cover, for the marks panel and Copy for agent
   (marks.describe, worked out in the background as jobs.MarksSummary does);
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
-  user maps folder, and the viewer builds the map again in place.
+  user maps folder, and the viewer builds the map again in place;
+- the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
+  from the Map menu, Build, Test In-Game, the project folder.
 
 From the viewer:
 
@@ -20,7 +22,8 @@ From the viewer:
                                     {handle, grab, mark, direction} as the overlay found them under the cursor,
                                     focus: {z, distance, angle} of the Edit camera
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
-    command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy
+    command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
+                                    open_folder, open_map {map}, test_game {choice}
     reloaded {ms} / reload_failed {error}
 
 To the viewer:
@@ -31,20 +34,28 @@ To the viewer:
     panel {lines}                   the marks panel: [text, style] (marking.summary_lines)
     status {text, seconds}          a line for the status bar
     clipboard {text}                Copy for agent's text (at once when the panel's summary is current, else once read)
-    reload {}                       the build changed: read the scene again and build the map
+    reload {scene, new_map}         the build changed, or another map: read the scene and build the map
+    menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice
+    build {running, line, outcome}  the build chip
+    toast {kind, title, detail, seconds}, window {minimized}
 """
 
 import json
+import os
 import socket
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 
+from mapworkshop.config import save_setting, setting
 from mapworkshop.formats.map import Map
+from mapworkshop.viewer import jobs
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.camera import march
 from mapworkshop.viewer.jobs import MarksSummary
+from mapworkshop.viewer.loading import map_title
 from mapworkshop.viewer.marking import MarkEditor, summary_lines
 from mapworkshop.viewer.overlay import MarkOverlay
 
@@ -209,22 +220,42 @@ class Link:
 
 
 class Companion:
-    """The marks, the panel and live reload for one open map. handle() answers one message from the viewer with the
-    messages to send back; serve() runs the link until the viewer closes."""
+    """The marks, the panel, the toolbar's jobs and live reload for the map shown. handle() answers one message from
+    the viewer with the messages to send back; serve() runs the link until the viewer closes.
 
-    def __init__(self, map_path, surface, rescene=None, progress=print):
-        self.map_path, self.surface, self.progress = map_path, surface, progress
-        self.rescene = rescene            # () -> Surface: the build changed; install it and write the scene again
-        self.marks = marklib.Marks(map_path)
-        self.picks, self.world, self.status = Picks(), World(surface), Status()
+    `prepare(name)` readies a map for the viewer (godot_viewer.prepare: its build in the user maps folder, its scene
+    written) and returns (scene.json, the scene, the project or None, the Surface); `prepared` is what it returned for
+    the map the viewer opens with."""
+
+    def __init__(self, prepared, prepare=None, progress=print):
+        self.prepare, self.progress = prepare, progress
+        self.picks, self.status = Picks(), Status()
+        self.jobs = jobs.Status()             # the build's and the test game's lines, for the status line
+        self.build = jobs.Build(self.jobs, self._toast)
+        self.toasts = []
+        self.sent_job = None                  # the job line and build outcome last sent
+        self.loaded = None
+        self.copied = None                    # Copy for agent's message once worked out in the background
+        self._show(*prepared)
+
+    def _show(self, scene_path, data, owner, surface):
+        """Hold `data`'s map: its marks, surface, summary and build watch (a new map drops the old selection)."""
+        self.scene_path, self.data, self.owner, self.surface = scene_path, data, owner, surface
+        self.map_path = Path(data['map_path'])
+        self.marks = marklib.Marks(self.map_path)
+        self.world = World(surface)
         self.editor = MarkEditor(self.picks, self.world, self.status)
         self.editor.marks = self.marks
-        self.summary, self.loaded = MarksSummary(), Loaded(map_path, surface)
-        self.panel = []                   # the panel lines last sent (none: no marks)
-        self.shown = None                 # the marks state last sent
-        self.copied = None                # Copy for agent's message once worked out in the background
+        self.summary = MarksSummary()
+        self.loaded = Loaded(self.map_path, surface, self.loaded.assets if self.loaded else None)
+        # another map's panel is cleared (None differs from any lines); the first map's starts empty
+        self.panel, self.shown = (None if hasattr(self, 'panel') else []), None
         self.stamp = self._build_stamp()
-        self.reload_started = None        # when the new build was found (perf_counter), and its file's time
+        self.reload_started = None            # when the new build was found (perf_counter), and its file's time
+
+    def _toast(self, toast):
+        self.toasts.append(dict(type='toast', kind=toast['kind'], title=toast['title'], detail=toast.get('detail', ''),
+                                seconds=max(0.5, toast['until'] - time.perf_counter())))
 
     # Messages --------------------------------------------------------------------------------------------------------
     def handle(self, message):
@@ -254,19 +285,10 @@ class Companion:
         elif kind == 'tool':
             self.editor.set_tool(message.get('tool'))
         elif kind == 'command':
-            name = message.get('name')
-            if name == 'undo':
-                self.editor.undo()
-            elif name == 'escape':
-                self.editor.escape()
-            elif name == 'toggle':
-                self.editor.toggle_visible()
-            elif name == 'copy':
-                out.append(self._copy())
-            elif name in ('delete', 'clear') and self.editor.visible:    # as the studio viewer: not on hidden marks
-                (self.editor.delete_selected if name == 'delete' else self.editor.clear)()
+            out += self._command(message.get('name'), message)
         elif kind == 'ready':
-            self.progress(f'The Godot viewer opened the map in {message.get("ms", 0)/1000:.1f} s.')
+            self.progress(f'The Godot viewer opened {self.data["title"]} in {message.get("ms", 0)/1000:.1f} s.')
+            out.append(self.menu())
         elif kind == 'reloaded':
             if self.reload_started is not None:
                 found, built = self.reload_started
@@ -281,6 +303,61 @@ class Companion:
             return []
         state = self.changed_state(cursor)
         return out + self._status() + ([state] if state else [])
+
+    def _command(self, name, message):
+        out = []
+        if name == 'undo':
+            self.editor.undo()
+        elif name == 'escape':
+            self.editor.escape()
+        elif name == 'toggle':
+            self.editor.toggle_visible()
+        elif name == 'copy':
+            out.append(self._copy())
+        elif name in ('delete', 'clear') and self.editor.visible:         # as the studio viewer: not on hidden marks
+            (self.editor.delete_selected if name == 'delete' else self.editor.clear)()
+        elif name == 'open_map':
+            out += self.open_map(message['map'])
+        elif name == 'open_folder':
+            if self.owner is None:
+                out.append(dict(type='status', text='a game map has no project folder', seconds=4))
+            else:
+                os.startfile(self.owner.folder)
+        elif name == 'build':
+            self.build.start(self.owner)
+        elif name == 'test':
+            choice = setting('test_game', jobs.TEST_GAMES[0])
+            jobs.play(self.owner, self.jobs, choice if choice in jobs.TEST_GAMES else jobs.TEST_GAMES[0], self._played)
+        elif name == 'test_game':
+            if message.get('choice') in jobs.TEST_GAMES:
+                save_setting('test_game', message['choice'])
+            out.append(self.menu())
+        return out
+
+    def _played(self, event):
+        """Test In-Game's events: the viewer minimises while the game is up and comes back when it closes."""
+        self.toasts.append(dict(type='window', minimized=event == 'started'))
+
+    def open_map(self, name):
+        """Another map: readied (prepare), then the viewer reads its scene."""
+        if self.prepare is None:
+            return [dict(type='status', text='this viewer shows one map only', seconds=4)]
+        self._show(*self.prepare(name))
+        self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
+        return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu()]
+
+    def menu(self):
+        """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game
+        choice, as the studio viewer's toolbar has them."""
+        from mapworkshop import game, project
+        current = self.map_path.resolve()
+        own = sorted(((str(p.map_file), p.title) for p in project.projects() if p.map_file.exists()),
+                     key=lambda e: e[1].lower())
+        stock = sorted(((str(m), map_title(m, {})) for m in game.stock_maps()), key=lambda e: e[1].lower())
+        entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current)
+        return dict(type='menu', title=self.data['title'], project=self.owner is not None,
+                    projects=[entry(*e) for e in own], stock=[entry(*e) for e in stock],
+                    test_games=list(jobs.TEST_GAMES), test_game=setting('test_game', jobs.TEST_GAMES[0]))
 
     def state(self):
         return marks_state(self.marks, self.surface, self.editor)
@@ -297,6 +374,20 @@ class Companion:
     def _status(self):
         lines, self.status.lines = self.status.lines, []
         return lines
+
+    def job_messages(self):
+        """The toasts, and the jobs' status line and build chip when they changed (Build, Test In-Game)."""
+        out, self.toasts = self.toasts, []
+        line = self.jobs.current()
+        outcome = self.build.outcome
+        job = (line, self.build.running, self.build.line if self.build.running else None, outcome)
+        if job != self.sent_job:
+            self.sent_job = job
+            if line:
+                out.append(dict(type='status', text=line, seconds=max(0.5, self.jobs.until - time.perf_counter())))
+            out.append(dict(type='build', running=self.build.running, line=job[2],
+                            outcome=None if outcome is None else dict(ok=outcome[0], seconds=outcome[1], ended=outcome[2])))
+        return out
 
     def _copy(self):
         """Copy for agent: the marks text now when the panel's summary is current, else a status line, and the
@@ -342,26 +433,28 @@ class Companion:
         return tuple((f.stat().st_mtime_ns, f.stat().st_size) if f.exists() else None for f in files)
 
     def watch(self):
-        """A reload message when a new build has settled (the map file and its map.ini unchanged for a moment, as the
-        studio viewer waits), else None. A build that cannot be read is reported and the last good one stays."""
+        """A reload message when a new build of a project has settled (the map file and its map.ini unchanged for a
+        moment, as the studio viewer waits), else None. A build that cannot be read is reported and the last good one
+        stays."""
         stamp = self._build_stamp()
-        if stamp == self.stamp or self.rescene is None:
+        if stamp == self.stamp or self.owner is None or self.prepare is None:
             return None
         time.sleep(0.3)
         if self._build_stamp() != stamp:
             return None                       # still being written: look again next time
         self.stamp = stamp                    # this build, good or not: the next one is looked at again
         try:
-            surface = self.rescene()
+            scene_path, data, owner, surface = self.prepare(self.owner.id)
             loaded = Loaded(self.map_path, surface, self.loaded.assets)
         except Exception as error:
             self.progress(f'{self.map_path.name} changed, but it cannot be read: {error!r}; the viewer keeps the last good one')
             return dict(type='status', text=f'the new build cannot be read: {error}', seconds=6)
         self.reload_started = (time.perf_counter(), self.map_path.stat().st_mtime)
-        self.surface = self.world.surface = surface
+        self.data, self.surface = data, surface
+        self.world.surface = surface
         self.loaded, self.shown = loaded, None
         self.progress(f'{self.map_path.name} changed: reloading it in the Godot viewer...')
-        return dict(type='reload')
+        return dict(type='reload', scene=str(scene_path), new_map=False)
 
     def serve(self, link, process, connect_timeout=120):
         """Answer the viewer until it closes (or `process` ends)."""
@@ -378,7 +471,7 @@ class Companion:
                 for reply in self.handle(message):
                     link.send(reply)
             copied, self.copied = self.copied, None
-            for extra in (self.watch(), self.panel_message(), copied):
+            for extra in [self.watch(), self.panel_message(), copied, *self.job_messages()]:
                 if extra is not None:
                     link.send(extra)
                     if extra['type'] == 'reload':

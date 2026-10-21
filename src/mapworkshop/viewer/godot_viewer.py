@@ -147,6 +147,15 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
     return folder/'scene.json', data, owner, surface
 
 
+def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None):
+    """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written; what
+    scene() returns. The companion prepares the map again for a new build or another map."""
+    prepared = scene(name, view, probes, screenshot, size, check, port, drive)
+    if prepared[2] is not None:
+        openbfme.install_user_map(prepared[2])
+    return prepared
+
+
 def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, progress=print, timeout=None,
         drive=None):
     """Prepare and start the viewer on map `name`. With a screenshot or check, wait for it and return
@@ -157,9 +166,9 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     gui, console = openbfme.assemble(progress)
     interactive = not (screenshot or check)
     link = godot_link.Link() if interactive else None
-    path, data, owner, surface = scene(name, view, probes, screenshot, size, check, link.port if link else None, drive)
-    if owner is not None:
-        openbfme.install_user_map(owner)
+    port = link.port if link else None
+    prepared = prepare(name, view, probes, screenshot, size, check, port, drive)
+    path, data = prepared[:2]
     env = openbfme.environment([])
     headless = (check and not screenshot) or (drive and not any(step['do'] == 'screenshot' for step in drive))
     args = [str(gui if interactive and not drive else console), *(['--headless'] if headless else []),
@@ -170,16 +179,10 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
                                 errors='replace', timeout=timeout or 600)
         return result.returncode, (result.stdout + result.stderr).splitlines()
 
-    def rescene():
-        """The build changed: into the user maps folder again, and the scene (its surface) written again."""
-        if owner is not None:
-            openbfme.install_user_map(owner)
-        return scene(name, size=size, port=link.port)[3]
-
     # driven (tests): the viewer's output kept out of the caller's, and a hung viewer stopped after `timeout`
     quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) if drive else {}
     process = subprocess.Popen(args, env=env, cwd=openbfme.HOME, **quiet)
-    companion = godot_link.Companion(Path(data['map_path']), surface, rescene if owner else None, progress)
+    companion = godot_link.Companion(prepared, lambda other: prepare(other, size=size, port=port), progress)
     try:
         companion.serve(link, process)
         return process.wait(timeout=(timeout or 600) if drive else None)

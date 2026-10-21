@@ -17,8 +17,7 @@ const CLASSES := ["RetailFileSystem", "MapTerrainBuilder", "MapObjectBuilder", "
 const SHADERS := ["terrain", "water_standing", "road", "river"]
 const WARMUP_FRAMES := 24     # frames before a screenshot: the objects' first poses and the streamed textures
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
-const HELP := ("Left drag orbit, right/middle drag pan, wheel zoom, double-click fly to, WASD move, Q/E R/F Z/X turn tilt zoom,\n"
-	+ "Space or Home reset, T top, 1 objects, 2 water, M marks, Del delete, Ctrl+Z undo, Esc step back, P screenshot, F1 help")
+const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["marks", "Marks (M)", true]]
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
@@ -34,10 +33,9 @@ var _world_env: WorldEnvironment
 var _sun: DirectionalLight3D
 var _orbit: OrbitCamera
 var _overlay: MarkOverlay
-var _ui: MarksUI
+var _frame: Frame             # the toolbar, the marks rail and panel, the camera bar: with the companion only
 var _link: Link
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
-var _label: Label
 var _frames := 0
 var _drag := ""               # while a button is held: "orbit", "pan", "marks" (the companion edits), "pending" (asked it)
 var _anchor := Vector3.INF    # the grabbed ground point while panning
@@ -94,9 +92,8 @@ func _headless() -> bool:
 func _fail(message: String) -> void:
 	push_error(message)
 	print("VIEWER failed: ", message)
-	if _label != null:
-		_label.text = "ERROR: " + message
-		_label.modulate = Color(1, 0.4, 0.4)
+	if _frame != null:
+		_frame.toast("failed", "The map could not be shown", message, 30)
 	if _headless() or not String(_scene.get("screenshot", "")).is_empty() or _scene.get("check", false):
 		get_tree().quit(1)
 
@@ -134,17 +131,19 @@ func _build_stage() -> void:
 	_overlay.camera = _camera
 	_overlay.state = _scene.get("marks", {})
 	layer.add_child(_overlay)
-	_label = Label.new()
-	_label.position = Vector2(12, 8)
-	_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_label.add_theme_constant_override("outline_size", 4)
-	layer.add_child(_label)
 	add_child(layer)
 	if _scene.get("port") != null:
-		_ui = MarksUI.new()
-		_ui.tool_chosen.connect(func(tool) -> void: _send({"type": "tool", "tool": tool}))
-		_ui.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
-		add_child(_ui)
+		_frame = Frame.new()
+		add_child(_frame)
+		_frame.marks.tool_chosen.connect(func(tool) -> void: _send({"type": "tool", "tool": tool}))
+		_frame.marks.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
+		_frame.toolbar.map_chosen.connect(func(path: String) -> void: _send({"type": "command", "name": "open_map", "map": path}))
+		_frame.toolbar.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
+		_frame.toolbar.test_game_chosen.connect(
+			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
+		_frame.toolbar.view_switched.connect(_switch_view)
+		_frame.toolbar.action.connect(_toolbar_action)
+		_frame.toolbar.set_views(VIEWS)
 		_link = Link.new()
 		var code := _link.open(int(_scene.port))
 		if code != OK:
@@ -190,8 +189,6 @@ func _open_map() -> void:
 			actual.x, actual.y, int(_scene.size[0]), int(_scene.size[1])])
 		return
 	_probe()
-	_label.text = "%s    F1: controls" % _scene.title
-	_label.visible = shot.is_empty()     # a picture without the help
 	_send({"type": "ready", "ms": done - started})
 	_drive = (_scene.get("drive", []) as Array).duplicate()
 	_driving = not _drive.is_empty()
@@ -245,19 +242,31 @@ func _build_map() -> Dictionary:
 		"objects": int(object_report.objects.total), "errors": report.errors.size() + object_report.errors.size()}
 
 
-## A new build: the scene and its surface read again and the map built again in place; the camera stays.
-func _reload() -> void:
+## A new build, or another map (`new_map`): the scene and its surface read and the map built in place. The camera
+## stays for a new build; another map starts at its whole map.
+func _reload(path: String, new_map: bool) -> void:
 	var started := Time.get_ticks_msec()
+	var previous := _scene_path
+	_scene_path = path
+	if _frame != null:
+		_frame.toast("busy", "Loading %s" % ("the new build" if not new_map else path.get_base_dir().get_file()), "", 30)
 	if not _read_scene():
+		_scene_path = previous
 		_send({"type": "reload_failed", "error": "the scene could not be read"})
 		return
 	_orbit.surface = _surface
 	_orbit.playable = Vector2(_scene.playable[0], _scene.playable[1])
+	if new_map:
+		_fixed = false
+		_orbit.fov = float(_scene.fov)
+		_orbit.reset()
+		_orbit.snap()
+		get_window().title = "%s - Godot viewer" % _scene.title
 	if _build_map().is_empty():
 		_send({"type": "reload_failed", "error": "the map did not build"})
 		return
-	_label.modulate = Color(1, 1, 1)
-	_label.text = "%s    F1: controls" % _scene.title
+	if _frame != null:
+		_frame.toast("done", "Loaded %s" % _scene.title, "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
 	print("VIEWER reloaded %s in %d ms" % [_scene.map, Time.get_ticks_msec() - started])
 	_send({"type": "reloaded", "ms": Time.get_ticks_msec() - started})
 
@@ -319,6 +328,8 @@ func _process(delta: float) -> void:
 			_orbit.drive(delta, forward, right, turn, tilt, zoom, speed)
 			_orbit.update(delta)
 			_orbit.apply(_camera)
+		if _frame != null:
+			_frame.bar.set_orbit(_orbit)
 		if _hover and _drag.is_empty():
 			_send(_event("hover", get_viewport().get_mouse_position()))
 		_hover = false
@@ -379,7 +390,11 @@ func _play_drive() -> void:
 		"tool":
 			_send({"type": "tool", "tool": step.get("tool")})
 		"command":
-			_send({"type": "command", "name": step.name})
+			var command := step.duplicate()       # its name and arguments, as the toolbar sends them
+			command.erase("do")
+			command.erase("frames")
+			command["type"] = "command"
+			_send(command)
 		"screenshot":
 			_save(String(step.path))
 
@@ -392,23 +407,34 @@ func _serve_link() -> void:
 		match String(message.get("type", "")):
 			"marks":
 				_overlay.state = message
-				_ui.show_tool(message.get("tool"))
-				_ui.set_hint(message.get("hint"))
-				_ui.show_panel(message.get("visible", true))       # M hides the panel with the marks
+				_frame.marks.show_tool(message.get("tool"))
+				_frame.bar.set_hint(message.get("hint"))
+				_frame.marks.show_panel(message.get("visible", true))      # M hides the panel with the marks
+				_frame.toolbar.set_view("marks", message.get("visible", true))
 				var cursor = message.get("cursor")
 				Input.set_default_cursor_shape(CURSORS.get(cursor, Input.CURSOR_ARROW) if cursor != null else Input.CURSOR_ARROW)
 			"press_result":
 				if int(message.get("seq", -1)) == _press_seq:
 					_answered(bool(message.handled))
 			"panel":
-				_ui.set_panel(message.lines, _overlay.state.get("visible", true))
+				_frame.marks.set_panel(message.lines, _overlay.state.get("visible", true))
 			"status":
-				_ui.set_status(message.text, float(message.get("seconds", 3)))
+				_frame.bar.set_status(message.text, float(message.get("seconds", 3)))
 			"clipboard":
 				DisplayServer.clipboard_set(message.text)
-				_ui.set_status("Copied the marks for an agent: paste them into its prompt", 4)
+				_frame.bar.set_status("Copied the marks for an agent: paste them into its prompt", 4)
 			"reload":
-				_reload()
+				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)))
+			"menu":
+				_frame.toolbar.set_menu(message)
+			"build":
+				_frame.toolbar.set_build(bool(message.running), message.get("line"), message.get("outcome"))
+			"toast":
+				_frame.toast(String(message.kind), String(message.title), String(message.get("detail", "")),
+					float(message.get("seconds", 3)))
+			"window":
+				var mode := DisplayServer.WINDOW_MODE_MINIMIZED if message.minimized else DisplayServer.WINDOW_MODE_WINDOWED
+				DisplayServer.window_set_mode(mode)
 	if _link.closed():
 		print("VIEWER the companion closed the link")
 		get_tree().quit(0)
@@ -469,18 +495,15 @@ func _save(path: String) -> Error:
 
 ## P: the view without the controls, into the renders folder.
 func _screenshot() -> void:
-	var shown := [_label.visible, _ui.visible if _ui != null else false]
-	_label.visible = false
-	if _ui != null:
-		_ui.visible = false
+	if _frame != null:
+		_frame.chrome = false
 	await RenderingServer.frame_post_draw
 	var stamp := Time.get_datetime_string_from_system().replace(":", "-")
 	var path := String(_scene.screenshots).path_join("%s %s.png" % [_scene.map, stamp])
 	var code := _save(path)
-	_label.visible = shown[0]
-	if _ui != null:
-		_ui.visible = shown[1]
-		_ui.set_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
+	if _frame != null:
+		_frame.chrome = true
+		_frame.bar.set_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -554,11 +577,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_T:
 				_free()
 				_orbit.toggle_top()
-			KEY_1: _toggle(_root.get_node_or_null("MapObjects") if _root != null else null)
-			KEY_2:
-				if _root != null:
-					_toggle(_root.get_node_or_null("StandingWater"))
-					_toggle(_root.get_node_or_null("Rivers"))
+			KEY_1: _switch_view("objects", not _shown("objects"))
+			KEY_2: _switch_view("water", not _shown("water"))
 			KEY_M:
 				if _link != null:
 					_send({"type": "command", "name": "toggle"})
@@ -568,15 +588,50 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_ESCAPE: _send({"type": "command", "name": "escape"})
 			KEY_P: _screenshot()
 			KEY_F1:
-				var title := "%s    F1: controls" % _scene.title
-				_label.text = "%s\n%s" % [_scene.title, HELP] if _label.text == title else title
+				if _frame != null:
+					_frame.toggle_help()
+
+
+## A View switch (the menu or its key): the layer shown or hidden.
+func _switch_view(key: String, on: bool) -> void:
+	match key:
+		"objects":
+			_show(["MapObjects"], on)
+		"water":
+			_show(["StandingWater", "Rivers"], on)
+		"marks":
+			if _link != null and bool(_overlay.state.get("visible", true)) != on:
+				_send({"type": "command", "name": "toggle"})
+	if _frame != null:
+		_frame.toolbar.set_view(key, on)
+
+
+func _shown(key: String) -> bool:
+	var node: Node3D = null
+	if _root != null:
+		node = _root.get_node_or_null({"objects": "MapObjects", "water": "StandingWater"}.get(key, ""))
+	return node == null or node.visible
+
+
+func _show(names: Array, on: bool) -> void:
+	for n in names:
+		var node: Node3D = _root.get_node_or_null(n) if _root != null else null
+		if node != null:
+			node.visible = on
+
+
+func _toolbar_action(name: String) -> void:
+	match name:
+		"top":
+			_free()
+			_orbit.toggle_top()
+		"reset":
+			_free()
+			_orbit.reset()
+		"screenshot":
+			_screenshot()
 
 
 ## A move ends a fixed view: the Edit camera takes over from where it was.
 func _free() -> void:
 	_fixed = false
-
-
-func _toggle(node: Node3D) -> void:
-	if node != null:
-		node.visible = not node.visible

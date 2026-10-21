@@ -271,13 +271,19 @@ mw view MAP --godot --view "..." --probe X,Y[,Z] [--probe ...]
 map as the game draws it, roads included and the units in their idle
 animations, in about two seconds once OpenBFME is built. It is a step of
 [moving the viewer to Godot](godot-viewer/plan.md) and does less than the
-viewer above so far. It has:
+viewer above so far. Its window has the toolbar along the top, the marks
+tools down the left edge, the marks panel at the right and a bar along the
+bottom with the status line and the camera's readout. It has:
 
+- the toolbar, as in [The toolbar](#the-toolbar): **Map** (the map projects,
+  the game's maps, Open project folder), **Build** with its chip, **Test
+  In-Game** and the choice of what it starts, **View** (objects, water,
+  marks), **Top view**, **Reset view**, **Screenshot** and the frame rate;
 - the Edit camera, as in [Moving around](#moving-around): left drag orbits,
   right or middle drag pans, the wheel zooms, a double-click flies there,
   W A S D, Q / E, R / F, Z / X, Space or Home and T;
 - marking, as in [Marking the map for an agent](#marking-the-map-for-an-agent):
-  the palette at the top left, selecting, moving, resizing and rotating, Del,
+  the tools at the left, selecting, moving, resizing and rotating, Del,
   Ctrl+Z and Esc, the marks panel at the right and **Copy for agent**. The
   marks are the same file, so `mw marks` reads them as from the viewer above;
 - live reload, as in [Live reload](#live-reload): a new build of a project
@@ -289,8 +295,8 @@ viewer above so far. It has:
   into `godot/` in the profile's renders folder
   (`local/profiles/<profile>/renders/godot/`), **F1** the controls.
 
-Weather, the sky, shadows, the toolbar, Photo mode, saved views and the
-overlays are not there yet.
+Weather, the sky, shadows, Properties, Preview, Browse..., Photo mode, saved
+views and the overlays are not there yet.
 
 A project opens from its last build, which goes into OpenBFME's user maps
 folder in `local/openbfme/appdata/`; a stock map opens from RotWK's archives,

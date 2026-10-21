@@ -47,7 +47,9 @@ class CompanionTests(unittest.TestCase):
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
-        self.companion = godot_link.Companion(self.map_path, FlatSurface(), progress=lambda line: None)
+        self.data = dict(map_path=str(self.map_path), title='Test')
+        self.companion = godot_link.Companion((tmp/'scene.json', self.data, None, FlatSurface()),
+                                              progress=lambda line: None)
 
     def send(self, *messages):
         out = []
@@ -134,7 +136,8 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(self.send(event('hover', 12, 10)), [])          # the same marks, the same cursor
 
     def test_a_build_that_cannot_be_read_keeps_the_last_good_one(self):
-        self.companion.rescene = mock.MagicMock(side_effect=OSError('half written'))
+        self.companion.owner = mock.MagicMock(id='test')
+        self.companion.prepare = mock.MagicMock(side_effect=OSError('half written'))
         time.sleep(0.01)
         self.map_path.write_bytes(b'broken')
         reply = self.companion.watch()
@@ -143,14 +146,38 @@ class CompanionTests(unittest.TestCase):
         self.assertIsNone(self.companion.reload_started)
 
     def test_a_new_build_is_reloaded_once_it_has_settled(self):
-        rescene = mock.MagicMock(return_value=FlatSurface())
-        self.companion.rescene = rescene
+        self.companion.owner = mock.MagicMock(id='test')
+        prepare = mock.MagicMock(return_value=(Path('scene.json'), self.data, self.companion.owner, FlatSurface()))
+        self.companion.prepare = prepare
         self.assertIsNone(self.companion.watch())
         time.sleep(0.01)
         self.map_path.write_bytes(b'rebuilt')
-        self.assertEqual(self.companion.watch(), dict(type='reload'))
-        rescene.assert_called_once()
+        self.assertEqual(self.companion.watch(), dict(type='reload', scene='scene.json', new_map=False))
+        prepare.assert_called_once_with('test')
         self.assertIsNone(self.companion.watch())
+
+    def test_another_map_is_prepared_and_the_viewer_told_to_read_it(self):
+        other = Path(self.tmp.name)/'map mp other.map'
+        other.write_bytes(b'')
+        self.companion.prepare = mock.MagicMock(
+            return_value=(Path('other.json'), dict(map_path=str(other), title='Other'), None, FlatSurface()))
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
+            replies = self.send(dict(type='command', name='open_map', map=str(other)))
+        self.assertEqual(replies[0], dict(type='reload', scene='other.json', new_map=True))
+        self.assertEqual(self.companion.map_path, other)
+        self.assertEqual(self.companion.marks.items, [])               # that map's marks, not this one's
+
+    def test_build_and_test_in_game_start_the_studio_viewers_jobs(self):
+        with mock.patch.object(self.companion.build, 'start') as build:
+            self.send(dict(type='command', name='build'))
+        build.assert_called_once_with(None)
+        with mock.patch.object(godot_link.jobs, 'play') as play, \
+                mock.patch.object(godot_link, 'setting', return_value='openbfme'):
+            self.send(dict(type='command', name='test'))
+        self.assertEqual(play.call_args[0][2], 'openbfme')
+        self.companion.jobs.set('building...', 5)
+        self.assertEqual([m['type'] for m in self.companion.job_messages()], ['status', 'build'])
+        self.assertEqual(self.companion.job_messages(), [])            # nothing new
 
 
 class LinkTests(unittest.TestCase):
