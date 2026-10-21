@@ -55,6 +55,7 @@ answer; the findings are in [how BFME2 behaves](../docs/game/README.md).
 | [Horde Spacing Lab](horde_spacing_lab/map.py) | `horde-spacing-lab` | where does ROTWK put the second of two battalions sent to one point, and where do a battalion's members stand around it? Ten pairs, traced with `mw battle --rotwk` ([battalions](../docs/game/battalions.md)) |
 | [Blend Lab](blend_lab/map.py) | `blend-lab` | how can a change of terrain texture be wider and softer than the game's one-cell blend? Sixteen approaches side by side, among them bands of in-between textures of varying number and width ([blends](../docs/game/terrain-textures.md#blends)) |
 | [Test Mode Lab](test_mode_lab/map.py) | `test-mode-lab` | two small armies, a wood and rocks between them, to select and order units in the viewer's Test mode |
+| [Path Lab](path_lab/map.py) | `path-lab` | which way do units go round a wall's corner, buildings, hills and other units? Four lanes, watched with Test mode's Paths |
 
 ## Adding a map
 

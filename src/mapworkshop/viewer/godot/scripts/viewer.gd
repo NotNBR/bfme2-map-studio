@@ -853,6 +853,9 @@ func _play_drive() -> void:
 			_switch_view(String(step.key), bool(step.on))      # as the View menu
 		"mode":
 			_set_mode(String(step.mode))                     # as the camera bar
+		"paths":
+			if _test != null:
+				_test.paths = String(step.paths)               # as Test mode's panel
 		"command":
 			var command := step.duplicate()       # its name and arguments, as the toolbar sends them
 			command.erase("do")
