@@ -13,6 +13,9 @@ does there:
   user maps folder, and the viewer builds the map again in place;
 - the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
   from the Map menu, Build, Test In-Game, the project folder;
+- the saved views and Copy view, in the studio viewer's own files and
+  command (viewer.views): local/views/<map>.json with the thumbnails beside
+  it, and a view as the mw render command that draws it;
 - Preview: the map again as a copy with a weather preset or a sun
   (godot_viewer.preview_map), which the viewer opens in its place;
 - the View menu's overlays that need the map's analysis: the walkability
@@ -29,7 +32,11 @@ From the viewer:
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
     command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
                                     open_folder, open_map {map}, test_game {choice}, overlay {overlay} ('walkable' or
-                                    'flow' switched on), preview {weather, sun} (either)
+                                    'flow' switched on), preview {weather, sun} (either), save_view {camera, slot,
+                                    thumbnail}, apply_view {view (its name) or slot, size}, rename_view {view, new},
+                                    delete_view {view}, copy_view {camera, preview}; camera: {mode, orbit {x, y,
+                                    distance, elevation, heading, fov}, fly {goal, forward, focal, roll, aperture,
+                                    focus, ev}}; preview: {size, objects, water, fog, grid, border, walkable, flow}
     reloaded {ms} / reload_failed {error}
 
 To the viewer:
@@ -39,7 +46,8 @@ To the viewer:
     press_result {handled, seq}     whether the press numbered seq acts on the marks (else it orbits)
     panel {lines}                   the marks panel: [text, style] (marking.summary_lines)
     status {text, seconds}          a line for the status bar
-    clipboard {text}                Copy for agent's text (at once when the panel's summary is current, else once read)
+    clipboard {text, what}          Copy for agent's text (at once when the panel's summary is current, else once read),
+                                    or Copy view's command with `what` was copied, for the status line
     reload {scene, new_map, what}   the build changed, another map or a preview (`what`, for the toast): read the scene
                                     and build the map
     menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice, Preview's
@@ -48,6 +56,8 @@ To the viewer:
     walkable {image, size, cut_off} the walkability estimate: an RGBA image, one pixel per cell from the playable
                                     area's corner, its extent in map units and the cut-off areas; {error} if it failed
     flow {strips}                   the river strips: [{vertices: [x, y, z, u, v] * n, triangles, length}]
+    views {items, free}             the saved views: [{name, slot, mode, thumbnail}], the first free slot
+    view {mode, name, ...}          go to a saved view, resolved as godot_viewer.resolve resolves a view
     toast {kind, title, detail, seconds}, window {minimized}
 """
 
@@ -70,6 +80,7 @@ from mapworkshop.viewer.jobs import MarksSummary
 from mapworkshop.viewer.loading import map_title
 from mapworkshop.viewer.marking import MarkEditor, summary_lines
 from mapworkshop.viewer.overlay import MarkOverlay
+from mapworkshop.viewer.views import THUMBNAIL, Views, edit_spec, photo_spec, render_command
 
 POLL = 0.25            # seconds between looks at the socket and the build
 
@@ -299,6 +310,7 @@ class Companion:
         self.editor = MarkEditor(self.picks, self.world, self.status)
         self.editor.marks = self.marks
         self.summary = MarksSummary()
+        self.views = Views(self.map_path)
         self.loaded = Loaded(self.map_path, surface, self.loaded.assets if self.loaded else None)
         # another map's panel is cleared (None differs from any lines); the first map's starts empty
         self.panel, self.shown = (None if hasattr(self, 'panel') else []), None
@@ -340,7 +352,7 @@ class Companion:
             out += self._command(message.get('name'), message)
         elif kind == 'ready':
             self.progress(f'The Godot viewer opened {self.data["title"]} in {message.get("ms", 0)/1000:.1f} s.')
-            out.append(self.menu())
+            out += [self.menu(), self.views_message()]
         elif kind == 'reloaded':
             if self.reload_started is not None:
                 found, built = self.reload_started
@@ -374,6 +386,8 @@ class Companion:
             out += self.overlay(message['overlay'])
         elif name == 'preview':
             out += self.set_preview({k: message[k] for k in ('weather', 'sun') if message.get(k)})
+        elif name in ('save_view', 'apply_view', 'rename_view', 'delete_view', 'copy_view'):
+            out += getattr(self, name)(message)
         elif name == 'open_folder':
             if self.owner is None:
                 out.append(dict(type='status', text='a game map has no project folder', seconds=4))
@@ -437,7 +451,7 @@ class Companion:
             return [dict(type='status', text='this viewer shows one map only', seconds=4)]
         self._show(*self.prepare(name, self.preview))
         self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
-        return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu()]
+        return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
     def set_preview(self, choice):
         """Preview's weather or sun: the map prepared again as that preview (the same map: the marks, the analysis
@@ -451,6 +465,101 @@ class Companion:
         self.preview = self.data['preview']
         what = ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
         return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=f'the preview: {what}'), self.menu()]
+
+    # The saved views, as the studio viewer keeps them (viewer.views) ------------------------------------------
+    def views_message(self):
+        """The Views list, read again (the studio viewer may have saved one meanwhile)."""
+        self.views.load()
+        items = [dict(name=v['name'], slot=v['slot'], mode=v['mode'],
+                      thumbnail=str(path) if (path := self.views.thumbnail_path(v['name'])).is_file() else '')
+                 for v in self.views.items]
+        return dict(type='views', items=items, free=self.views.free_slot())
+
+    def spec(self, camera):
+        """(mode, render.camera spec) of the viewer's camera, as the studio viewer's view_spec: an Edit view of the
+        orbit camera's goal, or a Photo view of the free camera where its eye is going."""
+        from types import SimpleNamespace
+        if camera['mode'] == 'photo':
+            f = camera['fly']
+            forward = np.asarray(f['forward'], float)
+            fly = SimpleNamespace(goal=np.asarray(f['goal'], float), forward=lambda: forward, focus=f['focus'],
+                                  focal=f['focal'], roll=f['roll'], aperture=f['aperture'], ev=f['ev'])
+            return 'photo', photo_spec(fly)
+        o = camera['orbit']
+        orbit = SimpleNamespace(goal=o, fov=o['fov'], ground=lambda x, y: float(self.surface.height_at(x, y)))
+        return 'edit', edit_spec(orbit)
+
+    def save_view(self, message):
+        """Save the view in its slot (None: the first free one), its thumbnail from the viewer's picture."""
+        from PIL import Image, ImageOps
+        mode, spec = self.spec(message['camera'])
+        thumbnail = None
+        picture_path = Path(message.get('thumbnail') or '')
+        if picture_path.is_file():
+            with Image.open(picture_path) as picture:
+                thumbnail = ImageOps.fit(picture.convert('RGB'), THUMBNAIL, Image.LANCZOS)
+            picture_path.unlink(missing_ok=True)
+        slot = message.get('slot')
+        self.views.load()
+        entry = self.views.save(mode, spec, int(slot) if slot else None, thumbnail)
+        where = f' - Ctrl+{entry["slot"]} goes back to it' if entry['slot'] else ''
+        return [dict(type='status', text=f'saved {entry["name"]}{where}', seconds=5), self.views_message()]
+
+    def apply_view(self, message):
+        """Go to a saved view (by name, or by slot: Ctrl+1-9), in its mode."""
+        from mapworkshop.render.camera import view_from_dict
+        from mapworkshop.viewer.godot_viewer import SIZE, resolve     # godot_viewer imports this module
+        self.views.load()
+        if message.get('slot'):
+            slot = int(message['slot'])
+            entry = self.views.by_slot(slot)
+            if entry is None:
+                return [dict(type='status', text=f'no view saved as {slot} - Ctrl+Shift+{slot} saves the current one '
+                                                 'there', seconds=4)]
+        else:
+            entry = self.views.by_name(message.get('view'))
+            if entry is None:
+                return [dict(type='status', text=f'no view called {message.get("view")}', seconds=4)]
+        try:
+            view = view_from_dict(entry['spec'])
+            camera = resolve(view, self.surface.terrain, message.get('size') or SIZE)
+        except (ValueError, RuntimeError) as error:
+            return [dict(type='status', text=f'{entry["name"]}: {error}', seconds=6)]
+        camera.pop('view_projection')
+        if view.eye is None:
+            camera['orbit']['heading'] = float(view.heading) % 360     # the view's own, as the studio viewer sets it
+        return [dict(type='view', mode=entry['mode'], name=entry['name'], **camera)]
+
+    def rename_view(self, message):
+        """Rename a saved view (its thumbnail with it); a name taken already is refused."""
+        self.views.load()
+        try:
+            self.views.rename(message['view'], message['new'])
+        except ValueError as error:
+            return [dict(type='status', text=str(error), seconds=5)]
+        return [self.views_message()]
+
+    def delete_view(self, message):
+        """Delete a saved view and its thumbnail."""
+        self.views.load()
+        if self.views.delete(message['view']):
+            return [dict(type='status', text=f'deleted {message["view"]}', seconds=4), self.views_message()]
+        return []
+
+    def copy_view(self, message):
+        """The view as the mw render command that draws it, with the View switches and the Preview mw render has
+        (viewer.views.render_command), on the clipboard."""
+        _, spec = self.spec(message['camera'])
+        shown = message.get('preview', {})
+        preview = dict(size=shown.get('size'), objects=shown.get('objects', True), weather_fx=shown.get('fog', True),
+                       grid=shown.get('grid', False), border=shown.get('border', False),
+                       walkable=shown.get('walkable', False), flow=shown.get('flow', False),
+                       weather=None if self.preview['weather'] == 'map' else self.preview['weather'],
+                       sun=None if self.preview['sun'] == 'own' else self.preview['sun'])
+        label = self.owner.id if self.owner else self.map_path.stem
+        text = render_command(label if self.owner else f'"{self.map_path}"', 'view', spec, preview, label=label)
+        hidden = '' if shown.get('water', True) else ' (with water: mw render always draws it)'
+        return [dict(type='clipboard', text=text, what='the view as a mw render command' + hidden)]
 
     def menu(self):
         """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game

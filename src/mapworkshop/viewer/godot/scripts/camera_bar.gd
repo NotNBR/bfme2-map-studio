@@ -1,5 +1,6 @@
 ## The bar along the bottom, as the studio viewer's camera bar and status bar have them (docs/viewer.md, "Photo mode and
-## the camera bar"): at the left the camera, Edit or Photo, and in Photo mode the lens (focal length, aperture, focus,
+## the camera bar"): at the left the camera, Edit or Photo, Views (the saved views with their thumbnails: go there,
+## save the current one, rename, delete) and Copy view, and in Photo mode the lens (focal length, aperture, focus,
 ## exposure: the wheel or a sideways drag over a field changes it, a click opens its presets) and the framing aids
 ## (Thirds, the frame's aspect); then the status line (the latest message for its time, else what the mouse does now);
 ## at the right the camera's readout. The viewer keeps the camera and the lens; this shows them (set_photo) and says
@@ -13,6 +14,12 @@ signal lens_pick(field: String, value: Variant)
 ## The wheel or a drag over a lens field, in notches.
 signal lens_step(field: String, notches: int)
 signal thirds_toggled(on: bool)
+## Views: save the current view (in the first free slot), go to a saved one, rename or delete it; Copy view.
+signal view_save()
+signal view_go(name: String)
+signal view_rename(name: String, new: String)
+signal view_delete(name: String)
+signal view_copy()
 
 const FIELDS := ["focal", "aperture", "focus", "ev"]
 const SCRUB_PIXELS := 6.0     # a sideways drag of this many pixels is a notch (viewer/app.py)
@@ -31,6 +38,11 @@ var _thirds: Button
 var _frame: MenuButton
 var _state := {}               # the lens as last shown (set_photo)
 var _scrub := {}               # a press on a field: {field, x, moved}
+var _views: MenuButton
+var _view_names := []          # the saved views' names, by item id (from 1; 0 saves)
+var _rename: ConfirmationDialog
+var _rename_edit: LineEdit
+var _renaming := ""
 
 
 func _ready() -> void:
@@ -45,6 +57,27 @@ func _ready() -> void:
 	_edit.pressed.connect(func() -> void: mode_chosen.emit("edit"))
 	_photo = _toggle(row, "Photo", "The free camera with a lens, for pictures (V)", group)
 	_photo.pressed.connect(func() -> void: mode_chosen.emit("photo"))
+	row.add_child(VSeparator.new())
+	_views = MenuButton.new()
+	_views.text = "Views  ▾"
+	_views.flat = false
+	_views.tooltip_text = "The saved views of this map: Ctrl+1-9 goes to one, Ctrl+Shift+1-9 saves into its slot"
+	_views.get_popup().id_pressed.connect(_on_view)
+	row.add_child(_views)
+	var copy := Button.new()
+	copy.text = "Copy view"
+	copy.tooltip_text = "The view as a mw render command, on the clipboard (Ctrl+C)"
+	copy.focus_mode = Control.FOCUS_NONE
+	copy.pressed.connect(func() -> void: view_copy.emit())
+	row.add_child(copy)
+	_rename = ConfirmationDialog.new()
+	_rename.title = "Rename view"
+	_rename_edit = LineEdit.new()
+	_rename.add_child(_rename_edit)
+	_rename.register_text_enter(_rename_edit)
+	_rename.confirmed.connect(func() -> void: view_rename.emit(_renaming, _rename_edit.text))
+	add_child(_rename)
+	set_views([], 1)
 	_lens_row = HBoxContainer.new()
 	_lens_row.add_theme_constant_override("separation", 4)
 	_lens_row.visible = false
@@ -124,6 +157,52 @@ func set_orbit(orbit: OrbitCamera) -> void:
 	var c: Dictionary = orbit.cur
 	_readout.text = "target %.0f, %.0f   distance %.0f   heading %.0f°   tilt %.0f°" % [
 		c.x, c.y, c.distance, fposmod(c.heading, 360.0), c.elevation]
+
+
+## The saved views ([{name, slot, mode, thumbnail}]) and the slot a save takes: the Views list, the save first, then
+## each view with its thumbnail, mode and key, and the views to rename or delete.
+func set_views(items: Array, free) -> void:
+	var popup := _views.get_popup()
+	popup.clear(true)
+	_view_names = [""]
+	popup.add_item("Save the current view" + ("   Ctrl+Shift+%d" % int(free) if free != null else ""), 0)
+	popup.add_separator("Saved views" if not items.is_empty() else "No saved views yet")
+	var rename := PopupMenu.new()
+	var remove := PopupMenu.new()
+	for item in items:
+		var id := _view_names.size()
+		_view_names.append(item.name)
+		var hint := String(item.mode).capitalize() + ("   Ctrl+%d" % int(item.slot) if item.slot != null else "")
+		popup.add_item("%s   %s" % [item.name, hint], id)
+		var index := popup.item_count - 1
+		if not String(item.thumbnail).is_empty():
+			var image := Image.load_from_file(String(item.thumbnail))
+			if image != null:
+				popup.set_item_icon(index, ImageTexture.create_from_image(image))
+				popup.set_item_icon_max_width(index, 96)
+		rename.add_item(item.name, id)
+		remove.add_item(item.name, id)
+	if not items.is_empty():
+		popup.add_separator()
+		rename.id_pressed.connect(_ask_rename)
+		remove.id_pressed.connect(func(id: int) -> void: view_delete.emit(_view_names[id]))
+		popup.add_submenu_node_item("Rename...", rename)
+		popup.add_submenu_node_item("Delete", remove)
+
+
+func _on_view(id: int) -> void:
+	if id == 0:
+		view_save.emit()
+	elif id > 0 and id < _view_names.size():
+		view_go.emit(_view_names[id])
+
+
+func _ask_rename(id: int) -> void:
+	_renaming = _view_names[id]
+	_rename_edit.text = _renaming
+	_rename.popup_centered(Vector2i(320, 0))
+	_rename_edit.select_all()
+	_rename_edit.grab_focus()
 
 
 func set_mode(mode: String) -> void:

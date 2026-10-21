@@ -176,6 +176,14 @@ func _build_stage() -> void:
 		_frame.bar.lens_pick.connect(_lens_pick)
 		_frame.bar.lens_step.connect(_lens_step)
 		_frame.bar.thirds_toggled.connect(func(on: bool) -> void: _thirds = on)
+		_frame.bar.view_save.connect(_save_view)
+		_frame.bar.view_go.connect(func(name: String) -> void: _send({"type": "command", "name": "apply_view",
+			"view": name, "size": _size()}))
+		_frame.bar.view_rename.connect(func(name: String, new: String) -> void: _send({"type": "command",
+			"name": "rename_view", "view": name, "new": new}))
+		_frame.bar.view_delete.connect(func(name: String) -> void: _send({"type": "command", "name": "delete_view",
+			"view": name}))
+		_frame.bar.view_copy.connect(_copy_view)
 		var entries := []
 		for view in VIEWS:
 			entries.append([view[0], view[1], _views[view[0]]])
@@ -552,7 +560,7 @@ func _focus_centre() -> void:
 
 
 ## The scene's scripted input (tests): each step after its frames, a mouse button, motion or key as Input gets them
-## from the hand, at a map point the camera projects; "tool" arms a palette tool, "command" sends one as its button
+## from the hand, at a map point the camera projects (a key with "ctrl" and "shift"); "tool" arms a palette tool, "command" sends one as its button
 ## does, "lens" picks a lens field's preset as the camera bar does, "screenshot" saves the window as it is, controls
 ## and all; "wait" holds the next step back for its seconds. Done, the viewer closes.
 func _play_drive() -> void:
@@ -595,6 +603,7 @@ func _play_drive() -> void:
 			var k := InputEventKey.new()
 			k.keycode = OS.find_keycode_from_string(String(step.key))
 			k.ctrl_pressed = step.get("ctrl", false)
+			k.shift_pressed = step.get("shift", false)
 			k.pressed = true
 			Input.parse_input_event(k)
 		"tool":
@@ -635,7 +644,14 @@ func _serve_link() -> void:
 				_status(message.text, float(message.get("seconds", 3)))
 			"clipboard":
 				DisplayServer.clipboard_set(message.text)
-				_status("Copied the marks for an agent: paste them into its prompt", 4)
+				if message.has("what"):
+					_status("Copied %s" % message.what, 5)
+				else:
+					_status("Copied the marks for an agent: paste them into its prompt", 4)
+			"views":
+				_frame.bar.set_views(message.items, message.free)
+			"view":
+				_go_to_view(message)
 			"reload":
 				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)),
 					String(message.get("what", "")))
@@ -742,6 +758,8 @@ func _screenshot() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _orbit == null:
 		return
+	if event is InputEventKey and event.pressed and not event.echo and _view_key(event as InputEventKey):
+		return
 	if _mode == "photo" and _photo_input(event):
 		return
 	if event is InputEventMouseButton:
@@ -836,6 +854,84 @@ func _unhandled_input(event: InputEvent) -> void:
 ## A Preview entry: the companion writes the map's preview copy and has the viewer build it in place.
 func _preview(option: String, value: String) -> void:
 	_send({"type": "command", "name": "preview", option: value})
+
+
+## The views' keys in either mode (the studio viewer's): Ctrl+1-9 goes to the view in that slot, Ctrl+Shift+1-9
+## saves the current one there, Ctrl+C copies the view as a mw render command. True when it was one of them.
+func _view_key(key: InputEventKey) -> bool:
+	if not key.ctrl_pressed:
+		return false
+	var digit := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode   # the digit row's place
+	if digit >= KEY_1 and digit <= KEY_9:
+		var slot := int(digit - KEY_0)
+		if key.shift_pressed:
+			_save_view(slot)
+		else:
+			_send({"type": "command", "name": "apply_view", "slot": slot, "size": _size()})
+		return true
+	if key.keycode == KEY_C:
+		_copy_view()
+		return true
+	return false
+
+
+func _size() -> Array:
+	var size := get_viewport().get_visible_rect().size
+	return [size.x, size.y]
+
+
+## The camera as the companion turns it into a view (Companion.spec): the mode, the orbit camera's goal and field of
+## view, the free camera where its eye is going and its lens.
+func _camera_state() -> Dictionary:
+	var g: Dictionary = _orbit.goal
+	return {"mode": _mode,
+		"orbit": {"x": g.x, "y": g.y, "distance": g.distance, "elevation": g.elevation, "heading": g.heading,
+			"fov": _orbit.fov},
+		"fly": {"goal": _list(_fly.goal), "forward": _list(_fly.forward()), "focal": _fly.focal, "roll": _fly.roll,
+			"aperture": _fly.aperture, "focus": _fly.focus, "ev": _fly.ev}}
+
+
+## Save the view (in `slot`, else the first free one) with a thumbnail of the next frame without the controls (Photo:
+## the frame).
+func _save_view(slot := 0) -> void:
+	if _link == null:
+		return
+	var camera := _camera_state()
+	var photo := _mode == "photo"
+	var frame := _fly.frame
+	_frame.chrome = false
+	await RenderingServer.frame_post_draw
+	var path := _scene_path.get_base_dir().path_join("view %d.png" % Time.get_ticks_msec())   # the companion takes it
+	var size := Vector2i(get_viewport().get_visible_rect().size)
+	var code := _save(path, Lens.frame_rect(size, frame) if photo else Rect2i())
+	_frame.chrome = true
+	_send({"type": "command", "name": "save_view", "camera": camera, "slot": slot if slot > 0 else null,
+		"thumbnail": path if code == OK else ""})
+
+
+## Copy view: the camera and what mw render can reproduce of the picture (the size, Photo's frame; the View switches).
+func _copy_view() -> void:
+	var size := Vector2i(get_viewport().get_visible_rect().size)
+	if _mode == "photo":
+		size = Lens.frame_rect(size, _fly.frame).size
+	_send({"type": "command", "name": "copy_view", "camera": _camera_state(), "preview": {"size": [size.x, size.y],
+		"objects": _shown("objects"), "water": _shown("water"), "fog": _shown("fog"), "grid": _shown("grid"),
+		"border": _shown("border"), "walkable": _shown("walkable"), "flow": _shown("flow")}})
+
+
+## A saved view the companion resolved: Photo at its eye with its lens, or the Edit camera orbiting its target.
+func _go_to_view(v: Dictionary) -> void:
+	_fixed = false
+	if v.mode == "photo":
+		_place_view_photo(v)
+		_set_mode("photo", false)
+	else:
+		_set_mode("edit")
+		var o: Dictionary = v.orbit
+		var heading: float = _orbit.goal.heading + wrapf(float(o.heading) - _orbit.goal.heading, -180.0, 180.0)
+		_orbit.set_goal(o.x, o.y, o.distance, heading, o.elevation)     # the short way round
+		_orbit.top = null
+	_status(String(v.name), 2)
 
 
 ## Photo mode's mouse and keys (viewer/app.py's): with the mouse taken, it looks around, a right drag slides, the wheel

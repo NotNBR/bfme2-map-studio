@@ -15,6 +15,7 @@ import numpy as np
 from mapworkshop.native import openbfme
 from mapworkshop.viewer import godot_link, godot_viewer
 from mapworkshop.viewer import marks as marklib
+from mapworkshop.viewer import views as viewlib
 from mapworkshop.viewer.marking import MarkEditor
 
 
@@ -43,6 +44,7 @@ class CompanionTests(unittest.TestCase):
         self.map_path = tmp/'map mp test.map'
         self.map_path.write_bytes(b'')
         patches = [mock.patch.object(marklib, 'MARKS_DIR', tmp/'marks'),
+                   mock.patch.object(viewlib, 'VIEWS', tmp/'views'),
                    mock.patch.object(godot_link, 'Loaded', mock.MagicMock())]
         for p in patches:
             p.start()
@@ -230,6 +232,70 @@ class CompanionTests(unittest.TestCase):
             self.send(dict(type='command', name='overlay', overlay='walkable'))
         self.assertEqual(self.companion.job_messages()[0], dict(type='walkable', error='no game files'))
         self.assertFalse(self.companion.loaded.walking)
+
+
+EDIT = dict(mode='edit', orbit=dict(x=400.0, y=300.0, distance=1200.0, elevation=35.0, heading=90.0, fov=50.0),
+            fly=dict(goal=[0, 0, 0], forward=[0, 1, 0], focal=39.0, roll=0.0, aperture=0.0, focus=1500.0, ev=0.0))
+PHOTO = dict(EDIT, mode='photo', fly=dict(goal=[100.0, 200.0, 400.0], forward=[0.0, 0.6, -0.8], focal=85.0, roll=4.0,
+                                         aperture=2.0, focus=500.0, ev=0.5))
+
+
+class ViewsTests(unittest.TestCase):
+    """The saved views and Copy view, in the studio viewer's files and command."""
+    setUp, send = CompanionTests.setUp, CompanionTests.send
+
+    def test_a_view_is_saved_with_its_thumbnail_and_gone_back_to(self):
+        from PIL import Image
+        shot = Path(self.tmp.name)/'view.png'
+        Image.new('RGB', (1600, 1000), (200, 10, 10)).save(shot)
+        replies = self.send(dict(type='command', name='save_view', camera=EDIT, slot=3, thumbnail=str(shot)))
+        self.assertEqual(replies[0]['text'], 'saved View 1 - Ctrl+3 goes back to it')
+        self.assertFalse(shot.exists())                             # the viewer's picture, taken
+        items = replies[1]['items']
+        self.assertEqual([(v['name'], v['slot'], v['mode']) for v in items], [('View 1', 3, 'edit')])
+        with Image.open(items[0]['thumbnail']) as thumbnail:
+            self.assertEqual(thumbnail.size, viewlib.THUMBNAIL)
+        saved = viewlib.Views(self.map_path).by_name('View 1')['spec']         # as the studio viewer reads it
+        self.assertEqual(saved, dict(target=[400, 300, 50], distance=1200, elevation=35, heading=90, fov=50))
+        view = self.send(dict(type='command', name='apply_view', slot=3, size=[1600, 1000]))[0]
+        self.assertEqual((view['type'], view['mode'], view['name']), ('view', 'edit', 'View 1'))
+        self.assertAlmostEqual(view['orbit']['distance'], 1200.0)
+        self.assertAlmostEqual(view['orbit']['heading'], 90.0)
+        self.assertIn('Ctrl+Shift+4', self.send(dict(type='command', name='apply_view', slot=4))[0]['text'])
+
+    def test_an_edit_view_keeps_its_own_heading(self):
+        self.send(dict(type='command', name='save_view', camera=dict(EDIT, orbit=dict(EDIT['orbit'], heading=200.0))))
+        view = self.send(dict(type='command', name='apply_view', view='View 1'))[0]
+        self.assertAlmostEqual(view['orbit']['heading'], 200.0)    # not -160: the viewer turns the short way from it
+
+    def test_a_photo_view_keeps_its_lens(self):
+        self.send(dict(type='command', name='save_view', camera=PHOTO))
+        saved = viewlib.Views(self.map_path).items[0]
+        self.assertEqual(saved['mode'], 'photo')
+        self.assertEqual(saved['spec'], dict(eye=[100, 200, 400], target=[100, 500, 0], focal=85, roll=4, aperture=2,
+                                             focus=500, ev=0.5))
+        view = self.send(dict(type='command', name='apply_view', view=saved['name'], size=[1600, 1000]))[0]
+        self.assertEqual(view['photo'], dict(focal=85.0, aperture=2.0, ev=0.5, focus=500.0))
+        self.assertEqual(view['eye'], [100.0, 200.0, 400.0])
+
+    def test_rename_and_delete(self):
+        self.send(dict(type='command', name='save_view', camera=EDIT))
+        renamed = self.send(dict(type='command', name='rename_view', view='View 1', new='Gate'))[0]
+        self.assertEqual(renamed['items'][0]['name'], 'Gate')
+        replies = self.send(dict(type='command', name='delete_view', view='Gate'))
+        self.assertEqual(replies[1]['items'], [])
+
+    def test_copy_view_gives_the_mw_render_command_of_the_picture(self):
+        self.companion.preview = dict(weather='rain', sun='own')
+        replies = self.send(dict(type='command', name='copy_view', camera=EDIT,
+                                 preview=dict(size=[1600, 1000], objects=True, water=False, fog=True, grid=True)))
+        text = replies[0]['text']
+        self.assertEqual(replies[0]['type'], 'clipboard')
+        self.assertTrue(text.startswith('mw render --map "'), text)                 # not a project: the file
+        for part in ('--size 1600x1000', '--weather rain', '--grid', 'target=400,300,50 distance=1200'):
+            self.assertIn(part, text)
+        self.assertNotIn('--sun', text)
+        self.assertIn('mw render always draws it', replies[0]['what'])             # the water was hidden
 
 
 class LinkTests(unittest.TestCase):

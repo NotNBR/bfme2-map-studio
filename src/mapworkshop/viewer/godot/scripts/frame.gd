@@ -19,7 +19,11 @@ Marks (the rail at the left)
 View
   1  objects     2  water     6  fog     7  walkable     8  river flow arrows     G  grid     B  map border     M  marks
 
-  V  Photo mode     P  screenshot     F1  these controls"""
+  V  Photo mode     P  screenshot     F1  these controls
+
+Views
+  Ctrl+1-9  go to the view saved there     Ctrl+Shift+1-9  save the view there
+  Ctrl+C  copy the view as a mw render command"""
 
 ## Photo mode's controls, above the camera bar (viewer/camerabar.py's PHOTO_KEYS).
 const PHOTO_KEYS := """Photo mode

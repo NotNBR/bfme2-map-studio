@@ -305,11 +305,17 @@ bottom with the status line and the camera's readout. It has:
   the tools at the left, selecting, moving, resizing and rotating, Del,
   Ctrl+Z and Esc, the marks panel at the right and **Copy for agent**. The
   marks are the same file, so `mw marks` reads them as from the viewer above;
-- Photo mode, as in [Photo mode and the camera bar](#photo-mode-and-the-camera-bar),
-  with **Edit / Photo** at the left of the bar along the bottom, but no
-  Views or Copy view yet. Its depth of field and exposure are `mw render`'s,
-  run on the graphics card; a screenshot (P) in Photo mode is named
-  `<map> photo <time>.png`;
+- the camera bar and Photo mode, as in
+  [Photo mode and the camera bar](#photo-mode-and-the-camera-bar), along the
+  bottom with the status line: **Edit / Photo**, **Views** and **Copy view**
+  (the same views files and command as the viewer above, Ctrl+1-9,
+  Ctrl+Shift+1-9 and Ctrl+C; renaming and deleting are at the end of the
+  Views list), the lens and the framing aids. The depth of field and
+  exposure are `mw render`'s, run on the graphics card; a screenshot (P) in
+  Photo mode is named `<map> photo <time>.png`. Copy view carries the size,
+  the Preview's weather and sun and the View switches `mw render` has; the
+  rest (units, shadows, clouds, detail, time, normal maps) are `mw render`'s
+  defaults, which the Godot viewer does not draw;
 - live reload, as in [Live reload](#live-reload): a new build of a project
   (`mw build`, `mw dev MAP --godot`) is built again in place, about three
   seconds after the build for a small map, and the camera stays. A build that
@@ -321,7 +327,7 @@ bottom with the status line and the camera's readout. It has:
   renders folder (`local/profiles/<profile>/renders/godot/`), **F1** the
   controls.
 
-Properties, Browse... and saved views are not there yet.
+Properties and Browse... are not there yet.
 Shadows, normal maps, cloud shadows, rain and snow, editor markers and the
 game object limits are not in the View menu: OpenBFME's library draws none of
 them as switches.
