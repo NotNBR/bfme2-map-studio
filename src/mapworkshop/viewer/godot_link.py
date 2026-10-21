@@ -12,7 +12,9 @@ does there:
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
   user maps folder, and the viewer builds the map again in place;
 - the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
-  from the Map menu, Build, Test In-Game, the project folder;
+  from the Map menu (Browse... for a project's build or a stock map), Build,
+  Test In-Game, the project folder; Properties opens the studio viewer's
+  window (viewer.properties), whose Save builds the project;
 - the saved views and Copy view, in the studio viewer's own files and
   command (viewer.views): local/views/<map>.json with the thumbnails beside
   it, and a view as the mw render command that draws it;
@@ -31,8 +33,9 @@ From the viewer:
                                     focus: {z, distance, angle} of the Edit camera
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
     command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
-                                    open_folder, open_map {map}, test_game {choice}, overlay {overlay} ('walkable' or
-                                    'flow' switched on), preview {weather, sun} (either), save_view {camera, slot,
+                                    open_folder, open_map {map}, browse, test_game {choice}, properties,
+                                    overlay {overlay} ('walkable' or 'flow' switched on), preview {weather, sun}
+                                    (either), save_view {camera, slot,
                                     thumbnail}, apply_view {view (its name) or slot, size}, rename_view {view, new},
                                     delete_view {view}, copy_view {camera, preview}; camera: {mode, orbit {x, y,
                                     distance, elevation, heading, fov}, fly {goal, forward, focal, roll, aperture,
@@ -298,6 +301,10 @@ class Companion:
         self.sent_job = None                  # the job line and build outcome last sent
         self.loaded = None
         self.copied = None                    # Copy for agent's message once worked out in the background
+        self.properties = None                # the Properties window (viewer.properties), once opened
+        self.opening_properties = False       # its window is being opened (the game's files still loading)
+        self.properties_saved = None          # the project its Save wrote, for the serving loop to build
+        self.browsed = None                   # the .map file Browse... chose, opened from the serving loop
         self._show(*prepared)
 
     def _show(self, scene_path, data, owner, surface):
@@ -361,6 +368,7 @@ class Companion:
                               f's ago).')
                 out.append(dict(type='status', text=f'reloaded {time.time() - built:.1f} s after the build', seconds=3))
                 self.reload_started = None
+                out.append(self.menu())                  # the title, after a Save
         elif kind == 'reload_failed':
             self.progress(f'The Godot viewer could not reload the map: {message.get("error")}')
         else:
@@ -388,6 +396,10 @@ class Companion:
             out += self.set_preview({k: message[k] for k in ('weather', 'sun') if message.get(k)})
         elif name in ('save_view', 'apply_view', 'rename_view', 'delete_view', 'copy_view'):
             out += getattr(self, name)(message)
+        elif name == 'properties':
+            out += self.open_properties()
+        elif name == 'browse':
+            threading.Thread(target=self._browse, args=(self.map_path.parent.parent,), daemon=True).start()
         elif name == 'open_folder':
             if self.owner is None:
                 out.append(dict(type='status', text='a game map has no project folder', seconds=4))
@@ -440,6 +452,39 @@ class Companion:
         return [dict(vertices=vertices[:, [0, 1, 2, 4, 5]].round(2).ravel().tolist(),
                      triangles=triangles.ravel().tolist(), length=float(vertices[-1, 5]))
                 for _, (vertices, triangles) in rivers.strips(self.loaded.map)]
+
+    def _browse(self, folder):
+        """Browse...: a .map file chosen in the system's file dialog (on this thread), opened by the serving loop."""
+        from mapworkshop.viewer.properties import choose_map_file
+        self.browsed = choose_map_file(folder)
+
+    def open_properties(self):
+        """The Properties window for the map shown, as the studio viewer opens it: editable for a project, read-only
+        for a game map; its Save writes map.toml and builds the project, which the viewer reloads. It opens once the
+        game's files are loaded (their defaults for what a map leaves out)."""
+        from mapworkshop.viewer.properties import PropertiesDialog, ini_texts
+        if self.opening_properties:
+            return []
+        window = self.properties
+        if window is not None and window.is_open and window.map_path == self.map_path:
+            window.lift()
+            return []
+        loaded, owner, map_path = self.loaded, self.owner, self.map_path
+        self.opening_properties = True
+
+        def saved(updated):
+            self.properties_saved = updated   # on the window's thread: the serving loop builds it (job_messages)
+
+        def work():
+            try:
+                self.properties = PropertiesDialog(map_path, owner, ini_texts(loaded.game_assets()), saved)
+                self.properties.open()
+            except Exception as error:
+                self.toasts.append(dict(type='status', text=f'the properties could not be shown: {error}', seconds=8))
+            finally:
+                self.opening_properties = False
+        threading.Thread(target=work, daemon=True).start()
+        return [dict(type='status', text='opening the map properties...', seconds=3)]
 
     def _played(self, event):
         """Test In-Game's events: the viewer minimises while the game is up and comes back when it closes."""
@@ -596,6 +641,19 @@ class Companion:
     def job_messages(self):
         """The toasts, and the jobs' status line and build chip when they changed (Build, Test In-Game)."""
         out, self.toasts = self.toasts, []
+        if self.browsed:
+            path, self.browsed = self.browsed, None
+            try:
+                out += self.open_map(str(path))
+            except Exception as error:           # any map file at all: say why it does not open, and go on
+                out.append(dict(type='status', text=f'that map cannot be opened: {error}', seconds=8))
+        if self.properties_saved:
+            # the Properties window wrote map.toml: build that project (the map shown, or the one it was opened on)
+            updated, self.properties_saved = self.properties_saved, None
+            if self.owner is not None and updated.map_file.resolve() == self.map_path.resolve():
+                self.owner = updated
+            out.append(dict(type='status', text='map properties saved to map.toml - building', seconds=4))
+            self.build.start(updated)
         line = self.jobs.current()
         outcome = self.build.outcome
         job = (line, self.build.running, self.build.line if self.build.running else None, outcome)
@@ -662,6 +720,7 @@ class Companion:
         try:
             scene_path, data, owner, surface = self.prepare(str(self.map_path), self.preview)
             loaded = Loaded(self.map_path, surface, self.loaded.assets)
+            self.owner = owner or self.owner          # map.toml read again: a Save's new title
         except Exception as error:
             self.progress(f'{self.map_path.name} changed, but it cannot be read: {error!r}; the viewer keeps the last good one')
             return dict(type='status', text=f'the new build cannot be read: {error}', seconds=6)

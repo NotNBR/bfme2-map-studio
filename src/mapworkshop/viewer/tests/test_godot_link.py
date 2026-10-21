@@ -190,6 +190,33 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual([r['type'] for r in replies[:2]], ['status', 'menu'])
         self.assertEqual(self.companion.preview, godot_link.OWN)
 
+    def test_properties_open_the_studio_viewers_window_whose_save_builds(self):
+        at_once = mock.MagicMock(side_effect=lambda target, daemon: mock.MagicMock(start=target))
+        dialog = mock.MagicMock()
+        with mock.patch('mapworkshop.viewer.properties.PropertiesDialog', return_value=dialog) as window, \
+                mock.patch.object(godot_link.threading, 'Thread', at_once):
+            self.send(dict(type='command', name='properties'))
+        path, owner, texts, saved = window.call_args[0]
+        self.assertEqual((path, owner, sorted(texts)), (self.map_path, None, ['WaterTransparency', 'Weather']))
+        dialog.open.assert_called_once_with()
+        updated = mock.MagicMock(**{'map_file.resolve.return_value': self.map_path.resolve()})
+        saved(updated)                                             # Save, on the window's thread: only noted
+        with mock.patch.object(self.companion.build, 'start') as build:
+            self.companion.job_messages()                          # the serving loop builds it
+        build.assert_called_once_with(updated)
+        dialog.is_open, dialog.map_path = True, self.map_path
+        self.assertEqual(self.send(dict(type='command', name='properties')), [])   # open: brought to the front
+        dialog.lift.assert_called_once_with()
+
+    def test_a_map_chosen_by_browse_opens_from_the_serving_loop(self):
+        self.companion.browsed = str(self.map_path)
+        with mock.patch.object(self.companion, 'open_map', return_value=[dict(type='reload')]) as open_map:
+            self.assertEqual(self.companion.job_messages()[0], dict(type='reload'))
+        open_map.assert_called_once_with(str(self.map_path))
+        self.companion.browsed = 'elsewhere.map'
+        with mock.patch.object(self.companion, 'open_map', side_effect=RuntimeError('neither')):
+            self.assertIn('cannot be opened', self.companion.job_messages()[0]['text'])
+
     def test_build_and_test_in_game_start_the_studio_viewers_jobs(self):
         with mock.patch.object(self.companion.build, 'start') as build:
             self.send(dict(type='command', name='build'))

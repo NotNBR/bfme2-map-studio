@@ -38,7 +38,8 @@
   walkability estimate and the river flow arrows), Preview (the weather
   and sun presets, as a copy of the map), Photo mode (the free camera, the
   lens, frames and thirds, and `render/photo.py`'s depth of field as a
-  compositor effect), and the saved views and Copy view are done.
+  compositor effect), the saved views and Copy view, and Properties are
+  done.
 
 ## Where we are
 

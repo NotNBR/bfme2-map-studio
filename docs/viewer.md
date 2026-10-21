@@ -276,9 +276,11 @@ tools down the left edge, the marks panel at the right and a bar along the
 bottom with the status line and the camera's readout. It has:
 
 - the toolbar, as in [The toolbar](#the-toolbar): **Map** (the map projects,
-  the game's maps, Open project folder), **Build** with its chip, **Test
-  In-Game** and the choice of what it starts, **Preview**, **View**, **Top
-  view**, **Reset view**, **Screenshot** and the frame rate;
+  the game's maps, Open project folder, and Browse... for a project's build
+  or a stock map), **Properties** (the studio viewer's window; the build its
+  Save starts reloads here), **Build** with its chip, **Test In-Game** and
+  the choice of what it starts, **Preview**, **View**, **Top view**, **Reset
+  view**, **Screenshot** and the frame rate;
 - **Preview**, as in [The toolbar](#the-toolbar): **Weather** and **Sun**,
   with the button showing the choice. OpenBFME draws a map as its file and
   `map.ini` say, so a preview is a copy of the map with the preset's world
@@ -327,7 +329,6 @@ bottom with the status line and the camera's readout. It has:
   renders folder (`local/profiles/<profile>/renders/godot/`), **F1** the
   controls.
 
-Properties and Browse... are not there yet.
 Shadows, normal maps, cloud shadows, rain and snow, editor markers and the
 game object limits are not in the View menu: OpenBFME's library draws none of
 them as switches.

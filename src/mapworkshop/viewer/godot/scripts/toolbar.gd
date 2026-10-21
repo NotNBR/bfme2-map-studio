@@ -1,8 +1,8 @@
-## The toolbar across the top, as the studio viewer has it (docs/viewer.md, "The toolbar"): Map (the map projects, the
-## game's maps, Open project folder), Properties, Build with its chip, Test In-Game and what it starts, Preview (the
-## weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay open while
-## their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate. The lists come
-## from the companion's menu message.
+## The toolbar across the top, as the studio viewer has it (docs/viewer.md, "The toolbar"): Map (the map projects,
+## the game's maps, Open project folder, Browse...), Properties, Build with its chip, Test In-Game and what it starts,
+## Preview (the weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay
+## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate. The
+## lists come from the companion's menu message.
 class_name Toolbar
 extends PanelContainer
 
@@ -44,7 +44,8 @@ func _ready() -> void:
 	_map.get_popup().id_pressed.connect(_on_map)
 	_map.get_popup().max_size = Vector2i(520, 700)
 	row.add_child(_map)
-	_add(row, "Properties", "The map's map-wide settings: not in the Godot viewer yet", Callable()).disabled = true
+	_add(row, "Properties", "The map's map-wide settings: a project's to edit (Save builds it), a game map's to read",
+		func() -> void: command.emit("properties"))
 	_add(row, "Build", "Build the project again (it reloads when it is done)", func() -> void: command.emit("build"))
 	_build_chip = Label.new()
 	_build_chip.add_theme_color_override("font_color", UITheme.MUTED)
@@ -116,6 +117,7 @@ func set_menu(menu: Dictionary) -> void:
 	popup.add_separator()
 	popup.add_item("Open project folder", -2)
 	popup.set_item_disabled(popup.item_count - 1, not menu.project)
+	popup.add_item("Browse...", -3)
 	for index in _test_game.item_count:
 		if _test_game.get_item_metadata(index) == menu.test_game:
 			_test_game.select(index)
@@ -149,6 +151,8 @@ func _on_preview(id: int) -> void:
 func _on_map(id: int) -> void:
 	if id == -2:
 		command.emit("open_folder")
+	elif id == -3:
+		command.emit("browse")
 	elif id >= 0 and id < _maps.size():
 		map_chosen.emit(_maps[id])
 

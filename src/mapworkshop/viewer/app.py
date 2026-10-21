@@ -582,31 +582,22 @@ class Viewer:
             self.session.reload = True
 
     def browse_map(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        path = filedialog.askopenfilename(title='Open a BFME2 map', initialdir=str(self.session.source.parent.parent),
-                                          filetypes=[('BFME2 maps', '*.map'), ('All files', '*.*')])
-        root.destroy()
-        return Path(path) if path else None
+        from mapworkshop.viewer.properties import choose_map_file
+        return choose_map_file(self.session.source.parent.parent)
 
     def open_properties(self):
         """The Properties window (viewer.properties) for the map shown: editable
         for a project, read-only for a game map. Saving rebuilds the project."""
         from mapworkshop.assets.library import GameAssets
-        from mapworkshop.viewer.properties import PropertiesDialog
+        from mapworkshop.viewer.properties import PropertiesDialog, ini_texts
         if self.properties is not None and self.properties.is_open:
             self.properties.lift()
             return
         r = self.renderer
         assets = r.assets if r is not None else GameAssets()
-        ini_texts = dict(Weather=assets.ini_text('weather.ini'), WaterTransparency=assets.ini_text('water.ini'))
-
         def saved(updated):
             self.properties_saved = updated
-        self.properties = PropertiesDialog(self.session.source, self.session.owner, ini_texts, saved)
+        self.properties = PropertiesDialog(self.session.source, self.session.owner, ini_texts(assets), saved)
         self.properties.open()
 
     def copy_for_agent(self):

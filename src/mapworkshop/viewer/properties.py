@@ -24,6 +24,26 @@ PROJECT_KEYS = ('title', 'description', 'weather')
 DERIVED = {('world', 'mapName'): 'title', ('world', 'mapDescription'): 'description'}
 
 
+def ini_texts(assets):
+    """The game's INI texts the dialog takes its defaults from (properties.defaults)."""
+    return dict(Weather=assets.ini_text('weather.ini'), WaterTransparency=assets.ini_text('water.ini'))
+
+
+def choose_map_file(folder):
+    """A .map file chosen in the system's file dialog, starting in `folder` (Browse...); None if none was. It
+    blocks the calling thread while the dialog is open."""
+    from pathlib import Path
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    path = filedialog.askopenfilename(title='Open a BFME2 map', initialdir=str(folder),
+                                      filetypes=[('BFME2 maps', '*.map'), ('All files', '*.*')])
+    root.destroy()
+    return Path(path) if path else None
+
+
 class PropertiesDialog:
     """Open with open(); `on_saved(project)` runs on the dialog's thread after
     a project's map.toml was written."""
