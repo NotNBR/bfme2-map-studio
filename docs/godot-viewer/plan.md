@@ -30,8 +30,9 @@
   is done: the submodule pins `studio-2026-10-21-1` in the user's public fork
   (official `main` plus a short, listed set of commits), nothing is written
   into it, and `mw test` checks that. Phase 1 is done: `mw view MAP --godot`
-  opens a map in about two seconds, with the Edit camera and the marks, and
-  puts map points on the same pixels as `mw render`.
+  opens a map in about two seconds, with the Edit camera, and puts map points
+  on the same pixels as `mw render`. Phase 2 is done: marking for agents, the
+  marks panel, Copy for agent and live reload, through a Python companion.
 
 ## Where we are
 
@@ -129,9 +130,12 @@ running
 - four shaders it loads by fixed path: `res://shaders/terrain.gdshader`,
   `water_standing.gdshader`, `road.gdshader`, `river.gdshader` (its other
   `res://` files belong to its game menus);
-- four classes: `RetailFileSystem` (the game's files), `MapTerrainBuilder`
-  (`build_map`: terrain, water, rivers, roads), `MapObjectBuilder` (`setup`,
-  `build_objects`, `advance`: objects and animated units) and `PathfindView`.
+- four classes: `RetailFileSystem` (`mount_retail`: the game's files),
+  `MapTerrainBuilder` (`build_map`: terrain, water, rivers, roads),
+  `MapObjectBuilder` (`setup`, `build_objects`, `advance`: objects and animated
+  units) and `PathfindView`, each builder's `get_report`, and the nodes the
+  layer switches find in what they build (`MapObjects`, `StandingWater`,
+  `Rivers`).
 
 **What each side does:**
 
@@ -139,7 +143,7 @@ running
 |---|---|---|
 | Drawing the map | OpenBFME's builders; units animated by `advance()` | the build, installed as a user map |
 | Edit and Photo cameras | `Camera3D`, the studio's camera maths carried over | the terrain heights, once per load, for picking the ground and keeping the camera on it |
-| Marks | drawn draped on the terrain and edited in Godot; saved as `local/marks/<map>.json` in today's format | what each mark covers (the marks panel, Copy for agent), from today's code |
+| Marks | drawn over the map and picked under the cursor, as `viewer/overlay.py` draws and picks them; each mouse event goes to the companion with the cursor's ray and what is under it | the editing itself (`viewer/marking.py`'s MarkEditor), `local/marks/<map>.json` in today's format (`viewer/marks.py`), what each mark covers (the marks panel, Copy for agent), from today's code |
 | Photo mode | today's lens: the frame from the studio's own camera maths (the sensor and frame rules of `render/photo.py`), the depth of field as a compositor effect porting `render/photo.py`'s blur (phase 1 found Godot's `CameraAttributesPhysical` unfit: see there) | the lens settings, as `mw render` resolves a view |
 | Saved views, Copy view | the same `local/views` JSON and `mw render` command | |
 | Walkability, river flow | drawn over the terrain | computed as today, sent as an image and line data |
@@ -240,6 +244,25 @@ The Python companion and its protocol (with unit tests); live reload after
 
 Verified by: `mw marks` gives the same output for marks drawn in either viewer;
 the time from a finished build to the reloaded view is measured.
+
+**Done (2026-10-21).** `mw view MAP --godot` (and `mw dev MAP --godot`) runs as
+the viewer's companion, `viewer/godot_link.py`: JSON lines over a local
+socket. The editing stays in Python: Godot draws the marks over the map and
+finds what is under the cursor with `overlay.py`'s rules (`mark_overlay.gd`),
+sends each press, drag, release, click and hover with the cursor's ray, and
+the companion's MarkEditor (the studio viewer's own) changes and saves the
+marks and answers with what to draw, the panel and the status. Measured:
+
+| | |
+|---|---|
+| Marks drawn by scripted mouse input in the Godot viewer | a circle and a rectangle drawn, then the circle dragged by its rim (the overlay picking it): the same marks file, and the same `mw marks` text, as the same strokes through the studio viewer's MarkEditor (`viewer/tests/test_godot_link.py`, headless) |
+| A rebuild to the reloaded view | 2.9 and 3.2 s (two runs) after the build wrote the map (its file's time: an upper bound of the time after the build finished), for Blend Lab; the viewer's reload 2.5 s of it, more than its first opening, 1.6 s |
+| The protocol and the companion | unit tests without Godot: drawing, selecting, moving, deleting, undo, escape, the state and when it is sent, the panel, Copy for agent, errors, the socket, reload and a build that cannot be read |
+
+Found: scripted input (`Input.parse_input_event`, the scene's `drive` steps)
+plays the viewer's own input path headless, so the tests exercise the
+viewer, the socket and the companion together; a reload takes longer than
+the first opening, worth a look when the reload is made faster.
 
 ### Phase 3: parity
 

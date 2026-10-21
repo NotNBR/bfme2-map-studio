@@ -148,7 +148,10 @@ def source(progress=print):
                                f'submodule"')
         progress(f'Moving the OpenBFME submodule to the pinned {pin[:8]}...')
         _git('submodule', 'update', '--init', '--checkout', '--', name)
-    _git('submodule', 'update', '--init', cwd=SOURCE)                   # godot-cpp at the commit the pin records
+    cpp = 'engine/thirdparty/godot-cpp'
+    pinned_cpp = _git('ls-files', '--stage', '--', cpp, cwd=SOURCE).split()[1]
+    if not (SOURCE/cpp/'.git').exists() or _git('rev-parse', 'HEAD', cwd=SOURCE/cpp) != pinned_cpp:
+        _git('submodule', 'update', '--init', cwd=SOURCE)               # godot-cpp at the commit the pin records
     for option in LFS_OFF[1::2]:
         key, value = option.split('=', 1)
         current = subprocess.run(['git', 'config', '--get', key], cwd=SOURCE, capture_output=True, text=True)

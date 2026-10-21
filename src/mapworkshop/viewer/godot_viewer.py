@@ -8,11 +8,15 @@ Python prepares what the viewer needs and starts it:
   (native/openbfme.py, install_user_map()), where the library opens it by
   name; a stock map opens from the game's archives;
 - the scene, local/openbfme/scenes/<map>/: scene.json (the map, the camera,
-  the marks' outlines from local/marks/, what to capture and check) and
-  surface.f32, the visible surface as the studio's viewer has it (terrain
-  raised to standing water, render.engine's surface_at) on the height map's
-  samples, on which the viewer picks the ground and drapes the marks;
+  the marks as they are drawn, what to capture and check, the companion's
+  port) and surface.f32, the visible surface as the studio's viewer has it
+  (terrain raised to standing water, render.engine's surface_at) on the
+  height map's samples, on which the viewer picks the ground;
 - the assembled project, local/openbfme/viewer/ (openbfme.assemble()).
+
+While the viewer is open, the companion (viewer/godot_link.py) keeps the
+marks, the marks panel and Copy for agent, and reloads the map when it is
+built again.
 
 A view (`--view`, the key=value words of `mw render --view`) is resolved here
 as mw render resolves it (on the terrain's own heights), and the viewer puts
@@ -38,6 +42,7 @@ from mapworkshop.mapkit.lines import inside
 from mapworkshop.native import openbfme
 from mapworkshop.render.camera import parse_view
 from mapworkshop.render.photo import fov_from_focal
+from mapworkshop.viewer import godot_link
 from mapworkshop.viewer import marks as marklib
 
 SCENES = openbfme.HOME/'scenes'
@@ -48,8 +53,8 @@ FOV = 50.0            # degrees across the width, as the studio viewer's Edit ca
 class Heights:
     """A height map's samples in map units with `border` samples around the playable area (formats.terrain.height_at)."""
 
-    def __init__(self, heights, border):
-        self.heights, self.border = heights, border
+    def __init__(self, heights, border, playable):
+        self.heights, self.border, self.playable = heights, border, playable
 
     def height_at(self, x, y):
         return height_at(self.heights, self.border, x, y)
@@ -63,8 +68,8 @@ class Surface(Heights):
     def __init__(self, m):
         hm = m.heightmap()
         terrain = (hm['elevations']*0.0390625).astype(np.float32)
-        super().__init__(terrain.copy(), hm['border'])
-        self.terrain, self.playable = Heights(terrain, hm['border']), playable_extent(hm)
+        super().__init__(terrain.copy(), hm['border'], playable_extent(hm))
+        self.terrain = Heights(terrain, hm['border'], self.playable)
         ys, xs = np.indices(self.heights.shape)
         xs, ys = (xs - self.border)*10.0, (ys - self.border)*10.0
         for area in records(m, 'StandingWaterAreas'):
@@ -118,22 +123,9 @@ def pixel(view_projection, point, size):
     return float((ndc[0] + 1)/2*size[0]), float((1 - ndc[1])/2*size[1])
 
 
-def outlines(map_path):
-    """The map's marks (local/marks/) as the viewer draws them: id, kind, outline points in map x/y, closed."""
-    path = marklib.marks_path(map_path)
-    if not path.exists():
-        return []
-    data = json.loads(path.read_text(encoding='utf-8'))
-    out = []
-    for mark in data.get('marks', []):
-        points, closed = marklib.outline(mark)
-        out.append(dict(id=mark['id'], kind=mark['kind'], points=np.round(points, 1).tolist(), closed=bool(closed)))
-    return out
-
-
-def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False):
+def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None):
     """Write the scene for map `name` (a project, stock map or .map file); (scene.json, its contents, the project or
-    None). A probe without a z stands on the terrain."""
+    None, the Surface). A probe without a z stands on the terrain."""
     map_path, native, user_map, owner = source(name)
     surface = Surface(Map(map_path.read_bytes()))
     folder = SCENES/native
@@ -143,36 +135,59 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False):
                 user_map_folder=str(openbfme.user_maps()) if user_map else '', size=list(size),
                 surface=dict(file='surface.f32', columns=surface.heights.shape[1], rows=surface.heights.shape[0],
                              border=surface.border, cell=10.0),
-                playable=list(surface.playable), fov=FOV, marks=outlines(map_path), check=check,
-                screenshot=str(Path(screenshot).resolve()) if screenshot else '', screenshots=str(RENDERS/'godot'))
+                playable=list(surface.playable), fov=FOV, marks=godot_link.marks_state(marklib.Marks(map_path), surface),
+                check=check, screenshot=str(Path(screenshot).resolve()) if screenshot else '',
+                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [])
     if view:
         camera = resolve(view, surface.terrain, size)
         data['view'] = {k: v for k, v in camera.items() if k != 'view_projection'}
         points = [list(p) if len(p) == 3 else [*p, float(surface.terrain.height_at(*p))] for p in probes]
         data['probes'] = [dict(point=p, pixel=pixel(camera['view_projection'], p, size)) for p in points]
     (folder/'scene.json').write_text(json.dumps(data, indent=1), encoding='utf-8')
-    return folder/'scene.json', data, owner
+    return folder/'scene.json', data, owner, surface
 
 
-def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, progress=print, timeout=None):
+def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, progress=print, timeout=None,
+        drive=None):
     """Prepare and start the viewer on map `name`. With a screenshot or check, wait for it and return
-    (exit code, the viewer's output lines); otherwise return the running process."""
+    (exit code, the viewer's output lines); otherwise serve it as its companion until it closes and return its exit
+    code. `drive` (tests): scripted input the viewer plays headless, with the companion, before it closes."""
     started = time.perf_counter()
     openbfme.assets(progress)
     gui, console = openbfme.assemble(progress)
-    path, data, owner = scene(name, view, probes, screenshot, size, check)
+    interactive = not (screenshot or check)
+    link = godot_link.Link() if interactive else None
+    path, data, owner, surface = scene(name, view, probes, screenshot, size, check, link.port if link else None, drive)
     if owner is not None:
         openbfme.install_user_map(owner)
     env = openbfme.environment([])
-    exe = console if (screenshot or check) else gui
-    args = [str(exe), *(['--headless'] if check and not screenshot else []), '--path', str(openbfme.VIEWER), '--',
-            f'--scene={path}']
+    headless = (check and not screenshot) or (drive and not any(step['do'] == 'screenshot' for step in drive))
+    args = [str(gui if interactive and not drive else console), *(['--headless'] if headless else []),
+            '--path', str(openbfme.VIEWER), '--', f'--scene={path}']
     progress(f'Opening {data["title"]} in the Godot viewer ({time.perf_counter() - started:.1f} s to prepare)...')
-    if not (screenshot or check):
-        return subprocess.Popen(args, env=env, cwd=openbfme.HOME)
-    result = subprocess.run(args, env=env, cwd=openbfme.HOME, capture_output=True, text=True, encoding='utf-8',
-                            errors='replace', timeout=timeout or 600)
-    return result.returncode, (result.stdout + result.stderr).splitlines()
+    if not interactive:
+        result = subprocess.run(args, env=env, cwd=openbfme.HOME, capture_output=True, text=True, encoding='utf-8',
+                                errors='replace', timeout=timeout or 600)
+        return result.returncode, (result.stdout + result.stderr).splitlines()
+
+    def rescene():
+        """The build changed: into the user maps folder again, and the scene (its surface) written again."""
+        if owner is not None:
+            openbfme.install_user_map(owner)
+        return scene(name, size=size, port=link.port)[3]
+
+    # driven (tests): the viewer's output kept out of the caller's, and a hung viewer stopped after `timeout`
+    quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) if drive else {}
+    process = subprocess.Popen(args, env=env, cwd=openbfme.HOME, **quiet)
+    companion = godot_link.Companion(Path(data['map_path']), surface, rescene if owner else None, progress)
+    try:
+        companion.serve(link, process)
+        return process.wait(timeout=(timeout or 600) if drive else None)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise RuntimeError(f'the Godot viewer did not finish its scripted input within {timeout or 600} s')
+    finally:
+        link.close()
 
 
 def main(args):
@@ -184,8 +199,7 @@ def main(args):
     name = args.map or args.map_option
     try:
         if not (args.screenshot or probes):
-            run(name, args.view, size=size)
-            return 0
+            return run(name, args.view, size=size)
         code, lines = run(name, args.view, probes, args.screenshot, size, check=not args.screenshot)
     except (LookupError, RuntimeError, ValueError) as error:
         raise SystemExit(f'mw view --godot: {error}')

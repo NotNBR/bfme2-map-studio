@@ -70,6 +70,7 @@ def parser():
     s = sub.add_parser('dev', help='Rebuild on every save, with the viewer open')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
     s.add_argument('--no-view', action='store_true', help="Don't open the viewer")
+    s.add_argument('--godot', action='store_true', help='Open the Godot viewer on OpenBFME instead (mw view --godot)')
     s.add_argument('--no-cache', action='store_true', help="Make every calculation again instead of reusing earlier builds' results")
     s = sub.add_parser('build', help='Build a map')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
@@ -722,8 +723,9 @@ def cmd_dev(args, extra):
     if not p.map_file.exists() or _changed_since_build(p):
         _build(p, extra)
     viewer = None
+    view = [sys.executable, '-m', 'mapworkshop.viewer.app', p.id, *(['--godot'] if args.godot else [])]
     if not args.no_view and p.map_file.exists():
-        viewer = subprocess.Popen([sys.executable, '-m', 'mapworkshop.viewer.app', p.id], cwd=ROOT)
+        viewer = subprocess.Popen(view, cwd=ROOT)
     say(f'Watching {p.folder} - save a file to rebuild, Ctrl+C to stop.')
     seen = _snapshot(p)
     try:
@@ -737,7 +739,7 @@ def cmd_dev(args, extra):
                 code = _build(p, extra)
                 say(f'{"Rebuilt" if code == 0 else "Failed"} after {time.time() - started:.0f} s; watching.')
                 if code == 0 and viewer is None and not args.no_view:
-                    viewer = subprocess.Popen([sys.executable, '-m', 'mapworkshop.viewer.app', p.id], cwd=ROOT)
+                    viewer = subprocess.Popen(view, cwd=ROOT)
     except KeyboardInterrupt:
         pass
     finally:

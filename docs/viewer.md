@@ -261,6 +261,7 @@ strips show. `mw render ... --flow` draws the same into still renders, and
 
 ```powershell
 mw view MAP --godot [--view "target=X,Y distance=D ..."] [--size 1600x1000]
+mw dev MAP --godot
 mw view MAP --godot --view "..." --screenshot PICTURE.png
 mw view MAP --godot --view "..." --probe X,Y[,Z] [--probe ...]
 ```
@@ -268,23 +269,37 @@ mw view MAP --godot --view "..." --probe X,Y[,Z] [--probe ...]
 `--godot` opens the map in the studio's new viewer instead, on
 [OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)'s library: the
 map as the game draws it, roads included and the units in their idle
-animations, in about two seconds once OpenBFME is built. It is the first
-step of [moving the viewer to Godot](godot-viewer/plan.md) and does less than
-the viewer above so far: the Edit camera, as in [Moving around](#moving-around)
-(left drag orbits, right or middle drag pans, the wheel zooms, a double-click
-flies there, W A S D, Q / E, R / F, Z / X, Space or Home and T), **1** for
-the objects, **2** the water, **M** the marks, which it shows but does not
-edit, **P** a screenshot into `godot/` in the profile's renders folder
-(`local/profiles/<profile>/renders/godot/`), **F1** the controls. Weather,
-the sky and shadows are not drawn yet.
+animations, in about two seconds once OpenBFME is built. It is a step of
+[moving the viewer to Godot](godot-viewer/plan.md) and does less than the
+viewer above so far. It has:
+
+- the Edit camera, as in [Moving around](#moving-around): left drag orbits,
+  right or middle drag pans, the wheel zooms, a double-click flies there,
+  W A S D, Q / E, R / F, Z / X, Space or Home and T;
+- marking, as in [Marking the map for an agent](#marking-the-map-for-an-agent):
+  the palette at the top left, selecting, moving, resizing and rotating, Del,
+  Ctrl+Z and Esc, the marks panel at the right and **Copy for agent**. The
+  marks are the same file, so `mw marks` reads them as from the viewer above;
+- live reload, as in [Live reload](#live-reload): a new build of a project
+  (`mw build`, `mw dev MAP --godot`) is built again in place, about three
+  seconds after the build for a small map, and the camera stays. A build that
+  cannot be read leaves the last good map and says so in the status line;
+  stock maps are not watched;
+- **1** for the objects, **2** the water, **M** the marks, **P** a screenshot
+  into `godot/` in the profile's renders folder
+  (`local/profiles/<profile>/renders/godot/`), **F1** the controls.
+
+Weather, the sky, shadows, the toolbar, Photo mode, saved views and the
+overlays are not there yet.
 
 A project opens from its last build, which goes into OpenBFME's user maps
 folder in `local/openbfme/appdata/`; a stock map opens from RotWK's archives,
-so only under the RotWK profile. `--view` takes the words of `mw render
---view` (an orbit view, not a top view) and starts there, and the first move
-orbits from it: the view is worked out as `mw render` works it out, so the
-camera puts a map point on the same pixel as `mw render`'s. `--probe` prints
-that pixel from each, and `--screenshot` saves the view and closes; both need
-the window at the `--size` asked for. Photo mode is not ported yet: a view's
-`focal` frames the picture as `mw render` does, and `aperture` and `focus`
-change nothing.
+so only under the RotWK profile. While the window is open, `mw view --godot`
+keeps running: it is the viewer's companion, which keeps the marks and
+watches the build. `--view` takes the words of `mw render --view` (an orbit
+view, not a top view) and starts there, and the first move orbits from it:
+the view is worked out as `mw render` works it out, so the camera puts a map
+point on the same pixel as `mw render`'s. `--probe` prints that pixel from
+each, and `--screenshot` saves the view and closes; both need the window at
+the `--size` asked for. Photo mode is not ported yet: a view's `focal` frames
+the picture as `mw render` does, and `aperture` and `focus` change nothing.

@@ -108,6 +108,14 @@ func drive(dt: float, forward: float, right: float, turn: float, tilt: float, zo
 	goal["y"] = clampf(goal.y, 0.0, playable.y)
 
 
+## The angle (radians, counter-clockwise) that lines a new rectangle up with the screen; 0 within 10 degrees of the
+## map axes (Camera.screen_angle).
+func screen_angle() -> float:
+	var turn := -deg_to_rad(cur.heading)
+	var a := turn - roundf(turn / (PI / 2.0)) * (PI / 2.0)     # math.remainder(turn, pi/2)
+	return 0.0 if absf(a) < deg_to_rad(10.0) else a
+
+
 ## The eye and target in map coordinates (Camera.matrices): never inside the terrain.
 func eye_target() -> Array:
 	var e := deg_to_rad(cur.elevation)

@@ -1,7 +1,11 @@
 ## The studio's map viewer on OpenBFME's library (docs/godot-viewer/plan.md). mw view MAP --godot starts it
 ## (viewer/godot_viewer.py) with --scene=<scene.json>: the map to open (a user map by name, or a stock map from the
-## archives), the surface heights it picks and drapes on, the marks, and the camera. It opens the map through the
-## library (RetailFileSystem, MapTerrainBuilder, MapObjectBuilder) and shows it with the studio's Edit camera.
+## archives), the surface heights it picks on, the marks, the camera and the companion's port. It opens the map through
+## the library (RetailFileSystem, MapTerrainBuilder, MapObjectBuilder) and shows it with the studio's Edit camera.
+##
+## With the companion (viewer/godot_link.py, over Link) it edits marks: the palette arms a tool, and each left press,
+## drag, release and hover goes to the companion with the cursor's ray and what the overlay finds under it; the
+## companion's MarkEditor answers with the marks to draw, the panel and the status. A new build reloads in place.
 ##
 ## The scene can also ask for a fixed view (mw render's, resolved in Python), points to project through it (probes:
 ## each printed with where Python puts it), a screenshot to save, or a check (headless: open the map, print the
@@ -12,35 +16,49 @@ extends Node3D
 const CLASSES := ["RetailFileSystem", "MapTerrainBuilder", "MapObjectBuilder", "PathfindView"]
 const SHADERS := ["terrain", "water_standing", "road", "river"]
 const WARMUP_FRAMES := 24     # frames before a screenshot: the objects' first poses and the streamed textures
+const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
 const HELP := ("Left drag orbit, right/middle drag pan, wheel zoom, double-click fly to, WASD move, Q/E R/F Z/X turn tilt zoom,\n"
-	+ "Space or Home reset, T top, 1 objects, 2 water, M marks, P screenshot, F1 help")
+	+ "Space or Home reset, T top, 1 objects, 2 water, M marks, Del delete, Ctrl+Z undo, Esc step back, P screenshot, F1 help")
+const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
+	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
 var _scene := {}
-var _scene_dir := ""
+var _scene_path := ""
 var _surface: Surface
 var _fs: RefCounted
 var _terrain: RefCounted
 var _objects: RefCounted
 var _root: Node3D
-var _marks: Node3D
 var _camera: Camera3D
 var _world_env: WorldEnvironment
 var _sun: DirectionalLight3D
 var _orbit: OrbitCamera
+var _overlay: MarkOverlay
+var _ui: MarksUI
+var _link: Link
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
 var _label: Label
 var _frames := 0
-var _drag := ""               # "orbit" or "pan" while a mouse button is held
+var _drag := ""               # while a button is held: "orbit", "pan", "marks" (the companion edits), "pending" (asked it)
 var _anchor := Vector3.INF    # the grabbed ground point while panning
+var _press_at := Vector2.ZERO
+var _press_seq := 0           # the number of the last press sent; the companion's answer carries it
+var _press_double := false    # that press was a double-click: unless the marks take it, the camera flies there
+var _pending_orbit := Vector2.ZERO   # the mouse's motion while the answer is awaited, for the orbit it may become
+var _hover := false           # the cursor moved: tell the companion what is under it, once a frame
+var _drive := []              # the scene's scripted input, for tests: steps still to play
+var _drive_wait := 0          # frames until the next step
+var _drive_until := 0         # and the time (ms) it waits for
+var _driving := false
+var _drive_at := Vector2.ZERO # where the scripted cursor last was
 
 
 func _ready() -> void:
-	var scene_path := ""
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--scene="):
-			scene_path = arg.substr(8)
+			_scene_path = arg.substr(8)
 	var missing := _missing()
-	if scene_path.is_empty():
+	if _scene_path.is_empty():
 		print("VIEWER ready" if missing.is_empty() else "VIEWER missing: " + ", ".join(missing))
 		if _headless():
 			get_tree().quit(0 if missing.is_empty() else 1)
@@ -48,14 +66,7 @@ func _ready() -> void:
 	if not missing.is_empty():
 		_fail("the assembly lacks " + ", ".join(missing))
 		return
-	_scene = JSON.parse_string(FileAccess.get_file_as_string(scene_path))
-	if not (_scene is Dictionary):
-		_fail("cannot read the scene %s" % scene_path)
-		return
-	_scene_dir = scene_path.get_base_dir()
-	_surface = Surface.load_from(_scene_dir.path_join(_scene.surface.file), _scene.surface)
-	if _surface == null:
-		_fail("cannot read the surface heights")
+	if not _read_scene():
 		return
 	# the picture's size in every mode, so the camera has the aspect Python resolved the view for
 	get_window().size = Vector2i(int(_scene.size[0]), int(_scene.size[1]))
@@ -90,8 +101,23 @@ func _fail(message: String) -> void:
 		get_tree().quit(1)
 
 
+## The scene and its surface, again on a reload. False (after saying why) when either cannot be read.
+func _read_scene() -> bool:
+	var scene = JSON.parse_string(FileAccess.get_file_as_string(_scene_path))
+	if not (scene is Dictionary):
+		_fail("cannot read the scene %s" % _scene_path)
+		return false
+	var surface := Surface.load_from(_scene_path.get_base_dir().path_join(scene.surface.file), scene.surface)
+	if surface == null:
+		_fail("cannot read the surface heights")
+		return false
+	_scene = scene
+	_surface = surface
+	return true
+
+
 ## The world as OpenBFME's own map viewer sets it up for a map: black around it, no ambient light until the map's
-## object lighting is known, linear tone mapping.
+## object lighting is known, linear tone mapping. Over it the marks and, with the companion, the marking controls.
 func _build_stage() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -103,13 +129,26 @@ func _build_stage() -> void:
 	add_child(_world_env)
 	_camera = Camera3D.new()
 	add_child(_camera)
-	var ui := CanvasLayer.new()
+	var layer := CanvasLayer.new()
+	_overlay = MarkOverlay.new()
+	_overlay.camera = _camera
+	_overlay.state = _scene.get("marks", {})
+	layer.add_child(_overlay)
 	_label = Label.new()
 	_label.position = Vector2(12, 8)
 	_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_label.add_theme_constant_override("outline_size", 4)
-	ui.add_child(_label)
-	add_child(ui)
+	layer.add_child(_label)
+	add_child(layer)
+	if _scene.get("port") != null:
+		_ui = MarksUI.new()
+		_ui.tool_chosen.connect(func(tool) -> void: _send({"type": "tool", "tool": tool}))
+		_ui.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
+		add_child(_ui)
+		_link = Link.new()
+		var code := _link.open(int(_scene.port))
+		if code != OK:
+			_fail("cannot reach the companion on port %d: %s" % [int(_scene.port), error_string(code)])
 
 
 func _open_map() -> void:
@@ -119,39 +158,18 @@ func _open_map() -> void:
 	if not mount.ok:
 		_fail("mounting the game's files failed: " + "; ".join(mount.errors))
 		return
-	var user_map: bool = _scene.user_map
-	if user_map and not _same_folder(String(mount.get("user_map_folder", "")), String(_scene.user_map_folder)):
+	if _scene.user_map and not _same_folder(String(mount.get("user_map_folder", "")), String(_scene.user_map_folder)):
 		_fail("OpenBFME's user maps folder is %s, the studio installed the map in %s" % [
 			mount.get("user_map_folder", ""), _scene.user_map_folder])
 		return
 	var mounted := Time.get_ticks_msec()
-	_terrain = ClassDB.instantiate("MapTerrainBuilder")
-	_root = _terrain.build_map(_fs, _scene.map, {"user_map": user_map, "fog": false, "markers": false})
-	var report: Dictionary = _terrain.get_report()
-	if _root == null:
-		_fail("the terrain did not build: %s" % [report.errors])
+	var report := _build_map()
+	if report.is_empty():
 		return
-	add_child(_root)
-	var built_terrain := Time.get_ticks_msec()
-	_objects = ClassDB.instantiate("MapObjectBuilder")
-	var setup: Dictionary = _objects.setup(_fs)
-	if not setup.ok:
-		_fail("the object world did not load: %s" % [setup.errors])
-		return
-	var objects: Node3D = _objects.build_objects(_fs, _scene.map, {"user_map": user_map})
-	var object_report: Dictionary = _objects.get_report()
-	if objects == null:
-		_fail("the objects did not build: %s" % [object_report.errors])
-		return
-	_root.add_child(objects)
-	_apply_lighting(object_report)
-	var width := maxf(4.0, maxf(_scene.playable[0], _scene.playable[1]) / 400.0)
-	_marks = MarksLayer.build(_scene.marks, _surface, width)
-	add_child(_marks)
 	var done := Time.get_ticks_msec()
 	print("VIEWER opened %s in %d ms: mount %d, terrain %d, objects %d (%d objects, %d errors), %d marks" % [
-		_scene.map, done - started, mounted - started, built_terrain - mounted, done - built_terrain,
-		int(object_report.objects.total), report.errors.size() + object_report.errors.size(), _scene.marks.size()])
+		_scene.map, done - started, mounted - started, report.terrain_ms, report.objects_ms, report.objects,
+		report.errors, (_overlay.state.get("marks", []) as Array).size()])
 	_orbit = OrbitCamera.new(_surface, Vector2(_scene.playable[0], _scene.playable[1]), float(_scene.fov))   # at its reset()
 	if _scene.has("view"):
 		# exactly where Python resolved the view, until a move hands it to the Edit camera, which orbits the view's
@@ -172,8 +190,12 @@ func _open_map() -> void:
 			actual.x, actual.y, int(_scene.size[0]), int(_scene.size[1])])
 		return
 	_probe()
-	_label.text = "%s\n%s" % [_scene.title, HELP]
+	_label.text = "%s    F1: controls" % _scene.title
 	_label.visible = shot.is_empty()     # a picture without the help
+	_send({"type": "ready", "ms": done - started})
+	_drive = (_scene.get("drive", []) as Array).duplicate()
+	_driving = not _drive.is_empty()
+	_drive_wait = 10
 	if _scene.get("check", false) and shot.is_empty():
 		var layers := PackedStringArray()
 		for layer in ["MapObjects", "StandingWater", "Rivers"]:
@@ -182,6 +204,62 @@ func _open_map() -> void:
 		print("VIEWER layers: ", ", ".join(layers))
 		print("VIEWER check ok")
 		get_tree().quit(0)
+
+
+## The map's terrain and objects through the library, in place of any built before: {terrain_ms, objects_ms, objects,
+## errors}, or {} (after saying why) when they did not build. The terrain is built before the old map goes, so a map
+## that does not build leaves the last good one; its objects then go with it (the object builder holds one map).
+func _build_map() -> Dictionary:
+	var started := Time.get_ticks_msec()
+	if _terrain == null:
+		_terrain = ClassDB.instantiate("MapTerrainBuilder")
+	var user_map: bool = _scene.user_map
+	var built: Node3D = _terrain.build_map(_fs, _scene.map, {"user_map": user_map, "fog": false, "markers": false})
+	var report: Dictionary = _terrain.get_report()
+	if built == null:
+		_fail("the terrain did not build: %s" % [report.errors])
+		return {}
+	if _root != null:
+		remove_child(_root)
+		_root.queue_free()
+	if _sun != null:
+		_sun.queue_free()
+		_sun = null
+	_root = built
+	add_child(_root)
+	var built_terrain := Time.get_ticks_msec()
+	if _objects == null:
+		_objects = ClassDB.instantiate("MapObjectBuilder")
+		var setup: Dictionary = _objects.setup(_fs)
+		if not setup.ok:
+			_fail("the object world did not load: %s" % [setup.errors])
+			return {}
+	var objects: Node3D = _objects.build_objects(_fs, _scene.map, {"user_map": user_map})
+	var object_report: Dictionary = _objects.get_report()
+	if objects == null:
+		_fail("the objects did not build: %s" % [object_report.errors])
+		return {}
+	_root.add_child(objects)
+	_apply_lighting(object_report)
+	return {"terrain_ms": built_terrain - started, "objects_ms": Time.get_ticks_msec() - built_terrain,
+		"objects": int(object_report.objects.total), "errors": report.errors.size() + object_report.errors.size()}
+
+
+## A new build: the scene and its surface read again and the map built again in place; the camera stays.
+func _reload() -> void:
+	var started := Time.get_ticks_msec()
+	if not _read_scene():
+		_send({"type": "reload_failed", "error": "the scene could not be read"})
+		return
+	_orbit.surface = _surface
+	_orbit.playable = Vector2(_scene.playable[0], _scene.playable[1])
+	if _build_map().is_empty():
+		_send({"type": "reload_failed", "error": "the map did not build"})
+		return
+	_label.modulate = Color(1, 1, 1)
+	_label.text = "%s    F1: controls" % _scene.title
+	print("VIEWER reloaded %s in %d ms" % [_scene.map, Time.get_ticks_msec() - started])
+	_send({"type": "reloaded", "ms": Time.get_ticks_msec() - started})
 
 
 static func _vec(a: Array) -> Vector3:
@@ -224,12 +302,15 @@ func _apply_lighting(rep: Dictionary) -> void:
 func _process(delta: float) -> void:
 	if _objects != null:
 		_objects.advance(delta)
+	_serve_link()
 	if _orbit != null:
 		var forward := _axis(KEY_W, KEY_UP) - _axis(KEY_S, KEY_DOWN)
 		var right := _axis(KEY_D, KEY_RIGHT) - _axis(KEY_A, KEY_LEFT)
 		var turn := _axis(KEY_E) - _axis(KEY_Q)
 		var tilt := _axis(KEY_R) - _axis(KEY_F)
 		var zoom := _axis(KEY_X) - _axis(KEY_Z)
+		if Input.is_key_pressed(KEY_CTRL):
+			zoom = 0.0             # Ctrl+Z undoes
 		if forward != 0.0 or right != 0.0 or turn != 0.0 or tilt != 0.0 or zoom != 0.0:
 			_free()
 		if not _fixed:
@@ -238,11 +319,140 @@ func _process(delta: float) -> void:
 			_orbit.drive(delta, forward, right, turn, tilt, zoom, speed)
 			_orbit.update(delta)
 			_orbit.apply(_camera)
+		if _hover and _drag.is_empty():
+			_send(_event("hover", get_viewport().get_mouse_position()))
+		_hover = false
+	_play_drive()
 	_frames += 1
 	var shot := String(_scene.get("screenshot", ""))
 	if not shot.is_empty() and _frames == WARMUP_FRAMES and _root != null:
 		var code := _save(shot)
 		get_tree().quit(0 if code == OK else 1)
+
+
+## The scene's scripted input (tests): each step after its frames, a mouse button, motion or key as Input gets them
+## from the hand, at a map point the camera projects; "tool" arms a palette tool, "command" sends one as its button
+## does, "screenshot" saves the window as it is, controls and all; "wait" holds the next step back for its seconds.
+## Done, the viewer closes.
+func _play_drive() -> void:
+	if not _driving or _orbit == null:
+		return
+	_drive_wait -= 1
+	if _drive_wait > 0 or Time.get_ticks_msec() < _drive_until:
+		return
+	if _drive.is_empty():
+		_driving = false
+		print("VIEWER drive done")
+		await get_tree().create_timer(1.0).timeout      # the companion's last answers
+		get_tree().quit(0)
+		return
+	var step: Dictionary = _drive.pop_front()
+	_drive_wait = int(step.get("frames", 3))
+	_drive_until = Time.get_ticks_msec() + int(float(step.get("seconds", 0.0)) * 1000.0)   # "wait" steps
+	var pos := Vector2.ZERO
+	if step.has("at"):
+		var x: float = step.at[0]
+		var y: float = step.at[1]
+		pos = _camera.unproject_position(Surface.to_godot(Vector3(x, y, _surface.height_at(x, y))))
+	if step.has("at"):
+		_drive_at = pos
+	match String(step.do):
+		"press", "release":
+			var b := InputEventMouseButton.new()
+			b.button_index = MOUSE_BUTTON_LEFT
+			b.pressed = step.do == "press"
+			b.position = pos
+			b.global_position = pos
+			Input.parse_input_event(b)
+		"move":
+			var m := InputEventMouseMotion.new()
+			m.position = pos
+			m.global_position = pos
+			m.relative = pos - _drive_at
+			Input.parse_input_event(m)
+		"key":
+			var k := InputEventKey.new()
+			k.keycode = OS.find_keycode_from_string(String(step.key))
+			k.ctrl_pressed = step.get("ctrl", false)
+			k.pressed = true
+			Input.parse_input_event(k)
+		"tool":
+			_send({"type": "tool", "tool": step.get("tool")})
+		"command":
+			_send({"type": "command", "name": step.name})
+		"screenshot":
+			_save(String(step.path))
+
+
+## The companion's messages since the last frame; its closing ends the viewer (the session is over).
+func _serve_link() -> void:
+	if _link == null:
+		return
+	for message in _link.poll():
+		match String(message.get("type", "")):
+			"marks":
+				_overlay.state = message
+				_ui.show_tool(message.get("tool"))
+				_ui.set_hint(message.get("hint"))
+				_ui.show_panel(message.get("visible", true))       # M hides the panel with the marks
+				var cursor = message.get("cursor")
+				Input.set_default_cursor_shape(CURSORS.get(cursor, Input.CURSOR_ARROW) if cursor != null else Input.CURSOR_ARROW)
+			"press_result":
+				if int(message.get("seq", -1)) == _press_seq:
+					_answered(bool(message.handled))
+			"panel":
+				_ui.set_panel(message.lines, _overlay.state.get("visible", true))
+			"status":
+				_ui.set_status(message.text, float(message.get("seconds", 3)))
+			"clipboard":
+				DisplayServer.clipboard_set(message.text)
+				_ui.set_status("Copied the marks for an agent: paste them into its prompt", 4)
+			"reload":
+				_reload()
+	if _link.closed():
+		print("VIEWER the companion closed the link")
+		get_tree().quit(0)
+
+
+func _send(message: Dictionary) -> void:
+	if _link != null:
+		_link.send(message)
+
+
+## The companion's answer to the last press: the marks took it, or the camera does (a double-click flies there; else
+## the motion meanwhile starts the orbit). The button may be up already.
+func _answered(handled: bool) -> void:
+	var held := _drag == "pending"
+	if handled:
+		_drag = "marks" if held else _drag
+	elif _press_double:
+		var hit := _orbit.pick(_camera, _press_at)
+		if hit != Vector3.INF:
+			_free()
+			_orbit.fly_to(hit)
+		_drag = "" if held else _drag
+	elif held:
+		_drag = "orbit"
+		if _pending_orbit != Vector2.ZERO:
+			_free()
+			_orbit.orbit(_pending_orbit.x, _pending_orbit.y)
+	_pending_orbit = Vector2.ZERO
+
+
+## A mouse event for the companion's MarkEditor: the cursor's ray in map coordinates, what the overlay finds under the
+## cursor, Shift, and the Edit camera's focus.
+func _event(kind: String, pos: Vector2) -> Dictionary:
+	var handle = _overlay.handle_at(pos)
+	return {"type": kind,
+		"ray": [_list(Surface.to_map(_camera.project_ray_origin(pos))), _list(Surface.to_map(_camera.project_ray_normal(pos)))],
+		"picks": {"handle": handle, "grab": _overlay.grab_at(pos, _overlay.state.get("selected")), "mark": _overlay.mark_at(pos),
+			"direction": _overlay.handle_direction(handle) if handle != null else null},
+		"shift": Input.is_key_pressed(KEY_SHIFT),
+		"focus": {"z": _orbit.cur.z, "distance": _orbit.cur.distance, "angle": _orbit.screen_angle()}}
+
+
+static func _list(v: Vector3) -> Array:
+	return [v.x, v.y, v.z]
 
 
 func _axis(a: Key, b: Key = KEY_NONE) -> float:
@@ -257,20 +467,51 @@ func _save(path: String) -> Error:
 	return code
 
 
+## P: the view without the controls, into the renders folder.
+func _screenshot() -> void:
+	var shown := [_label.visible, _ui.visible if _ui != null else false]
+	_label.visible = false
+	if _ui != null:
+		_ui.visible = false
+	await RenderingServer.frame_post_draw
+	var stamp := Time.get_datetime_string_from_system().replace(":", "-")
+	var path := String(_scene.screenshots).path_join("%s %s.png" % [_scene.map, stamp])
+	var code := _save(path)
+	_label.visible = shown[0]
+	if _ui != null:
+		_ui.visible = shown[1]
+		_ui.set_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _orbit == null:
 		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
 		if b.button_index == MOUSE_BUTTON_LEFT:
-			if b.pressed and b.double_click:
-				var hit := _orbit.pick(_camera, b.position)
-				if hit != Vector3.INF:
-					_free()
-					_orbit.fly_to(hit)
-				_drag = ""
+			if b.pressed:
+				_press_at = b.position
+				_press_double = b.double_click and _overlay.state.get("tool") == null
+				if _link != null:
+					# the companion says whether the press acts on the marks (as the studio viewer offers every press
+					# to its MarkEditor first); until then the drag waits, and its moves still go to the companion
+					_drag = "pending"
+					_pending_orbit = Vector2.ZERO
+					_press_seq += 1
+					var press := _event("press", b.position)
+					press["seq"] = _press_seq
+					_send(press)
+				elif _press_double:
+					_answered(false)
+				else:
+					_drag = "orbit"
 			else:
-				_drag = "orbit" if b.pressed else ""
+				if _link != null:
+					_send(_event("release", b.position))       # nothing when the press did not act on the marks
+					if _drag != "marks" and b.position.distance_to(_press_at) < CLICK_PIXELS:
+						_send(_event("click", b.position))
+				_drag = ""
+				_hover = true                                   # the cursor for what a press there does now
 		elif b.button_index == MOUSE_BUTTON_RIGHT or b.button_index == MOUSE_BUTTON_MIDDLE:
 			_anchor = Vector3.INF
 			if b.pressed:
@@ -282,33 +523,53 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif b.pressed and (b.button_index == MOUSE_BUTTON_WHEEL_UP or b.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 			_free()
 			_orbit.zoom(1.0 if b.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0, _orbit.pick(_camera, b.position))
-	elif event is InputEventMouseMotion and not _drag.is_empty():
+	elif event is InputEventMouseMotion:
 		var m := event as InputEventMouseMotion
-		_free()
-		if _drag == "orbit":
-			_orbit.orbit(m.relative.x, m.relative.y)   # dragging down raises the camera, as in the studio viewer
-		else:
-			# the grabbed point stays under the cursor: where the cursor's ray meets the grabbed point's height
-			var hit := _orbit.plane_hit(_camera, m.position, _anchor.z)
-			if hit != Vector3.INF:
-				_orbit.pan(_anchor, hit)
+		match _drag:
+			"":
+				_hover = true
+			"marks":
+				_send(_event("move", m.position))
+			"pending":
+				_send(_event("move", m.position))
+				_pending_orbit += m.relative
+			"orbit":
+				_free()
+				_orbit.orbit(m.relative.x, m.relative.y)   # dragging down raises the camera, as in the studio viewer
+			"pan":
+				_free()
+				# the grabbed point stays under the cursor: where the cursor's ray meets the grabbed point's height
+				var hit := _orbit.plane_hit(_camera, m.position, _anchor.z)
+				if hit != Vector3.INF:
+					_orbit.pan(_anchor, hit)
 	elif event is InputEventKey and event.pressed and not event.echo:
-		match (event as InputEventKey).keycode:
+		var key := event as InputEventKey
+		if key.keycode == KEY_Z and key.ctrl_pressed:
+			_send({"type": "command", "name": "undo"})
+			return
+		match key.keycode:
 			KEY_SPACE, KEY_HOME:
 				_free()
 				_orbit.reset()
 			KEY_T:
 				_free()
 				_orbit.toggle_top()
-			KEY_1: _toggle(_root.get_node_or_null("MapObjects"))
+			KEY_1: _toggle(_root.get_node_or_null("MapObjects") if _root != null else null)
 			KEY_2:
-				_toggle(_root.get_node_or_null("StandingWater"))
-				_toggle(_root.get_node_or_null("Rivers"))
-			KEY_M: _toggle(_marks)
-			KEY_P:
-				var stamp := Time.get_datetime_string_from_system().replace(":", "-")
-				_save(String(_scene.screenshots).path_join("%s %s.png" % [_scene.map, stamp]))
-			KEY_F1: _label.visible = not _label.visible
+				if _root != null:
+					_toggle(_root.get_node_or_null("StandingWater"))
+					_toggle(_root.get_node_or_null("Rivers"))
+			KEY_M:
+				if _link != null:
+					_send({"type": "command", "name": "toggle"})
+				else:
+					_overlay.visible = not _overlay.visible
+			KEY_DELETE, KEY_BACKSPACE: _send({"type": "command", "name": "delete"})
+			KEY_ESCAPE: _send({"type": "command", "name": "escape"})
+			KEY_P: _screenshot()
+			KEY_F1:
+				var title := "%s    F1: controls" % _scene.title
+				_label.text = "%s\n%s" % [_scene.title, HELP] if _label.text == title else title
 
 
 ## A move ends a fixed view: the Edit camera takes over from where it was.

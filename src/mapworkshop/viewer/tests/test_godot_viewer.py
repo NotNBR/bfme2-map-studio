@@ -1,12 +1,9 @@
-"""The Godot viewer's Python side (viewer/godot_viewer.py): the surface it sends, views resolved as mw render resolves
-them, the marks' outlines; and, when OpenBFME is built, the viewer itself, headless: it opens a map through OpenBFME's
-library (a lab's build from the user maps folder, else a stock map) and its camera projects map points onto the pixels
-mw render's does."""
-import json
+"""The Godot viewer's Python side (viewer/godot_viewer.py): the surface it sends and views resolved as mw render
+resolves them; and, when OpenBFME is built, the viewer itself, headless: it opens a map through OpenBFME's library (a
+lab's build from the user maps folder, else a stock map) and its camera projects map points onto the pixels mw
+render's does."""
 import re
-import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -84,21 +81,6 @@ class ViewTests(unittest.TestCase):
     def test_a_top_view_is_refused(self):
         with self.assertRaises(RuntimeError):
             godot_viewer.resolve('kind=top', FlatTerrain(), (1600, 1000))
-
-
-class OutlineTests(unittest.TestCase):
-    def test_marks_become_outlines_in_map_coordinates(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp)/'m.json'
-            path.write_text(json.dumps(dict(marks=[dict(id=1, kind='pin', points=[[10, 20]]),
-                                                    dict(id=2, kind='circle', points=[[100, 100]], radius=50)])),
-                            encoding='utf-8')
-            with mock.patch.object(godot_viewer.marklib, 'marks_path', return_value=path):
-                marks = godot_viewer.outlines('m.map')
-        self.assertEqual(marks[0], dict(id=1, kind='pin', points=[[10.0, 20.0]], closed=False))
-        self.assertTrue(marks[1]['closed'])
-        radii = np.hypot(*(np.array(marks[1]['points']) - 100).T)
-        self.assertTrue(np.allclose(radii, 50, atol=0.1))
 
 
 def lab():
