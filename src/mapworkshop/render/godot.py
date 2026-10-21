@@ -42,7 +42,9 @@ from mapworkshop.render.photo import fov_from_focal
 
 SCENES = openbfme.HOME/'scenes'
 SIZE = (1600, 1000)
-OWN = dict(weather='map', sun='own')     # Preview's choice when it shows the map as it is
+# Preview's choice when it shows the map as it is: the map's own weather and the weather's own sun, every object the
+# map places drawn (not only what the game's tree and shrub buffers hold), the units too
+OWN = dict(weather='map', sun='own', limits=False, units=True)
 PREVIEW = ' studio preview'               # the name of a preview copy in the user maps folder: '<map> studio preview'
 LOOSE = ' studio map'                     # and of a map that is neither a project's build nor in RotWK's archives
 FOV = 50.0            # degrees across the width: the Edit camera's (orbit_camera.gd)
@@ -120,13 +122,14 @@ def pixel(view_projection, point, size):
     return float((ndc[0] + 1)/2*size[0]), float((1 - ndc[1])/2*size[1])
 
 
-def preview_map(map_path, name, weather='map', sun='own'):
-    """A copy of the map as Preview shows it, in the user maps folder, as the studio renderer previews it
-    (mapkit.weather): a weather preset's world weather and lighting, and its Weather block in place of the map's in
-    map.ini; a sun's light rig over it, and its fog after; the sky they bring on the map's WaterReflectionSkydome
-    objects (the studio renderer swaps the texture of every sky dome; a copy can only change these templates). The
-    map's map.str and solo.ini go with it. Returns the copy's name."""
-    from mapworkshop.mapkit import weather as presets
+def preview_map(map_path, name, weather='map', sun='own', limits=False, units=True):
+    """A copy of the map as Preview and the View switches show it, in the user maps folder (mapkit.weather): a
+    weather preset's world weather and lighting, and its Weather block in place of the map's in map.ini; a sun's
+    light rig over it, and its fog after; the sky they bring on the map's WaterReflectionSkydome objects (a copy can
+    only change these templates). `limits`: without the trees and shrubs past the game's buffers
+    (mapkit.vegetation.past_buffers); `units` False: without the units. The map's map.str and solo.ini go with it.
+    Returns the copy's name."""
+    from mapworkshop.mapkit import vegetation, weather as presets
     m = Map(map_path.read_bytes())
     weather, sun = (None if weather == 'map' else weather), (None if sun == 'own' else sun)
     if weather:
@@ -134,12 +137,21 @@ def preview_map(map_path, name, weather='map', sun='own'):
     if sun:
         presets.apply_sun_to_map(m, sun)
     sky = presets.sky(weather, sun)
-    if sky:
+    if sky or limits or not units:
         objects = m.objects()
         for o in objects:
-            if o['template'].lower().startswith('waterreflectionskydome_'):
+            if sky and o['template'].lower().startswith('waterreflectionskydome_'):
                 o['template'] = presets.skydome_template(sky)
-        m.set_objects(objects)
+        left_out = set()
+        if limits or not units:
+            from mapworkshop.assets.library import GameAssets
+            assets = GameAssets.shared()
+            if limits:
+                left_out |= vegetation.past_buffers(objects, assets)
+            if not units:
+                left_out |= {o['index'] for o in objects
+                             if (r := assets.template_model(o['template'])) and r['unit'] and not r['tree']}
+        m.set_objects([o for o in objects if o['index'] not in left_out])
     ini = map_path.with_name('map.ini')
     text = ini.read_bytes().decode('latin-1') if ini.is_file() else ''      # byte for byte, whatever the code page
     if weather:
@@ -155,6 +167,35 @@ def preview_map(map_path, name, weather='map', sun='own'):
         if map_path.with_name(other).is_file():
             shutil.copyfile(map_path.with_name(other), folder/other)
     return copy
+
+
+def falling(map_path, preview, playable, folder):
+    """The rain or snow the map's weather lets fall (render.weather: weather.ini's Weather under map.ini's, or under
+    the Preview's weather and sun), for the viewer's falling.gd: its settings, the game's emitters as falling.f32 and
+    the drop's texture as falling.png in `folder`. None when nothing falls."""
+    from PIL import Image
+    from mapworkshop.assets.library import GameAssets
+    from mapworkshop.mapkit import weather as presets
+    from mapworkshop.render import weather
+    from mapworkshop.render.materials import bleed_alpha
+    ini = map_path.with_name('map.ini')
+    local = ini.read_text(encoding='cp1252', errors='replace') if ini.is_file() else ''
+    if preview['weather'] != 'map':
+        local = presets.ini_block(preview['weather'])
+    sun = presets.sun_ini(preview['sun']) if preview['sun'] != 'own' else ''
+    assets = GameAssets.shared()
+    w = weather.parse(assets.ini_text('weather.ini'), local, sun)
+    emitters = weather.emitters(w, *playable)
+    image = assets.image(w['snowtexture']) if len(emitters) else None
+    if image is None:
+        return None
+    Image.fromarray(bleed_alpha(image), 'RGBA').save(folder/'falling.png')
+    (folder/'falling.f32').write_bytes(emitters.astype('<f4').tobytes())
+    box, speed = float(max(int(w['snowboxheight']), 1)), float(w['snowspeed'])
+    return dict(emitters='falling.f32', texture='falling.png', count=len(emitters), size=w['snowquadsize'], box=box,
+                speed=speed, amplitude=w['snowamplitude'],
+                frequency=[w['snowfrequencyscalex'], w['snowfrequencyscaley']], xy_speed=list(w['snowxyspeed']),
+                drift_per_cycle=[v*box/(speed or 1.0) for v in w['snowxyspeed']])
 
 
 def remove_copies():
@@ -189,6 +230,7 @@ def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=
                              border=surface.border, cell=10.0),
                 playable=list(surface.playable), fov=FOV, check=check, screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {},
                 fps=fps, **(extra or {}))
+    data['falling'] = falling(map_path, preview, surface.playable, folder)
     if marks is not None:
         data['marks'] = marks(map_path, surface)
     if view:
@@ -203,11 +245,11 @@ def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=
 
 def shot_of(shot, terrain, start):
     """A shot as the viewer takes it: {path, size} and its resolved view, or a top view's region (centre, width,
-    height) seen from above the highest ground, as render.camera.TopView resolves it; its background colour and
-    another map to show, when it has them."""
+    height) seen from above the highest ground, as render.camera.TopView resolves it; its background colour, another
+    map to show and the time it is taken at (seconds after the map was built), when it has them."""
     from mapworkshop.render.camera import TopView
     view, out = shot.get('view'), dict(path=str(Path(shot['path']).resolve()))
-    out.update({k: shot[k] for k in ('background', 'map') if shot.get(k) is not None})
+    out.update({k: shot[k] for k in ('background', 'map', 'time') if shot.get(k) is not None})
     if isinstance(view, TopView):
         x0, y0, x1, y1 = view.bounds(terrain)
         out['size'] = list(shot.get('size') or (round((x1-x0)/10*shot['scale']), round((y1-y0)/10*shot['scale'])))
@@ -263,10 +305,12 @@ def shoot(name, shots, size=SIZE, switches=None, preview=None, extra=None, m=Non
     return data['shots']
 
 
-def render(name, views, out, size=(1600, 1200), top_scale=2.0, switches=None, preview=None, progress=print):
-    """mw render on the Godot viewer: each (name, view) as out/<name>.png (shoot). `switches`: the View switches mw
-    render has (objects, fog, grid, border, walkable, flow, and terrain); the walkability and the river strips are
-    worked out here. Returns [{name, file, size, view}]."""
+def render(name, views, out, size=(1600, 1200), top_scale=2.0, switches=None, preview=None, time=0.0,
+           progress=print):
+    """mw render on the Godot viewer: each (name, view) as out/<name>.png (shoot), `time` seconds after the map was
+    built (the units' animations, the overlays, the falling weather). `switches`: the View switches mw render has
+    (objects, fog, grid, border, walkable, flow, and terrain); the walkability and the river strips are worked out
+    here. Returns [{name, file, size, view}]."""
     from mapworkshop.assets.library import GameAssets
     from mapworkshop.render.camera import TopView
     switches = dict(switches or {})
@@ -283,8 +327,8 @@ def render(name, views, out, size=(1600, 1200), top_scale=2.0, switches=None, pr
             extra['walkable'] = walkability(m, GameAssets(), map_path.with_name('map.ini'), SCENES/native/'walkable.png')
         if switches.get('flow'):
             extra['flow'] = flow_strips(m)
-        shots = [dict(path=out/f'{n}.png', view=v, size=None if isinstance(v, TopView) else size, scale=top_scale)
-                 for n, v in views]
+        shots = [dict(path=out/f'{n}.png', view=v, size=None if isinstance(v, TopView) else size, scale=top_scale,
+                      time=time) for n, v in views]
         resolved = shoot(name, shots, size, switches, preview, extra, m, progress)
     finally:
         remove_copies()

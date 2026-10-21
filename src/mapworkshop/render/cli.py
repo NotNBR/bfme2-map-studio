@@ -164,11 +164,7 @@ def main(argv=None):
 # Options the Godot viewer cannot honour: (option, whether it is set, why).
 STUDIO_ONLY = (('--lod', lambda a: a.lod != 'medium', 'OpenBFME has no detail levels'),
                ('--normal-maps', lambda a: a.normal_maps != 'auto', 'OpenBFME has no switch for them'),
-               ('--no-clouds', lambda a: a.no_clouds, 'OpenBFME draws no cloud shadows'),
-               ('--vegetation-limits', lambda a: a.vegetation_limits, 'OpenBFME has no switch for them'),
-               ('--editor-markers', lambda a: a.editor_markers, 'OpenBFME does not draw them'),
-               ('--no-units', lambda a: a.no_units, 'OpenBFME builds the units with the other objects'),
-               ('--time', lambda a: a.time != 0.0, 'the Godot viewer renders the units at their start'))
+               ('--editor-markers', lambda a: a.editor_markers, 'OpenBFME does not draw them'))
 
 
 def godot(parser, args, views, size):
@@ -181,17 +177,21 @@ def godot(parser, args, views, size):
             parser.error(f'{option} needs --engine studio: {why}')
     source = resolve_map(args.map)
     started = time.time()
-    switches = dict(objects=not args.no_objects, fog=not args.no_weather, grid=args.grid, border=args.border,
-                    walkable=args.walkable, flow=args.flow)
+    switches = dict(objects=not args.no_objects, fog=not args.no_weather, clouds=not args.no_clouds, grid=args.grid,
+                    border=args.border, walkable=args.walkable, flow=args.flow)
     preview = {k: v for k, v in dict(weather=args.weather, sun=args.sun).items() if v}
+    if args.vegetation_limits:
+        preview['limits'] = True
+    if args.no_units:
+        preview['units'] = False
     try:
-        outputs = render(args.map, views, args.out, size, args.top_scale, switches, preview,
+        outputs = render(args.map, views, args.out, size, args.top_scale, switches, preview, args.time,
                          progress=lambda line: print(line, file=sys.stderr))
     except (LookupError, RuntimeError, ValueError, OSError) as error:
         raise SystemExit(f'mw render: {error} (--engine studio renders without OpenBFME)')
     report = dict(map=str(source), map_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
                   renderer='OpenBFME (Godot viewer), not a native capture', engine='godot',
-                  options=dict(switches, **preview), outputs=outputs, seconds=round(time.time()-started, 2))
+                  options=dict(switches, **preview, time=args.time), outputs=outputs, seconds=round(time.time()-started, 2))
     (args.out/'render.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(dict(out=str(args.out), images=[o['file'] for o in outputs], seconds=report['seconds'])))
     return 0

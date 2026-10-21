@@ -179,8 +179,18 @@ class CompanionTests(unittest.TestCase):
             self.send(dict(type='command', name='open_map', map='other'))
         remember.assert_called_once_with(owner)                        # `mw` alone opens it next time
 
+    def test_the_units_switch_prepares_a_copy_without_them(self):
+        preview = dict(godot_link.OWN, units=False)
+        self.companion.prepare = mock.MagicMock(
+            return_value=(Path('preview.json'), dict(self.data, map='map mp test studio preview', preview=preview),
+                          None, FlatSurface()))
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
+            replies = self.send(dict(type='command', name='preview', units=False))
+        self.companion.prepare.assert_called_once_with(str(self.map_path), preview)
+        self.assertEqual(replies[0]['what'], "the preview: Map's own · no units")
+
     def test_a_preview_prepares_the_same_map_again_with_it(self):
-        preview = dict(weather='rain', sun='own')
+        preview = dict(godot_link.OWN, weather='rain')
         self.companion.prepare = mock.MagicMock(
             return_value=(Path('preview.json'), dict(self.data, map='map mp test studio preview', preview=preview),
                           None, FlatSurface()))
@@ -329,15 +339,16 @@ class ViewsTests(unittest.TestCase):
         self.assertEqual(replies[1]['items'], [])
 
     def test_copy_view_gives_the_mw_render_command_of_the_picture(self):
-        self.companion.preview = dict(weather='rain', sun='own')
+        self.companion.preview = dict(godot_link.OWN, weather='rain', limits=True)
         replies = self.send(dict(type='command', name='copy_view', camera=EDIT,
                                  preview=dict(size=[1600, 1000], objects=True, water=False, fog=True, grid=True)))
         text = replies[0]['text']
         self.assertEqual(replies[0]['type'], 'clipboard')
         self.assertTrue(text.startswith('mw render --map "'), text)                 # not a project: the file
-        for part in ('--size 1600x1000', '--weather rain', '--grid', 'target=400,300,50 distance=1200'):
+        for part in ('--size 1600x1000', '--weather rain', '--grid', '--vegetation-limits', 'target=400,300,50 distance=1200'):
             self.assertIn(part, text)
         self.assertNotIn('--sun', text)
+        self.assertNotIn('--no-units', text)
         self.assertIn('mw render always draws it', replies[0]['what'])             # the water was hidden
 
 

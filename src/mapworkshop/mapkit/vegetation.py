@@ -14,6 +14,9 @@ swap where W3DTreeDraw's TextureName differs) through W3DModelDraw, which has
 no buffer. They keep SHRUBBERY so they do not block movement, and drop TREE,
 SHRUB and the optimized kinds, so nothing routes them back into a buffer.
 
+past_buffers lists what the game leaves out, for the viewer's View switch
+(render.godot.preview_map), which draws every object the map places.
+
 Status: the first native run with Greywater's 5,606 overflow
 objects crashed during map load (logic frame 0, an empty "Game crash" dialog,
 no crash report). Not yet diagnosed.
@@ -23,8 +26,32 @@ from mapworkshop.assets import ini
 
 TREE_BUFFER = 1200
 SHRUB_BUFFER = 2000
+TREE_TYPES = 64          # the tree buffer's kinds of tree (model and texture)
 PREFIX = 'GW_'
 _DROP_KINDS = {'TREE', 'SHRUB', 'OPTIMIZED_TREE', 'OPTIMIZED_PROP', 'CLUB', 'SELECTABLE'}
+
+
+
+def past_buffers(objects, assets):
+    """The indexes of the objects the game leaves out of its buffers, in map order: trees past TREE_BUFFER or past
+    TREE_TYPES kinds, shrubs past SHRUB_BUFFER (as at Medium and above, which draw shrubs: GameLOD.ini ShowProps).
+    `objects` as formats.map.Map.objects() gives them; `assets` answers template_model."""
+    counts, kinds, dropped = dict(tree=0, shrub=0), dict(tree=set(), shrub=set()), set()
+    for o in objects:
+        if o['flags'] & 0x36:             # bridge endpoints, objects the map hides
+            continue
+        resolved = assets.template_model(o['template'])
+        if not resolved or not resolved['tree'] or resolved['editor']:
+            continue
+        buffer = 'shrub' if 'SHRUB' in resolved['kinds'] and 'TREE' not in resolved['kinds'] else 'tree'
+        kind = (resolved['model'], (resolved['texture'] or '').lower())
+        if counts[buffer] >= (TREE_BUFFER if buffer == 'tree' else SHRUB_BUFFER) or \
+                (kind not in kinds[buffer] and len(kinds[buffer]) >= TREE_TYPES):
+            dropped.add(o['index'])
+            continue
+        counts[buffer] += 1
+        kinds[buffer].add(kind)
+    return dropped
 
 
 def describe(templates, name, model_textures=None):

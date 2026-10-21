@@ -31,8 +31,10 @@ const SHOT_FRAMES := 12       # and before each further shot: the new view's tex
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
 ## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; the Python viewer's keys)
 const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
-	["fog", "Fog (6)", true], ["animate", "Animate", true], ["grid", "Grid (G)", false], ["border", "Map border (B)", false],
-	["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true]]
+	["fog", "Fog, rain and snow (6)", true], ["clouds", "Cloud shadows", true], ["animate", "Animate", true],
+	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
+	["units", "Units", true], ["limits", "The game's tree and shrub limits", false]]
+const COPY_VIEWS := ["units", "limits"]       # the switches the map's copy carries (render.godot.preview_map)
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
@@ -66,6 +68,8 @@ var _shot_wait := 0           # frames until the current shot is saved
 var _shot_failed := false
 var _fixed := false           # a view from the scene: the camera stays where Python resolved it
 var _frames := 0
+var _clock := 0.0             # seconds the objects and overlays have run since the map was built
+var _falling: Falling         # the rain or snow, when the map's weather has it
 var _drag := ""               # while a button is held: "orbit", "pan", "marks" (the companion edits), "pending" (asked it)
 var _anchor := Vector3.INF    # the grabbed ground point while panning
 var _press_at := Vector2.ZERO
@@ -162,6 +166,8 @@ func _build_stage() -> void:
 		_views[view[0]] = view[2]
 	for key in _scene.get("views", {}):           # the scene's own switches (screenshots of an overlay)
 		_views[key] = bool(_scene.views[key])
+	for key in COPY_VIEWS:                        # and those of the copy it opens
+		_views[key] = bool(_scene.get("preview", {}).get(key, _views[key]))
 	_overlays = Overlays.new()
 	add_child(_overlays)
 	_overlay = MarkOverlay.new()
@@ -291,6 +297,7 @@ func _build_map() -> Dictionary:
 			_fail("the object world did not load: %s" % [setup.errors])
 			return {}
 	var objects: Node3D = _objects.build_objects(_fs, _scene.map, {"user_map": user_map})
+	_clock = 0.0
 	var object_report: Dictionary = _objects.get_report()
 	if objects == null:
 		_fail("the objects did not build: %s" % [object_report.errors])
@@ -299,9 +306,27 @@ func _build_map() -> Dictionary:
 	add_child(objects)
 	_apply_lighting(object_report)
 	_overlays.build(_surface, Vector2(_scene.playable[0], _scene.playable[1]), int(_scene.surface.border))
+	_build_falling()
 	_apply_views()
 	return {"terrain_ms": built_terrain - started, "objects_ms": Time.get_ticks_msec() - built_terrain,
 		"objects": int(object_report.objects.total), "errors": report.errors.size() + object_report.errors.size()}
+
+
+## The scene's rain or snow in place of the one before.
+func _build_falling() -> void:
+	if _falling != null:
+		_falling.queue_free()
+		_falling = null
+	if _scene.get("falling") == null:
+		return
+	_falling = Falling.new()
+	if not _falling.build(_scene.falling, _scene_path.get_base_dir(), Vector2(_scene.playable[0], _scene.playable[1])):
+		print("VIEWER the rain or snow did not load")
+		_falling.free()
+		_falling = null
+		return
+	_falling.visible = _views.get("fog", true)
+	add_child(_falling)
 
 
 ## The terrain (water, rivers, roads) in place of the one before, which stays when it does not build. False when
@@ -401,11 +426,8 @@ func _apply_lighting(rep: Dictionary) -> void:
 
 
 func _process(delta: float) -> void:
-	if _views.get("animate", true):
-		if _objects != null:
-			_objects.advance(delta)
-		if _overlays != null:
-			_overlays.advance(delta)
+	if _views.get("animate", true) and _shots.is_empty():     # shots stand at their own time (_next_shot)
+		_advance(_clock + delta)
 	_serve_link()
 	if _orbit != null and _mode == "photo":
 		_process_photo(delta)
@@ -435,6 +457,42 @@ func _process(delta: float) -> void:
 	_take_shot()
 
 
+## The map's cloud shadows on the terrain (its CloudTexture, the cloud_tex of OpenBFME's terrain shader), or plain
+## white in their place.
+func _show_clouds(on: bool) -> void:
+	if _root == null:
+		return
+	for node in _root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_node := node as MeshInstance3D
+		var materials := [mesh_node.material_override]
+		if mesh_node.mesh != null:
+			for i in mesh_node.mesh.get_surface_count():
+				materials.append(mesh_node.mesh.surface_get_material(i))
+		for material in materials:
+			var shader_material := material as ShaderMaterial
+			if shader_material == null:
+				continue
+			if not shader_material.has_meta("cloud_tex"):
+				var clouds: Variant = shader_material.get_shader_parameter("cloud_tex")
+				if clouds == null:
+					continue
+				shader_material.set_meta("cloud_tex", clouds)
+			shader_material.set_shader_parameter("cloud_tex", shader_material.get_meta("cloud_tex") if on else null)
+
+
+## The objects' animations and the overlays run on to `time` seconds after the map was built.
+func _advance(time: float) -> void:
+	while time - _clock > 1e-6:                      # a shot's --time in steps, as frames would take it
+		var step := minf(time - _clock, 0.1)
+		if _objects != null:
+			_objects.advance(step)
+		if _overlays != null:
+			_overlays.advance(step)
+		_clock += step
+	if _falling != null:
+		_falling.set_time(_clock)
+
+
 ## Whether a view's lens changes the picture (render.photo.active): an aperture or an exposure.
 static func _lens_changes(v: Dictionary) -> bool:
 	var lens: Dictionary = v.get("photo", {})
@@ -454,6 +512,7 @@ func _next_shot(frames: int) -> void:
 	var bg: Array = shot.get("background", [0.0, 0.0, 0.0])
 	_world_env.environment.background_color = Color(bg[0], bg[1], bg[2])
 	_fixed = true
+	_advance(float(shot.get("time", 0.0)))           # mw render --time; an earlier time than the last shot's stays
 	_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	if shot.has("top"):
 		_set_mode("edit")
@@ -681,6 +740,8 @@ func _play_drive() -> void:
 			_send({"type": "tool", "tool": step.get("tool")})
 		"lens":
 			_lens_pick(String(step.field), step.value)         # as the camera bar's preset
+		"view":
+			_switch_view(String(step.key), bool(step.on))      # as the View menu
 		"command":
 			var command := step.duplicate()       # its name and arguments, as the toolbar sends them
 			command.erase("do")
@@ -728,6 +789,9 @@ func _serve_link() -> void:
 					String(message.get("what", "")))
 			"menu":
 				_frame.toolbar.set_menu(message)
+				for key in COPY_VIEWS:                # the copy shown, also after a preview that failed
+					_views[key] = bool(message.preview.current.get(key, _views[key]))
+					_frame.toolbar.set_view(key, _views[key])
 			"walkable":
 				if message.has("error"):
 					_switch_view("walkable", false)
@@ -994,7 +1058,8 @@ func _copy_view() -> void:
 	if _mode == "photo":
 		size = Lens.frame_rect(size, _fly.frame).size
 	_send({"type": "command", "name": "copy_view", "camera": _camera_state(), "preview": {"size": [size.x, size.y],
-		"objects": _shown("objects"), "water": _shown("water"), "fog": _shown("fog"), "grid": _shown("grid"),
+		"objects": _shown("objects"), "water": _shown("water"), "fog": _shown("fog"), "clouds": _shown("clouds"),
+		"grid": _shown("grid"),
 		"border": _shown("border"), "walkable": _shown("walkable"), "flow": _shown("flow")}})
 
 
@@ -1083,9 +1148,13 @@ func _switch_view(key: String, on: bool) -> void:
 				_root.visible = on
 			_overlays.visible = on                         # and what lies on the ground
 		"fog":
+			if _falling != null:
+				_falling.visible = on
 			if on != was and _root != null:
 				_build_terrain()
-				_apply_views(["water", "roads"])               # the layers in the terrain; the rest stays as it is
+				_apply_views(["water", "roads", "clouds"])     # the layers in the terrain; the rest stays as it is
+		"clouds":
+			_show_clouds(on)
 		"grid":
 			_overlays.set_grid(on)
 		"border":
@@ -1104,6 +1173,9 @@ func _switch_view(key: String, on: bool) -> void:
 				_overlays.set_walkable("", Vector2.ONE)
 			else:
 				_overlays.set_flow([], false)
+		"units", "limits":                             # a copy of the map without them, built in place
+			if on != was and _link != null:
+				_send({"type": "command", "name": "preview", key: on})
 		"marks":
 			if _link == null:
 				_overlay.visible = on and _mode == "edit"    # no companion: mw render's pictures leave them out

@@ -10,11 +10,10 @@ iteration, and check what matters in the game itself
   It opens the map once and takes every view in turn: a few seconds to open,
   then about a second a view. It needs OpenBFME and its game files, English
   RotWK 2.01 and BFME2 1.06 ([OpenBFME](testing-in-game.md#openbfme-mw-play---godot));
-  the first run builds OpenBFME, which takes minutes. OpenBFME has no detail levels, shadows, normal
-  maps, cloud shadows or falling rain and snow, and no switches for units,
-  editor markers or the object limits, so `--lod`, `--normal-maps`,
-  `--no-clouds`, `--vegetation-limits`, `--editor-markers`, `--no-units` and
-  `--time` need `--engine studio`. Where its pictures differ from the studio
+  the first run builds OpenBFME, which takes minutes. OpenBFME has no detail
+  levels, shadows or normal maps and does not draw WorldBuilder's editor
+  markers, so `--lod`, `--normal-maps` and `--editor-markers` need
+  `--engine studio`. Where its pictures differ from the studio
   renderer's is listed in [the Godot viewer's checklist](../godot-viewer/parity.md#how-openbfme-draws-the-map-differently).
 - **studio**: the studio's Python renderer, offscreen on the GPU, which
   reads terrain textures, models and INIs from the installed archives and
@@ -91,11 +90,11 @@ Reusable view sets go in a JSON file passed with `--views`:
 | `--lod low\|medium\|high` | the game detail level to imitate (default medium, as test games run): Medium has no terrain normal maps and uses stencil volume shadows; High adds normal maps and shadow mapping |
 | `--weather PRESET`, `--sun NAME` | the viewer's weather presets (clear, haze, rain, snow, dusk) and light rigs (ember, copper, blood, sulphur, ash, violet) over the map's own |
 | `--no-weather` | ignore the map.ini Weather block (fog, falling rain or snow) |
-| `--time SECONDS` | animation time: water ripples, clouds, falling rain and snow, particle effects (0) |
-| `--vegetation-limits` | keep only the game's first 1,200 trees and 2,000 shrubs, as the game does (default: draw every one) |
+| `--time SECONDS` | animation time: the units' idle animations, falling rain and snow, the flow arrows (0; the studio engine also moves the water ripples, clouds and particle effects, which OpenBFME moves on its own clock) |
+| `--vegetation-limits` | keep only the game's first 1,200 trees and 2,000 shrubs, and 64 kinds of tree, as the game does (default: draw every one) |
 | `--editor-markers` | also draw the WorldBuilder-only models the game never shows, such as the AI's farm sites (default: leave them out, as the game does) |
 | `--no-units` | leave out the units (default: each horde as its members in their ranks, every unit in its idle pose; [units](../game/renderer/objects.md#units)) |
-| `--no-objects`, `--no-shadows`, `--no-clouds` | leave those out (the cloud texture is on in game, frozen at time 0 here) |
+| `--no-objects`, `--no-shadows`, `--no-clouds` | leave those out (the game draws the map's cloud texture moving over the terrain) |
 | `--normal-maps auto\|on\|off` | terrain normal maps; auto follows `--lod` |
 | `--border` | draw the 30-cell border outside the playable area, which the game draws black (generators often fill it by repeating the edge, which looks streaked) |
 | `--grid` | a 100-unit world grid |

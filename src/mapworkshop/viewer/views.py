@@ -65,8 +65,10 @@ def render_words(spec):
 # The viewer's View switches that are on/off flags of `mw render`: (key, the
 # value that needs the flag, the flag). The others are --size, --weather and
 # --sun (render_flags).
-SWITCHES = (('objects', False, '--no-objects'), ('weather_fx', False, '--no-weather'), ('grid', True, '--grid'),
-            ('border', True, '--border'), ('walkable', True, '--walkable'), ('flow', True, '--flow'))
+SWITCHES = (('objects', False, '--no-objects'), ('weather_fx', False, '--no-weather'), ('clouds', False, '--no-clouds'),
+            ('grid', True, '--grid'),
+            ('border', True, '--border'), ('walkable', True, '--walkable'), ('flow', True, '--flow'),
+            ('vegetation_limits', True, '--vegetation-limits'), ('units', False, '--no-units'))
 RENDER_SIZE = (1600, 1200)      # mw render's default
 
 

@@ -68,10 +68,11 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 | Map: projects, the game's maps, Open project folder, Browse... | same; Browse... opens a project's build or a stock map only | `CompanionTests` |
 | Properties | same window (the Python viewer's own); its Save builds, and the build reloads | `CompanionTests` |
 | Build, its chip; Test In-Game and its choice | same, the Python viewer's own jobs | `CompanionTests` |
-| Preview: Weather, Sun | same lighting, fog and sky (a copy of the map); no falling rain or snow; the sky only on `WaterReflectionSkydome` objects | `rain`, `ember` pairs, `PreviewTests` |
+| Preview: Weather, Sun | same lighting, fog, sky and falling rain or snow (a copy of the map; the snow flake for flake); the sky only on `WaterReflectionSkydome` objects | `rain`, `ember` pairs, `PreviewTests` |
 | Preview: Detail | missing: OpenBFME has no detail levels | |
 | View: objects, water, roads, fog, Animate, grid, border, walkable, flow, marks | same, with the border drawn differently (below) | the overlay pairs |
-| View: units, shadows, clouds, normal maps, rain and snow, object limits, editor markers | missing: no such switches in OpenBFME | |
+| View: units, clouds, rain and snow, the tree and shrub limits | same; units and limits as a copy of the map without them | `CompanionTests`, `PastBuffersTests` |
+| View: shadows, normal maps, editor markers | missing: OpenBFME has none | |
 | Top view, Reset view, Screenshot, the frame rate and its cap | same | `top` pair |
 
 ## Marking the map for an agent
@@ -94,8 +95,6 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 These are differences in the drawing itself, not in the viewer. They matter
 for phase 4, where `mw render` moves onto the Godot viewer:
 
-- **No falling rain or snow**: the studio renderer draws the map's own rain on
-  Helm's Deep (`view`, `lens` pairs) and the presets' (`rain`).
 - **Rivers**: the Deeping Stream is lit pale at night where the studio
   renderer draws it dark (`open`, `view`, `top`; it is the river, not a road:
   it stays with the roads switched off). Water Lab's rivers are dark and flat

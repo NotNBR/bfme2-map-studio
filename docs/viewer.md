@@ -201,22 +201,25 @@ reads the map shown again.
   the viewer opens in the map's place (`<map> studio preview` in the user
   maps folder, removed when the viewer closes; while it is open, OpenBFME's
   Skirmish list shows it too). Rain and snow bring their fog, light and sky
-  but no falling rain or snow, and the sky changes only on the map's
-  `WaterReflectionSkydome` objects.
-- **View**: check marks that stay open while you switch them: objects (units
-  included), water, roads, fog (the map's own; switching it builds the
-  terrain again), **Animate** (the units' idle animations and the flow
-  arrows), grid, map border, walkable, river flow arrows and marks.
+  and the rain or snow falling, as the game lays it out; the sky changes only
+  on the map's `WaterReflectionSkydome` objects.
+- **View**: check marks that stay open while you switch them: objects, water,
+  roads, fog, rain and snow (the map's own; switching it builds the terrain
+  again), cloud shadows, **Animate** (the units' idle animations, the falling
+  rain or snow and the flow arrows), grid, map border, walkable, river flow
+  arrows, marks, **Units** and **The game's tree and shrub limits** (only the
+  first 1,200 trees, 2,000 shrubs and 64 kinds of tree the game keeps). The
+  last two open a copy of the map without what they leave out, as a preview
+  does.
 - **Top view**, **Reset view** and **Screenshot** (saved without the controls
   into `godot/` in the profile's renders folder,
   `local/profiles/<profile>/renders/godot/`).
 - **Frame rate**, at the right edge: the measured rate and the cap, for
   example `60 fps / 60`. Click it to change the cap.
 
-OpenBFME has no detail levels, shadows, normal maps, cloud shadows or falling
-rain and snow, and no switches for the units on their own, WorldBuilder's
-editor markers or the game's object limits, so the viewer has none of them,
-and it draws without anti-aliasing; `mw render --engine studio` draws them
+OpenBFME has no detail levels, shadows or normal maps and does not draw
+WorldBuilder's editor markers, so the viewer has none of them, and it draws
+without anti-aliasing; `mw render --engine studio` draws them
 ([rendering](guide/rendering.md)).
 
 ## Marking the map for an agent

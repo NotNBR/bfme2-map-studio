@@ -414,7 +414,7 @@ class Companion:
         elif name == 'overlay':
             out += self.overlay(message['overlay'])
         elif name == 'preview':
-            out += self.set_preview({k: message[k] for k in ('weather', 'sun') if message.get(k)})
+            out += self.set_preview({k: message[k] for k in OWN if message.get(k) is not None})
         elif name == 'reload':
             out += self.set_preview({}, 'the map again')
         elif name in ('save_view', 'apply_view', 'rename_view', 'delete_view', 'copy_view'):
@@ -519,9 +519,9 @@ class Companion:
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
     def set_preview(self, choice, what=None):
-        """Preview's weather or sun: the map prepared again as that preview (the same map: the marks, the analysis
-        and the camera stay), and the viewer told to build it; with no choice, the map read again (F5), `what` for
-        the toast."""
+        """Preview's weather or sun, or the View menu's units and tree limits (OWN's keys): the map prepared again
+        as that preview (the same map: the marks, the analysis and the camera stay), and the viewer told to build it;
+        with no choice, the map read again (F5), `what` for the toast."""
         if self.prepare is None:
             return [dict(type='status', text='this viewer shows the map as it is only', seconds=4)]
         try:
@@ -529,7 +529,9 @@ class Companion:
         except Exception as error:            # the menu back to what is shown
             return [dict(type='status', text=f'the preview did not work: {error}', seconds=8), self.menu()]
         self.preview = self.data['preview']
-        what = what or 'the preview: ' + ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
+        what = what or 'the preview: ' + ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']) + [
+            label for key, label in (('limits', "the game's tree limits"), ('units', 'no units'))
+            if self.preview[key] != OWN[key]])
         return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=what), self.menu()]
 
     # The saved views, as the Python viewer keeps them (viewer.views) ------------------------------------------
@@ -617,10 +619,12 @@ class Companion:
         _, spec = self.spec(message['camera'])
         shown = message.get('preview', {})
         preview = dict(size=shown.get('size'), objects=shown.get('objects', True), weather_fx=shown.get('fog', True),
+                       clouds=shown.get('clouds', True),
                        grid=shown.get('grid', False), border=shown.get('border', False),
                        walkable=shown.get('walkable', False), flow=shown.get('flow', False),
                        weather=None if self.preview['weather'] == 'map' else self.preview['weather'],
-                       sun=None if self.preview['sun'] == 'own' else self.preview['sun'])
+                       sun=None if self.preview['sun'] == 'own' else self.preview['sun'],
+                       vegetation_limits=self.preview['limits'], units=self.preview['units'])
         label = self.owner.id if self.owner else self.map_path.stem
         text = render_command(label if self.owner else f'"{self.map_path}"', 'view', spec, preview, label=label)
         hidden = '' if shown.get('water', True) else ' (with water: mw render always draws it)'
