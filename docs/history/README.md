@@ -24,6 +24,8 @@ hash it was measured on.
 | [Eight Kingdoms](eight-kingdoms.md) | launch presets, the prepared 4v4 battle and trailer, verification and recorded builds |
 | [Ithilien Frontier](ithilien-frontier.md) | launching, building and verifying the enlarged stock map, and its 8,000-pixel photograph |
 | [The Crown of Cardolan](crown-of-cardolan.md) | its eight-player setup and native review |
+| [The Godot viewer: plan](godot-viewer-plan.md) | moving the viewer, `mw render` and `mw item` onto OpenBFME, phase by phase, and the Python viewer's and renderer's removal (October 2026) |
+| [The Godot viewer against the Python viewer](godot-viewer-parity.md) | phase 3's feature-by-feature check, with what OpenBFME drew differently then |
 
 bfme-workshop also staged an
 [Eight Kingdoms 4v4 scenario](https://github.com/NotNBR/bfme-workshop/tree/main/examples/scenarios/eight_kingdoms_4v4):

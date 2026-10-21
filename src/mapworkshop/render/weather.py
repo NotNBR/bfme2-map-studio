@@ -1,10 +1,7 @@
-"""Map weather for previews: hardware fog and falling snow or rain.
+"""The map's falling snow or rain, for the viewer (render.godot.falling).
 
 Settings come from weather.ini's Weather block, overridden field by field by
 the map's map.ini Weather block (as the game's overridable WeatherSetting).
-
-Fog: HardwareFogEnable/Color/Start/End, applied by the effects by distance
-from the camera (see shaders.apply_fog).
 
 Particles: W3DSnowManager (W3DSnowManagerRender.cpp, Snow.cpp
 updateIniSettings, update 0x000949D9) and renderAsQuads (0x00093CC3, read
@@ -23,16 +20,13 @@ the world Z axis, 0.707 * SnowQuadSize either side of the centre, V = 0 at
 the top, vertex colour white (grey only under the brightness gate), drawn
 with shader bits 0x198B3: depth test without depth writes, alpha blending
 and no fog. Nothing is culled by distance; the near clip plane (10) is the
-only limit.
-Its WeatherMixin is the weather part of render.engine.MapRenderer: the methods
-that put it on the GPU and draw it, sharing the renderer's state.
+only limit. The viewer's falling.gdshader draws the quads.
 """
 
 import re
 
 import numpy as np
 from mapworkshop.mapkit.weather import WEATHER_BLOCK
-from mapworkshop.render import shaders
 
 DEFAULTS = dict(hardwarefogenable=False, hardwarefogcolor=(0, 0, 0), hardwarefogstart=0.0, hardwarefogend=1.0,
                 snowenabled=True, issnowing=False, snowtexture='EXRainDrop.tga', snowboxheight=300.0,
@@ -101,100 +95,30 @@ def emitters(settings, width, height):
     return np.concatenate(out)
 
 
-def particles(settings, width, height, travelled=0.0):
-    """World positions (N, 3) of the falling particles over a width x height map."""
-    if not (settings['snowenabled'] and settings['issnowing']):
-        return np.zeros((0, 3), np.float32)
-    box = max(int(settings['snowboxheight']), 1)
-    rand = msvc_rand()
-    start = np.array([next(rand) % box for _ in range(64*64)], np.float32).reshape(64, 64)
-    spacing = max(int(settings['snowspacing']), 1)
-    xs = np.arange(0, int(width), spacing)
-    ys = np.arange(0, int(height), spacing)
-    x, y = np.meshgrid(xs, ys)
-    # MODPOW2(x + 100000, 64) + MODPOW2(y + 100000, 64) * 64
-    h0 = box - np.fmod(start[(y + 100000) % 64, (x + 100000) % 64] + travelled, box)
-    amplitude = settings['snowamplitude']
-    px = x + amplitude*np.sin(h0*settings['snowfrequencyscalex'] + x)
-    py = y + amplitude*np.sin(h0*settings['snowfrequencyscaley'] + y)
-    return np.stack([px, py, h0], -1).reshape(-1, 3).astype(np.float32)
+def bleed_alpha(image):
+    """Fill transparent texels with nearby opaque colour before mipmapping.
 
-
-class WeatherMixin:
-    """MapRenderer's weather: fog uniforms and the falling rain or snow particles."""
-
-    # Weather ----------------------------------------------------------------
-    def _prepare_weather(self):
-        """map.ini Weather over weather.ini: hardware fog and falling particles."""
-        from mapworkshop.render.weather import parse, emitters
-        map_ini = self.source.parent/'map.ini' if self.source else None
-        if self.weather_preset:
-            from mapworkshop.mapkit.weather import ini_block
-            local = ini_block(self.weather_preset)
-        else:
-            local = self.map_ini
-        sun = ''
-        if self.sun:
-            from mapworkshop.mapkit.weather import sun_ini
-            sun = sun_ini(self.sun)
-        self.weather = parse(self.assets.ini_text('weather.ini'), local, sun)
-        w = self.weather
-        self.report['weather'] = dict(fog=[*w['hardwarefogcolor'], w['hardwarefogstart'], w['hardwarefogend']]
-                                      if w['hardwarefogenable'] else None,
-                                      particles=w['snowtexture'] if w['issnowing'] and w['snowenabled'] else None)
-        self.particles = None
-        centers = emitters(w, *self.playable)
-        self._weather_centers = centers
-        if len(centers):
-            self._prepare_image(w['snowtexture'])
-
-    def _weather_gpu(self):
-        w, centers = self.weather, self._weather_centers
-        texture = self._plain_texture(w['snowtexture']) if len(centers) else None
-        if texture is None:
-            return
-        program = self.ctx.program(vertex_shader=shaders.PARTICLE_VS, fragment_shader=shaders.PARTICLE_FS)
-        corners = self.ctx.buffer(np.array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1], 'f4').tobytes())
-        instances = self.ctx.buffer(centers.tobytes())
-        vao = self.ctx.vertex_array(program, [(corners, '2f', 'in_corner'), (instances, '3f/i', 'in_emitter')])
-        self.particles = dict(program=program, vao=vao, texture=texture, count=len(centers))
-        self.report['weather']['particle_count'] = len(centers)
-
-    def _set_fog(self, program, eye):
-        w = self.weather
-        on = int(w['hardwarefogenable'] and self.visible['weather'])
-        for key, value in [('fog_enabled', on), ('fog_color', tuple(w['hardwarefogcolor'])),
-                           ('fog_range', (w['hardwarefogstart'], w['hardwarefogend'])), ('fog_eye', eye)]:
-            if key in program:
-                program[key].value = value
-
-    def _draw_particles(self, vp, camera, eye, time=0.0):
-        mgl, ctx = self.moderngl, self.ctx
-        p = self.particles['program']
-        forward = np.asarray(camera['target'], float) - np.asarray(camera['eye'], float)
-        forward /= np.linalg.norm(forward) or 1.0
-        right = np.cross(forward, (0.0, 0.0, 1.0))
-        if np.linalg.norm(right) < 1e-6:
-            right = np.array([1.0, 0.0, 0.0])
-        right /= np.linalg.norm(right)
-        p['view_projection'].write(vp)
-        p['right'].value = tuple(right)
-        w = self.weather
-        box = float(max(int(w['snowboxheight']), 1))
-        speed = float(w['snowspeed']) or 1.0
-        p['size'].value = float(w['snowquadsize'])
-        p['box'].value = box
-        p['travelled'].value = float(time*w['snowspeed'])
-        p['amplitude'].value = float(w['snowamplitude'])
-        p['frequency'].value = (float(w['snowfrequencyscalex']), float(w['snowfrequencyscaley']))
-        p['drift'].value = (float(time*w['snowxyspeed'][0]), float(time*w['snowxyspeed'][1]))
-        p['drift_per_cycle'].value = (float(w['snowxyspeed'][0])*box/speed, float(w['snowxyspeed'][1])*box/speed)
-        p['playable'].value = self.playable
-        self.particles['texture'].use(0)
-        p['tex'].value = 0
-        ctx.enable(mgl.BLEND)
-        ctx.blend_func = (mgl.SRC_ALPHA, mgl.ONE_MINUS_SRC_ALPHA)
-        ctx.fbo.depth_mask = False
-        self.particles['vao'].render(mgl.TRIANGLES, instances=self.particles['count'])
-        ctx.fbo.depth_mask = True
-        ctx.disable(mgl.BLEND)
+    Retail DDS files ship their own mip chains; regenerating mips from the top
+    level would otherwise average hidden (often white) texels into the drop.
+    """
+    alpha = image[..., 3]
+    if alpha.min() >= 250:
+        return image
+    rgb = image[..., :3].astype(np.float32)
+    weight = (alpha > 127).astype(np.float32)
+    if weight.sum() == 0:
+        return image
+    out = image.copy()
+    filled = rgb*weight[..., None]
+    total = weight.copy()
+    for radius in (1, 2, 4, 8, 16, 32, 64):
+        blur = lambda a: sum(np.roll(np.roll(a, dy, 0), dx, 1) for dy in (-radius, 0, radius) for dx in (-radius, 0, radius))
+        filled, total = blur(filled), blur(total)
+        missing = (weight == 0) & (total > 0)
+        out[..., :3][missing] = (filled[missing]/total[missing, None]).astype(np.uint8)
+        weight = np.maximum(weight, (total > 0).astype(np.float32))
+        filled = out[..., :3].astype(np.float32)*weight[..., None]
+        total = weight.copy()
+        if weight.min() > 0:
+            break
+    return out

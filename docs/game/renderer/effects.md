@@ -1,6 +1,6 @@
 # Particle effects
 
-Objects get particle effects in two ways, and the renderer draws both:
+Objects get particle effects in two ways ([how the game draws a map](README.md)):
 
 - **W3D emitters.** The model's HLOD aggregate array (chunk `0x705`) names
   emitter files on bones. `GenericTorch`'s `GBTORCH`, for example, has
@@ -18,16 +18,17 @@ their emitters never update: `W3DPropDraw::reactToTransformChange` feeds
 `W3DPropBuffer`, and `ParticleEmitterClass::Render` is empty. Trees and shrubs
 have none.
 
-Effects are shown as on a map that has run for a while:
+On a map that has run for a while:
 
-- Systems that stop stay off: those with a `SystemLifetime`, `IsOneShot`, or
+- Systems that stop are off: those with a `SystemLifetime`, `IsOneShot`, or
   emitters with `MaxEmissions`.
 - Systems below the detail level's `MinParticlePriority` (`gamelod.ini`;
   `HIGH_OR_ABOVE` is off at Medium) are not drawn.
 
-Each particle's state is a closed-form function of its age, so any instant
-renders without simulating up to it. Randomness is a hash of the object, the
-emission and the particle, so stills are reproducible at any time.
+The rules below are those the studio's Python renderer followed; it computed
+each particle's state as a closed-form function of its age, with a hash of
+the object, the emission and the particle for randomness, so a still at any
+instant needed no simulation up to it.
 
 - **Emitters** (WW3D2 `part_emt.cpp`, `part_buf.cpp`, `pointgr.cpp`):
   - Emission every `int(1000 / rate)` ms, in bursts.
@@ -55,12 +56,8 @@ emission and the particle, so stills are reproducible at any time.
 
 Particles are drawn after water, without depth writes: alpha-blended groups
 first, sorted back to front, then additive ones. Fog fades additive particles
-to black. Particle textures are uploaded as they are: additive textures keep
-colour under zero alpha, which the alpha bleed applied to object textures
-would overwrite.
-
-The render report lists `effects`: emitters and systems attached, and those
-skipped with the reason.
+to black. Additive particle textures keep colour under zero alpha, so they are
+used as stored ([textures used as stored](#flame-and-glow-meshes)).
 
 ## Flame and glow meshes
 
@@ -72,33 +69,38 @@ lantern `TownLamp5`) has only these, and they work in the prop buffer too.
   `Obj_Look_At` at the bone's position instead of the mesh transform: local
   +x points at the camera (oriented) or along the camera's z axis (aligned),
   and y stays level (dx8renderer.cpp). The geometry type is a field, not
-  bits: `0x60000` shares the skin bit, which the loader used to take for a
-  skin.
+  bits: `0x60000` shares the skin bit, which the studio's Python renderer
+  once took for a skin.
 - **Grid mapper.** Stage-0 mapping `0x00070000`
   (`GridTextureMapperClass`). The UVs cover the first frame of a
   2<sup>Log2Width</sup> grid, which is stepped at `FPS` frames per second,
   row by row, up to `Last` frames. The flame sequence `EXFireTorchSeq` is a
   4 x 4 grid at 15 frames per second.
 - **Detail stage.** `DetailColorFunc` combines texture stage 1, with its own
-  UVs, into stage 0. DETAIL, SCALE, ADD, ADDSIGNED, ADDSIGNED2X and SCALE2X
-  are drawn. `FIREGLOW` multiplies its glow spot by itself (SCALE), which
+  UVs, into stage 0; the studio's Python renderer drew DETAIL, SCALE, ADD,
+  ADDSIGNED, ADDSIGNED2X and SCALE2X. `FIREGLOW` multiplies its glow spot by itself (SCALE), which
   darkens the spot's grey surround to almost black.
 - **Textures used as stored.** Materials that neither alpha blend nor alpha
-  test skip `bleed_alpha`, in the fixed-function path, `normalmapped.fx` and
-  `simple.fx` alike. Additive glows draw the colour under zero alpha, which
-  the bleed would replace with neighbouring atlas art; `FIREGLOW` then showed
-  as a patterned red square. An opaque texture's alpha need not mean
-  coverage at all: `GBAmonHen1`'s atlas is 95% transparent, and the bleed
-  turned the Amon Hen rocks that use it pale white.
+  test use the texture's colour as stored, whatever its alpha, in the
+  fixed-function path, `normalmapped.fx` and `simple.fx` alike. Additive
+  glows draw the colour under zero alpha: when the studio's Python renderer
+  bled neighbouring colour into transparent texels of such textures, the
+  bleed replaced it with neighbouring atlas art and `FIREGLOW` showed as a
+  patterned red square. An opaque texture's alpha need not mean coverage at
+  all: `GBAmonHen1`'s atlas is 95% transparent, and the bleed turned the
+  Amon Hen rocks that use it pale white.
 
 ## Approximations
 
-- Burst delays use the mean of `BurstDelay`.
+The studio's Python renderer approximated or left out the following; how the
+game handles them is not traced here.
+
+- Burst delays used the mean of `BurstDelay`.
 - `Wind`, `StartSizeRate`, slave and per-particle attached systems, `Event`
-  modules and the cylinder's `RadiusRate` are left out.
-- Other draw modules are skipped: `StreakDraw`, `GpuDraw`, `RenderObjectDraw`,
+  modules and the cylinder's `RadiusRate` were left out.
+- Other draw modules were skipped: `StreakDraw`, `GpuDraw`, `RenderObjectDraw`,
   `LightningDraw` and `ButterflyDraw`.
 - Whether BFME2 also adds the colour scale every frame, as Generals does, is
   not recovered.
-- Effects of other model-condition states (damaged, night, snow) are not
+- Effects of other model-condition states (damaged, night, snow) were not
   drawn.

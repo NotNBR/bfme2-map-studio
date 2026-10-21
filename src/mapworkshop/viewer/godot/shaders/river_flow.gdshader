@@ -1,4 +1,4 @@
-// River flow (View > River flow arrows), as render/shaders.py's RIVER_FLOW_FS draws it: over each river strip, chevrons
+// River flow (View > River flow arrows): over each river strip, chevrons
 // pointing downstream, one per v repeat and drifting downstream with time; the strip's banks as thin lines, its first
 // cross-section green and its last red. UV is the strip's (across, along); map coordinates are (x, -z) of Godot's.
 shader_type spatial;

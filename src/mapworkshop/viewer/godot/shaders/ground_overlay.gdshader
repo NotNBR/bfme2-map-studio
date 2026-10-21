@@ -1,4 +1,4 @@
-// Over the ground, as render/shaders.py's terrain shader draws it in the studio renderer: the walkability estimate
+// Over the ground: the walkability estimate
 // (mapkit.walkable's colours per cell, blocked cells striped), the 100-unit grid, and outside the playable area the
 // border faded to black over the border's width (shown when show_border). A mesh draped on the surface
 // (scripts/overlays.gd) carries it; map coordinates are (x, -z) of Godot's.

@@ -65,4 +65,4 @@ Headless game runs use the 32-bit `d3d9.dll` of [DXVK](https://github.com/doitsu
 
 ## Python dependencies
 
-Python dependencies are declared in `pyproject.toml`: NumPy and Pillow, with moderngl for rendering and imageio-ffmpeg for video. They are installed separately and retain the license notices included in their distributions.
+Python dependencies are declared in `pyproject.toml`: NumPy and Pillow. They are installed separately and retain the license notices included in their distributions.

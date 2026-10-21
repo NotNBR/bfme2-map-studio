@@ -1,8 +1,8 @@
-"""Headless BFME2 map renderer.
+"""Pictures of maps: mw render, mw item and the build's minimap.
 
-An offscreen OpenGL reimplementation of the game's terrain, water and object
-drawing, ported from the retail effect files (Shaders.big) and the EA/openbfme2
-height-map source. Assets are read directly from the installed game archives.
-It is an independent preview, not the game's renderer: check important
-conclusions in the game itself (`mw play`).
+The Godot viewer on OpenBFME's library draws them (render.godot), the game
+itself for comparison (mw render --engine game). The rest is what they share:
+the views and their cameras (camera, photo), the river strips (rivers) and the
+falling weather (weather), and mw item's catalogue and footprints (catalog,
+items, footprint).
 """

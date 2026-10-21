@@ -30,8 +30,8 @@ running: it is the viewer's companion, which keeps the marks, watches the
 build and works out what needs the map's analysis. The code is in
 [viewer/](../src/mapworkshop/viewer/): `godot_viewer.py` starts it,
 `godot_link.py` is the companion and `godot/` the Godot project;
-[the plan](godot-viewer/plan.md) records how it was built and
-[the checklist](godot-viewer/parity.md) how it compares with the Python
+[the plan](history/godot-viewer-plan.md) records how it was built and
+[the checklist](history/godot-viewer-parity.md) how it compared with the Python
 viewer it replaced.
 
 `--view` takes the words of `mw render --view` (an orbit view, not a top
@@ -154,9 +154,9 @@ reads the map shown again.
 
 - **Map**: your map projects first, then the game's own maps (they open under
   the RotWK profile only). **Open project folder** opens the current project's
-  source folder; **Browse...** picks a `.map` file, which opens when it is a
-  project's build or a stock map (`mw render --engine studio` draws any
-  other).
+  source folder; **Browse...** picks a `.map` file and opens it (one that is
+  neither a project's build nor a stock map as a copy in the user maps
+  folder).
 - **Properties** opens a window with the map's map-wide settings, in tabs:
   the project's title, description and weather preset; the camera limits;
   WorldInfo flags; the environment (water alpha, macro and cloud textures);
@@ -217,10 +217,9 @@ reads the map shown again.
 - **Frame rate**, at the right edge: the measured rate and the cap, for
   example `60 fps / 60`. Click it to change the cap.
 
-OpenBFME has no detail levels, shadows or normal maps and does not draw
-WorldBuilder's editor markers, so the viewer has none of them, and it draws
-without anti-aliasing; `mw render --engine studio` draws them
-([rendering](guide/rendering.md)).
+OpenBFME has no detail levels, shadows or normal maps, so the viewer has none
+of them, and it draws without anti-aliasing
+([where it differs from the game](guide/rendering.md#where-it-differs-from-the-game)).
 
 ## Marking the map for an agent
 

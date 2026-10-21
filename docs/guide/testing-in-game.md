@@ -1,6 +1,6 @@
 # Testing in the game
 
-The renderer and the walkability estimate are fast previews; the game decides.
+The viewer, `mw render` and the walkability estimate are fast previews; the game decides.
 `mw play` starts BFME2 on a map to play it, and two tools read the game without
 showing it: `mw walkable --native` (its pathfinding grid) and `mw capture`
 (screenshots). All three run an isolated copy of the game, so your own install,
@@ -283,7 +283,7 @@ the pin says why. Don't move the pin to the fork's `studio/main`: its features
 reach `mw play --godot` and `mw battle` only when a pin brings them in. An
 engine change goes to OpenBFME as a pull request; the few the studio alone
 needs are commits on the pinned tag, listed below, each with what replaces it.
-This is decision 5 of the [Godot viewer plan](../godot-viewer/plan.md#decisions).
+This is decision 5 of the [Godot viewer plan](../history/godot-viewer-plan.md#decisions).
 
 The pin is `studio-2026-10-21-2`: OpenBFME's `main` (`1ee8f2e9`) with
 
@@ -368,7 +368,7 @@ skirmish is seated as `mw play`'s ([line-ups](#line-ups)).
 - After moving the camera each shot waits `--settle` rendered frames (30)
   and, with `--delay MS`, at least that many milliseconds.
 
-Use it for what the renderer does not show, such as the water reflections at
+Use it for what the viewer does not show, such as the water reflections at
 High, and when a check needs the game's own view.
 
 ## Headless battles: `mw battle`

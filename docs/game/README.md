@@ -20,7 +20,7 @@ using the toolkit, in [the guides](../guide/projects-and-builds.md).
 | [Battalions](battalions.md) | where a battalion's soldiers stand, where a second battalion sent to a taken point stops, attack orders it cannot carry out | `mw battle` |
 | [Scripts](scripts.md) | the stored script tree, the catalogue of 595 actions and 195 conditions, what flags and timers do | `mapkit.script_writer` |
 | [Bases and script libraries](bases-and-libraries.md) | `.bse` castle templates, build lists, library linking | `formats.castles` |
-| [How the game draws a map](renderer/README.md) | terrain, water, shadows, objects, weather and particle effects, as the renderer reproduces them | `render` |
+| [How the game draws a map](renderer/README.md) | terrain, water, shadows, objects, weather and particle effects, as measured in the game | |
 | [The test-game runtime](runtime.md) | how test games, headless screenshots and faster loading work | `native` |
 
 ## Players, economy and AI

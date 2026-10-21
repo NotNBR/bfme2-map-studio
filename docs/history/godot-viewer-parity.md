@@ -1,6 +1,6 @@
 # The Godot viewer against the Python viewer
 
-Phase 3's check ([the plan](plan.md#phase-3-parity)): every feature of
+Phase 3's check ([the plan](godot-viewer-plan.md#phase-3-parity)): every feature of
 the Python viewer, as [the viewer's page](../viewer.md) described it then,
 section by section, in the Godot viewer (then `mw view MAP --godot`; since
 phase 4 the viewer, `mw view MAP`). Each item is one of:

@@ -124,7 +124,6 @@ class GameAssets:
         scoped._base = base
         scoped._templates = dict(base.templates)
         scoped._models = {}
-        scoped._units = {}
         scoped.map_ini = text
         scoped.add_map_templates(text)
         return scoped
@@ -169,7 +168,6 @@ class GameAssets:
             self.templates[name.lower()] = dict(kind=kind, parent=parent.lower() if kind != 'Object' and parent else None,
                                                 body=body, name=name, file='map.ini', line=None)
         self._models = {}
-        self._units = {}
 
     def template_model(self, template):
         """Draw information for a template's default state, or None.
@@ -242,11 +240,6 @@ class GameAssets:
         in place and comments removed (assets.ini.bodies)."""
         return ini.bodies(self, template)
 
-    def template_value(self, template, key):
-        """A template's own (top-level) value for key, inherited from its
-        parents; None without one (assets.ini.inherited)."""
-        return ini.inherited(self.template_bodies(template), key)
-
     def included(self, text, file, depth=0):
         """INI text with each #include "path" (relative to `file`, below
         data/ini) replaced by that file's text."""
@@ -263,196 +256,6 @@ class GameAssets:
                     includes[path] = ''
             return includes[path]
         return re.sub(r'(?im)^[ \t]*#include\s+"([^"]+)"', include, text)
-
-    @property
-    def constants(self):
-        """The INIs' #define values by name (gamedata.ini holds the horde sizes)."""
-        if not hasattr(self, '_constants'):
-            from mapworkshop.formats.big import definitions
-            try:
-                self._constants = definitions(self.ini_text('gamedata.ini'))
-            except FileNotFoundError:
-                self._constants = {}
-        return self._constants
-
-    def unit_animation(self, template):
-        """The animation file a unit stands in at the start of a game: the
-        first AnimationName of its IdleAnimationState, else its
-        DefaultModelConditionState's animation; None when it has none."""
-        return self._unit_cached('animation', template, self._unit_animation)
-
-    def _unit_animation(self, template):
-        for body in self.template_bodies(template):
-            body = WORLD_BUILDER.sub('', body)
-            names = []
-            idle = re.search(r'(?im)^\s*IdleAnimationState\b', body)
-            if idle:
-                names += re.findall(r'(?im)^\s*AnimationName\s*=\s*([\w.]+)', body[idle.end():])[:1]
-            default = re.search(r'(?ims)^\s*DefaultModelConditionState\b(.*?)^\s*End\b', body)
-            if default:
-                names += re.findall(r'(?im)^\s*(?:AnimationName|IdleAnimation|Animation)\s*=\s*([\w.]+)', default.group(1))
-            for name in names:
-                # 'Skeleton.Animation' names the file of the animation.
-                animation = name.rsplit('.', 1)[-1].lower()
-                if self.model_key(animation):
-                    return animation
-        return None
-
-    def hidden_subobjects(self, template):
-        """The sub-objects an object hides as it is created, lower case:
-        - a unit's: the ObjectHideSubObject[Permanently](self, "Name", true)
-          calls of the OnCreated function that its AILuaEventsList names in
-          data/scripts/scriptevents.xml (an EventList without one takes its
-          Inherit's), read from data/scripts/scripts.lua. The upgrades'
-          meshes are among them (Forged_Blade, FireArowTip).
-        - the CurDrawableHideSubObject[Permanently]("Name") calls of its draw
-          module's IdleAnimationState BeginScript, when the script has no
-          condition (CINE_DwarvenCatapult hides its crew so)."""
-        def hidden(name):
-            found = set()
-            for body in self.template_bodies(name):
-                for state in re.findall(r'(?ims)^\s*IdleAnimationState\b(.*?)^\s*End\b', body):
-                    for script in re.findall(r'(?is)\bBeginScript\b(.*?)\bEndScript\b', state):
-                        if not re.search(r'(?i)\bif\b', script):
-                            found.update(n.lower() for n in re.findall(
-                                r'CurDrawableHideSubObject(?:Permanently)?\(\s*"([^"]+)"\s*\)', script))
-                if found:
-                    break
-            for body in self.template_bodies(name):
-                events = re.search(r'(?im)^\s*AILuaEventsList\s*=\s*(\w+)', body)
-                if events:
-                    break
-            else:
-                return frozenset(found)
-            lists, hides = self._lua_created()
-            seen, events = set(), events.group(1).lower()
-            while events in lists and events not in seen:
-                seen.add(events)
-                inherit, created = lists[events]
-                if created:
-                    return frozenset(found | hides.get(created, frozenset()))
-                events = inherit
-            return frozenset(found)
-        return self._unit_cached('hidden', template, hidden)
-
-    def _lua_created(self):
-        """({event list: (its Inherit, its OnCreated function)}, {function:
-        the sub-objects it hides}), all lower case."""
-        if '_lua' not in self.__dict__:
-            lists, hides = {}, {}
-            try:
-                xml = re.sub(r'(?s)<!--.*?-->', '', self.read('data/scripts/scriptevents.xml').decode('latin-1'))
-                lua = re.sub(r'--[^\n]*', '', self.read('data/scripts/scripts.lua').decode('latin-1'))
-            except (FileNotFoundError, KeyError, OSError):
-                xml = lua = ''
-            for head, body in re.findall(r'(?is)<EventList\b([^>]*)>(.*?)</EventList>', xml):
-                name = re.search(r'(?i)\bName\s*=\s*"([^"]+)"', head)
-                inherit = re.search(r'(?i)\bInherit\s*=\s*"([^"]+)"', head)
-                created = re.search(r'(?i)EventName\s*=\s*"OnCreated"\s+ScriptFunctionName\s*=\s*"([^"]+)"', body)
-                if name:
-                    lists[name.group(1).lower()] = (inherit.group(1).lower() if inherit else None,
-                                                    created.group(1).lower() if created else None)
-            for function, body in re.findall(r'(?ims)^function\s+(\w+)\s*\([^)]*\)(.*?)^end\b', lua):
-                hides[function.lower()] = frozenset(n.lower() for n in re.findall(
-                    r'ObjectHideSubObject(?:Permanently)?\(\s*self\s*,\s*"([^"]+)"\s*,\s*true\s*\)', body))
-            self._lua = lists, hides
-        return self._lua
-
-    def horde_members(self, template):
-        """The members a horde fills itself with at the start of a game,
-        [(template, x, y)] in the horde's frame (x forward, map units): its
-        HordeContain's InitialPayload, each member at the next RankInfo
-        Position for its UnitType, rank by rank. [] for anything else."""
-        return self._unit_cached('members', template, self._horde_members)
-
-    def siege_crew(self, template):
-        """The crew a siege engine carries from the start of a game (the
-        battering rams' Uruks), [(template, bone, animation)]: its
-        SiegeEngineContain's InitialCrew, member k on the model's bone
-        PassengerBonePrefix + k (CREWBONE01), standing in the crew's
-        AnimationState = PASSENGER plus the condition that
-        BoneSpecificConditionState gives bone k (its side: the left and
-        right-handed holds), else in its idle animation. [] for anything else."""
-        return self._unit_cached('crew', template, self._siege_crew)
-
-    def _siege_crew(self, template):
-        for body in self.template_bodies(template):
-            contain = re.search(r'(?ims)^\s*Behavior\s*=\s*SiegeEngineContain\b(.*?)(?=^\s*(?:Behavior|Draw|Body)\s*=|\Z)', body)
-            if contain:
-                break
-        else:
-            return []
-        from mapworkshop.formats.big import number
-        block = contain.group(1)
-        prefix = re.search(r'(?im)^\s*PassengerBonePrefix\s*=\s*PassengerBone:\s*(\w+)', block)
-        conditions = {int(k): c.upper() for k, c in
-                      re.findall(r'(?im)^\s*BoneSpecificConditionState\s+(\d+)\s+(\w+)', block)}
-        crew = []
-        for name, count in re.findall(r'(?im)^\s*InitialCrew\s*=\s*(\S+)\s+(\S+)', block):
-            for _ in range(int(number(count, self.constants))):
-                k = len(crew) + 1
-                condition = conditions.get(k)
-                animation = self._state_animation(name, {'PASSENGER', condition} if condition else {'PASSENGER'})
-                crew.append((name, f'{prefix.group(1).lower()}{k:02d}' if prefix else None,
-                             animation or self.unit_animation(name)))
-        return crew
-
-    def _state_animation(self, template, conditions):
-        """The first AnimationName of the template's AnimationState for
-        exactly these model conditions, as an animation file; None without."""
-        for body in self.template_bodies(template):
-            for flags, state in re.findall(r'(?ims)^\s*AnimationState\s*=([^\n]*)\n(.*?)^\s*End\b', WORLD_BUILDER.sub('', body)):
-                if {f.upper() for f in flags.split()} == conditions:
-                    for name in re.findall(r'(?im)^\s*AnimationName\s*=\s*([\w.]+)', state):
-                        animation = name.rsplit('.', 1)[-1].lower()
-                        if self.model_key(animation):
-                            return animation
-        return None
-
-    def build_variations(self, template):
-        """BuildVariations: the templates the game creates one of in its
-        place (RohanPeasant: RohanPeasant1, 3 or 4); [] for none."""
-        def variations(name):
-            for body in self.template_bodies(name):
-                match = re.search(r'(?im)^\s*BuildVariations\s*=([^\n]*)', body)
-                if match:
-                    return [v for v in match.group(1).split() if v.lower() in self.templates]
-            return []
-        return self._unit_cached('variations', template, variations)
-
-    def _unit_cached(self, kind, template, compute):
-        cache = self.__dict__.setdefault('_units', {})
-        key = (kind, template.lower())
-        if key not in cache:
-            cache[key] = compute(template)
-        return cache[key]
-
-    def _horde_members(self, template):
-        for body in self.template_bodies(template):
-            contain = re.search(r'(?ims)^\s*Behavior\s*=\s*\w*HordeContain\b(.*?)(?=^\s*(?:Behavior|Draw|Body)\s*=|\Z)', body)
-            if contain:
-                break
-        else:
-            return []
-        from mapworkshop.formats.big import number
-        ranks = []
-        for line in re.findall(r'(?im)^\s*RankInfo\s*=([^\n]*)', contain.group(1)):
-            rank = re.search(r'(?i)RankNumber:\s*(\d+)', line)
-            unit = re.search(r'(?i)UnitType:\s*(\S+)', line)
-            for x, y in re.findall(r'(?i)Position:\s*X:\s*(-?[\d.]+)\s+Y:\s*(-?[\d.]+)', line):
-                ranks.append((int(rank.group(1)) if rank else 0, unit.group(1) if unit else '', float(x), float(y)))
-        ranks.sort(key=lambda r: r[0])                      # stable: positions keep their order in a rank
-        payload = [(name, number(count, self.constants))
-                   for name, count in re.findall(r'(?im)^\s*InitialPayload\s*=\s*(\S+)\s+(\S+)', contain.group(1))]
-        if not payload:
-            payload = [(unit, None) for unit in dict.fromkeys(r[1] for r in ranks)]
-        free, members = list(ranks), []
-        for name, count in payload:
-            fitting = [r for r in free if r[1].lower() == name.lower()] or free
-            for r in fitting[:len(fitting) if count is None else int(count)]:
-                free.remove(r)
-                members.append((name, r[2], r[3]))
-        return members
 
     def model_key(self, model):
         stem = model.lower().rsplit('.', 1)[0] if model.lower().endswith('.w3d') else model.lower()

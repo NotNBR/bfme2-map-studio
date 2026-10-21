@@ -256,20 +256,6 @@ def cmd_doctor(args):
               f'OpenBFME submodule: {len(dirt)} difference{"s" if len(dirt) > 1 else ""} from the commit recorded here '
               f'({"; ".join(dirt[:3])}{"; ..." if len(dirt) > 3 else ""})',
               'Nothing is written into it: docs/guide/testing-in-game.md, "The pin and a clean submodule".')
-    try:
-        import moderngl
-        ctx = moderngl.create_standalone_context(require=430)
-        renderer = ctx.info.get('GL_RENDERER', 'unknown')
-        ctx.release()
-        check(True, f'OpenGL 4.3: {renderer}')
-    except Exception as error:
-        check(False, 'OpenGL 4.3', f'The studio renderer (mw render --engine studio, mw item, map graphics) needs '
-                                   f'OpenGL 4.3 ({error}). Update the graphics driver.')
-    try:
-        import imageio_ffmpeg
-        check(bool(imageio_ffmpeg.get_ffmpeg_exe()), 'ffmpeg (videos only)', required=False)
-    except Exception:
-        check(False, 'ffmpeg (videos only)', 'pip install -e ".[video]"', required=False)
     if PROFILE == 'rotwk':
         from mapworkshop.native import runtime
         user_maps = runtime.APPDATA/runtime.profile_leaf()/'Maps'

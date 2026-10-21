@@ -3,7 +3,7 @@
 How the game blends terrain textures and maps them onto cliffs, and what
 `mapkit.blank.set_materials` and `mapkit.cliffs` write accordingly. The byte
 layouts are in the [terrain specification](../format/terrain.md); how the
-renderer draws them, in [the renderer's terrain](renderer/terrain.md).
+game draws them, in [terrain drawing](renderer/terrain.md).
 
 WorldBuilder's terrain implementation is partly available through EA's released
 Generals/Zero Hour source. It is a useful guide to the SAGE editor, but is not a
@@ -55,7 +55,7 @@ opposite corners of one texture as a single-corner blend in each layer.
 
 A blend spans one cell, so a wider transition has to be built from whole
 cells. The [Blend Lab](../../maps/blend_lab/map.py) compares sixteen ways in
-the renderer: mixing the two textures leaves an outline or speckle, while
+the studio's former renderer: mixing the two textures leaves an outline or speckle, while
 bands of textures of intermediate tone, best dithered, make the change
 gradual. Two or three bands of 40 to 50 units give the smoothest compact
 change; an in-between texture has to match the pair in pattern as well as
@@ -85,7 +85,7 @@ Native checks (15 October 2026, `maps/cliff_lab`, Medium): a map with 138,033
 records loads; mapped faces take the projected texture instead of the
 stretched one; triangle flip and the record's tile do not change the result.
 Open: a dark vertical band of one cell column shows on some mapped faces in
-the game but not in the renderer. It moves when every U is shifted by half a
+the game but not in the studio's former renderer. It moves when every U is shifted by half a
 repeat, so it depends on where in the texture a cell falls; WorldBuilder keeps
 each cell's U inside the texture's width (`adjustForTiling`), which the
 module does not yet do.

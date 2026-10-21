@@ -29,7 +29,7 @@ const SHADERS := ["terrain", "water_standing", "road", "river"]
 const WARMUP_FRAMES := 24     # frames before the first shot: the objects' first poses and the streamed textures
 const SHOT_FRAMES := 12       # and before each further shot: the new view's textures and the window's new size
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
-## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; the Python viewer's keys)
+## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; each title's key in brackets)
 const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
 	["fog", "Fog, rain and snow (6)", true], ["clouds", "Cloud shadows", true], ["animate", "Animate", true],
 	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
@@ -442,7 +442,7 @@ func _process(delta: float) -> void:
 		if forward != 0.0 or right != 0.0 or turn != 0.0 or tilt != 0.0 or zoom != 0.0:
 			_free()
 		if not _fixed:
-			# the Python viewer's speeds: Shift three times, Ctrl 0.3 times
+			# the speeds: Shift three times as fast, Ctrl 0.3 times
 			var speed := (3.0 if Input.is_key_pressed(KEY_SHIFT) else 1.0) * (0.3 if Input.is_key_pressed(KEY_CTRL) else 1.0)
 			_orbit.drive(delta, forward, right, turn, tilt, zoom, speed)
 			_orbit.update(delta)
@@ -667,7 +667,7 @@ func _lens_pick(field: String, value: Variant) -> void:
 			_fly.frame = Lens.frame_ratio(_frame_choice)
 
 
-## The wheel or a drag over a lens field (the Python viewer's adjust_field).
+## The wheel or a drag over a lens field: steps that field `notches` steps (negative: the other way).
 func _lens_step(field: String, notches: int) -> void:
 	match field:
 		"focal": _fly.zoom(notches)
@@ -912,8 +912,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_press_at = b.position
 				_press_double = b.double_click and _overlay.state.get("tool") == null
 				if _link != null:
-					# the companion says whether the press acts on the marks (as the Python viewer offers every press
-					# to its MarkEditor first); until then the drag waits, and its moves still go to the companion
+					# the companion says whether the press acts on the marks (every press goes to its MarkEditor
+					# first); until then the drag waits, and its moves still go to the companion
 					_drag = "pending"
 					_pending_orbit = Vector2.ZERO
 					_press_seq += 1
@@ -954,7 +954,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_pending_orbit += m.relative
 			"orbit":
 				_free()
-				_orbit.orbit(m.relative.x, m.relative.y)   # dragging down raises the camera, as in the Python viewer
+				_orbit.orbit(m.relative.x, m.relative.y)   # dragging down raises the camera
 			"pan":
 				_free()
 				# the grabbed point stays under the cursor: where the cursor's ray meets the grabbed point's height
@@ -999,7 +999,7 @@ func _preview(option: String, value: String) -> void:
 	_send({"type": "command", "name": "preview", option: value})
 
 
-## The views' keys in either mode (the Python viewer's): Ctrl+1-9 goes to the view in that slot, Ctrl+Shift+1-9
+## The views' keys in either mode: Ctrl+1-9 goes to the view in that slot, Ctrl+Shift+1-9
 ## saves the current one there, Ctrl+C copies the view as a mw render command. True when it was one of them.
 func _view_key(key: InputEventKey) -> bool:
 	if not key.ctrl_pressed:
@@ -1078,7 +1078,7 @@ func _go_to_view(v: Dictionary) -> void:
 	_status(String(v.name), 2)
 
 
-## Photo mode's mouse and keys (the Python viewer's): with the mouse taken, it looks around, a right drag slides, the wheel
+## Photo mode's mouse and keys: with the mouse taken, it looks around, a right drag slides, the wheel
 ## dollies (Alt: focal length, Shift: focus), a middle click focuses on the centre; a click takes the mouse back.
 ## True when the event was Photo mode's; the View keys and P, F1 go on to the common handling.
 func _photo_input(event: InputEvent) -> bool:

@@ -28,7 +28,7 @@ that covers it; [docs/README.md](docs/README.md) indexes them all.
 | Find, look at, turn and measure objects; textures, roads, sounds, effects | [finding assets](docs/guide/finding-assets.md) |
 | Design, assess or rework a map's landscape | [designing maps](docs/guide/designing-maps.md), [map graphics](docs/guide/map-graphics.md) for terrain and scenery diagnostics |
 | Water, fords, rivers, bridges, walls, sites, scripts: what the game does | [how BFME2 behaves](docs/game/README.md) |
-| A render disagrees with the game; changing the renderer | [how the game draws a map](docs/game/renderer/README.md) |
+| A picture from the viewer or `mw render` disagrees with the game | [how the game draws a map](docs/game/renderer/README.md), [where it differs](docs/guide/rendering.md#where-it-differs-from-the-game) |
 | Render a view; check in the game | [rendering](docs/guide/rendering.md), [testing in the game](docs/guide/testing-in-game.md) |
 | The bytes of a `.map` | [the format](docs/format/README.md) |
 
@@ -97,7 +97,7 @@ viewer's **Copy for agent** button copies.
    game verification (about 7 s). `mw capture <map> --shot NAME X Y HEIGHT
    [--graphics High]` saves screenshots rendered by the game itself (about
    10 s; it runs headless, unseen). Like `--native`, use it only when the user
-   wants the game's own view, for example to check something the renderer
+   wants the game's own view, for example to check something the viewer
    cannot show (water reflections at High).
 
 ## Keeping the repository in order

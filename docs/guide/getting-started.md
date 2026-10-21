@@ -11,9 +11,8 @@ You need:
   a port of the game's engine to Godot, which plays from those files;
   `mw play --godot --download` fetches the ones your installs lack. The first
   start builds OpenBFME, which takes a few minutes.
-- A graphics card with **OpenGL 4.3** (for `mw render --engine studio`, `mw item`
-  and map graphics) and Vulkan (for the viewer), which any card from the last
-  ten years has.
+- A graphics card with Vulkan (for the viewer, `mw render` and `mw item`),
+  which any card from the last ten years has.
 
 ## Install
 

@@ -41,12 +41,6 @@ keep and the tools that inspect a map.
 repository this one grew out of: lab runs with their map hashes, the first
 maps' build logs. Its commands do not exist here.
 
-## Work in progress
-
-[The Godot viewer](godot-viewer/plan.md): the plan for moving the viewer onto
-OpenBFME, and [how it compares](godot-viewer/parity.md) with the Python viewer,
-feature by feature.
-
 ## Licenses
 
 [Licenses and provenance](licenses/README.md).

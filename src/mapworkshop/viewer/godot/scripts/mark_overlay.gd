@@ -1,10 +1,10 @@
-## The marks over the map, as the Python viewer's MarkOverlay drew them: each outline draped on the
+## The marks over the map: each outline draped on the
 ## surface (Python sends the draped points: godot_link.marks_state), projected with the camera every frame and drawn
 ## on top as a thick line, a translucent fill for areas, discs for pins and a numbered tag per mark. Red marks; the one
 ## under the cursor lighter, the selected one yellow with square handles to resize it and, for a rectangle, a round
 ## handle on a stem to rotate it.
 ##
-## It also answers what is under a window position, with overlay.py's rules and distances, for the companion's
+## It also answers what is under a window position, by the distances viewer/marking.py uses, for the companion's
 ## MarkEditor: handle_at, grab_at, mark_at, handle_direction.
 class_name MarkOverlay
 extends Control

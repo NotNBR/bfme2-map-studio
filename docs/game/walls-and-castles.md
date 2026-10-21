@@ -6,7 +6,7 @@ first two; the third are ordinary objects.
 | Kind | Objects | Chained by | In a map |
 |---|---|---|---|
 | Chain walls (`WallHubBehavior`) | `MenWallSegmentSmall`, `MenWallHubSmall`, gates, posterns, towers, trebuchets; the same for Dwarves, Dol Guldur, Elves, Isengard and the faction castle kits | the engine, when a player places hubs; by hand in a map | `wall_line`, `place_wall` |
-| Castles (`CastleBehavior`) | `CastleFlag`, `CastleFlagNE/NW/SE/SW` | a castle template unpacked on capture | `castle_site`, `castle_layout` |
+| Castles (`CastleBehavior`) | `CastleFlag`, `CastleFlagNE/NW/SE/SW` | a castle template unpacked on capture | `castle_site` |
 | Decorative castle members (`CastleMemberBehavior`) | `RohanEdorasWall`, `GondorCastleWall`, the set pieces of Erebor, Blue Mountains, Osgiliath and others | not at all | `add_object` |
 
 ## Chain walls

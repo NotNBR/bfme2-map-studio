@@ -19,7 +19,6 @@ FONT = ('Segoe UI', 10)
 SMALL = ('Segoe UI', 9)
 MUTED = '#6e727c'
 ACCENT = '#2f6fc8'
-PROJECT_KEYS = ('title', 'description', 'weather')
 # Set from map.toml's title and description by the project's build.
 DERIVED = {('world', 'mapName'): 'title', ('world', 'mapDescription'): 'description'}
 

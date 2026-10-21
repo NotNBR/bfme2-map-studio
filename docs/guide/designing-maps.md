@@ -7,9 +7,7 @@ page is the method; [projects and builds](projects-and-builds.md) and
 [the toolkit](toolkit.md) are the means.
 
 The maps in [maps/](../../maps/README.md) are worked examples. Bramble Hollow,
-Brightwater Fold and the Hollin Dales are the most complete; the
-[Brightwater Fold showcase](../../misc/studio_showcase/README.md) follows one
-map from `mw new` to its last details in seven steps.
+Brightwater Fold and the Hollin Dales are the most complete.
 
 ## The passes
 
@@ -192,7 +190,7 @@ that matter first. Re-run the route checks after scenery is in.
 
 Review at three distances, tactical, transition and strategic, from every
 start. Look for material seams, floating objects, exposed borders, accidental
-repetition and a misleading minimap. The renderer is a preview; `mw play`
+repetition and a misleading minimap. `mw render` and the viewer are previews; `mw play`
 shows the game, and `mw capture` takes its screenshots when a review needs
 them. Keep a critique list ordered by impact (broken routes or starts, weak
 terrain or composition, collision, local polish), repair the earliest pass it

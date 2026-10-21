@@ -26,7 +26,7 @@ rem Install the packages unless they are already installed for this pyproject.to
 "local\venv\Scripts\python.exe" -c "import hashlib, pathlib, sys; m = pathlib.Path('local/venv/installed.txt'); sys.exit(not (m.exists() and m.read_text() == hashlib.sha256(pathlib.Path('pyproject.toml').read_bytes()).hexdigest() and pathlib.Path('local/venv/Scripts/mw.exe').exists()))"
 if errorlevel 1 (
     echo Installing the packages ...
-    "local\venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -e ".[render,video]" || goto failed
+    "local\venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -e . || goto failed
     "local\venv\Scripts\python.exe" -c "import hashlib, pathlib; pathlib.Path('local/venv/installed.txt').write_text(hashlib.sha256(pathlib.Path('pyproject.toml').read_bytes()).hexdigest())"
 )
 

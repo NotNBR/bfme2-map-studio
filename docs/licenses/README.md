@@ -20,10 +20,7 @@ Retail executables, extracted assets and isolated profiles are not included.
 - The viewer screenshot in the README shows a map rendered from BFME II's own
   textures and models. Rights to the underlying game visuals remain with their
   respective owners; it is a fan-project demonstration, not game assets licensed
-  for reuse under the project's GPL. The map viewer trailer
-  ([misc/map_viewer_trailer](../../misc/map_viewer_trailer/trailer.py)) uses an
-  original synthesized score ([`score.py`](../../misc/map_viewer_trailer/score.py))
-  and is not included; it renders into the ignored `local/videos/`.
+  for reuse under the project's GPL.
 - Generated maps, renders and local build outputs remain in the ignored `local/` folder.
 
 This project is not endorsed by or affiliated with EA or its licensors.

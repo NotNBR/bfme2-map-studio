@@ -1,4 +1,4 @@
-## The map overlays of the View menu, drawn on the ground as the studio renderer draws them (mw render --walkable): the grid, the border's fade, the
+## The map overlays of the View menu, drawn on the ground (mw render --walkable, --grid, --flow): the grid, the border's fade, the
 ## walkability estimate (one mesh draped on the surface, ground_overlay.gdshader) and the river flow arrows (each river
 ## strip's mesh, river_flow.gdshader). Python works out the walkability and the strips (godot_link); this draws them.
 class_name Overlays

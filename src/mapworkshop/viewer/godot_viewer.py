@@ -96,7 +96,6 @@ def parse_args(argv=None):
                         help='With --view: print where this map point lands in the picture, in the viewer and as '
                              'mw render projects it (repeatable)')
     parser.add_argument('--screenshot', type=Path, help='Save the view (or --view) as this PNG, unseen, and close')
-    parser.add_argument('--godot', action='store_true', help=argparse.SUPPRESS)   # the viewer's flag before phase 4
     return parser.parse_args(argv)
 
 

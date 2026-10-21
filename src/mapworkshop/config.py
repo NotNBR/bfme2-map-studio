@@ -8,7 +8,6 @@ Everything the workshop writes stays in the ignored `local/` folder:
     local/history/<map>/ earlier builds, one folder per build
     local/marks/         viewer marks, one file per map
     local/renders/       renders and viewer screenshots
-    local/videos/        videos
     local/cache/         caches
     local/openbfme/      OpenBFME for `mw play --godot` (native.openbfme)
 
@@ -137,14 +136,6 @@ ROTWK_ARCHIVES = frozenset(('ambientstreams.big', 'audio.big', 'bases.big', 'dat
     '_patch201.big', '_patch201ini.big', '_patch201maps.big'))
 
 
-def local_path(name, default=None):
-    """A configured path by name, or `default`."""
-    value = game_dir() if name == 'game' else setting(name)
-    if value:
-        return Path(value).expanduser()
-    return Path(default) if default else None
-
-
 # Select once per process. Children inherit this choice even if another studio
 # changes the saved default while a build or viewer is running.
 PROFILE = os.environ.get('MW_GAME_PROFILE') or setting('profile', 'bfme2')
@@ -158,7 +149,6 @@ HISTORY = PROFILE_ROOT/'history'
 MARKS = PROFILE_ROOT/'marks'
 VIEWS = PROFILE_ROOT/'views'
 RENDERS = PROFILE_ROOT/'renders'
-VIDEOS = PROFILE_ROOT/'videos'
 CACHE = PROFILE_ROOT/'cache'
 RUNTIME = PROFILE_ROOT/'runtime'
 GAME_LABEL = 'ROTWK 2.01' if PROFILE == 'rotwk' else 'BFME2'

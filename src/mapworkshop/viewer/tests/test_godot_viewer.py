@@ -146,7 +146,7 @@ class MainTests(unittest.TestCase):
     def test_mw_view_opens_the_map_and_makes_it_the_last_one(self):
         owner = mock.MagicMock()
         with mock.patch.object(godot_viewer, 'run', return_value=0) as run,                 mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')),                 mock.patch.object(godot_viewer.project, 'for_map_file', return_value=owner),                 mock.patch.object(godot_viewer.project, 'remember') as remember:
-            self.assertEqual(godot_viewer.main(['lab', '--godot', '--weather', 'rain']), 0)   # --godot: the old flag
+            self.assertEqual(godot_viewer.main(['lab', '--weather', 'rain']), 0)
             remember.assert_called_once_with(owner)
             self.assertEqual(run.call_args.kwargs['preview'], dict(weather='rain', sun='own'))
             run.return_value = (0, [])
@@ -164,10 +164,10 @@ class EngineTests(unittest.TestCase):
         self.assertAlmostEqual(shot['pitch'], 30.0)                     # below the horizon
         self.assertAlmostEqual(shot['heading'], 90.0)                   # facing east, as the view
 
-    def test_the_godot_engine_refuses_what_openbfme_cannot_draw(self):
+    def test_godot_is_the_default_engine(self):
         from mapworkshop.render import cli
         with mock.patch('sys.stderr'), self.assertRaises(SystemExit):
-            cli.main(['--map', 'water-lab', '--out', 'x', '--top', '--lod', 'high'])
+            cli.main(['--map', 'water-lab', '--out', 'x', '--top', '--engine', 'studio'])      # no more
         with mock.patch.object(cli, 'godot', return_value=0) as godot:
             self.assertEqual(cli.main(['--map', 'water-lab', '--out', 'x', '--top']), 0)   # the default engine
         godot.assert_called_once()
@@ -182,7 +182,7 @@ class ViewTests(unittest.TestCase):
         # heading 90: the camera stands west of the target and looks east
         self.assertAlmostEqual(camera['eye'][0], 500 - 1000*np.cos(np.radians(30)), places=6)
         self.assertAlmostEqual(camera['eye'][2], 20 + 500, places=6)
-        # the Edit camera orbits the target from the eye: the Python viewer's aim
+        # the Edit camera orbits the point the eye aims at
         self.assertEqual(camera['orbit']['x'], 500.0)
         self.assertAlmostEqual(camera['orbit']['heading'], 90.0, places=6)
         self.assertAlmostEqual(camera['orbit']['elevation'], 30.0, places=6)

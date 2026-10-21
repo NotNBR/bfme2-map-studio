@@ -1,7 +1,7 @@
 """The BFME2 installation: find it, extract its data, install maps, launch it.
 
 Nothing here writes to the game folder. `extract` copies the game's INI and
-map trees into local/game, which the builds and the renderer read; `install`
+map trees into local/game, which the builds and the toolkit read; `install`
 copies a built map into the game's user maps folder.
 """
 import hashlib

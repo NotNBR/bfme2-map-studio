@@ -1,7 +1,7 @@
 #[compute]
 #version 450
-// Photo mode's exposure and depth of field over the finished frame (scripts/photo_effect.gd), a port of render/photo.py
-// (its docstring has the method): each pixel's blur circle from its depth by the thin lens; the largest blur in each
+// Photo mode's exposure and depth of field over the finished frame (scripts/photo_effect.gd), as render/photo.py's
+// docstring lays out the method: each pixel's blur circle from its depth by the thin lens; the largest blur in each
 // TILE x TILE tile (pass 0), then the largest of the tiles it can reach (pass 1); the blur itself, Dennis Gustafsson's
 // single pass over a disc as large as that reach, in linear colour, then the exposure (pass 2). Pass 3 reads the
 // distance at one pixel, to focus on it; pass 4 copies the frame for pass 2 to read. The colour buffer is already

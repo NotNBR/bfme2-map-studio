@@ -42,7 +42,7 @@ globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
 ## Labs
 
 Small maps that each answer one question about the game, in the game and in
-the renderer. The docstring of each `map.py` lays out the test and records the
+the pictures (the studio's former renderer, now the viewer). The docstring of each `map.py` lays out the test and records the
 answer; the findings are in [how BFME2 behaves](../docs/game/README.md).
 
 | Lab | Id | Question |

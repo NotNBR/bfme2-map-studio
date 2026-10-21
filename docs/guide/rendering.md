@@ -10,15 +10,8 @@ iteration, and check what matters in the game itself
   It opens the map once and takes every view in turn: a few seconds to open,
   then about a second a view. It needs OpenBFME and its game files, English
   RotWK 2.01 and BFME2 1.06 ([OpenBFME](testing-in-game.md#openbfme-mw-play---godot));
-  the first run builds OpenBFME, which takes minutes. OpenBFME has no detail
-  levels, shadows or normal maps and does not draw WorldBuilder's editor
-  markers, so `--lod`, `--normal-maps` and `--editor-markers` need
-  `--engine studio`. Where its pictures differ from the studio
-  renderer's is listed in [the Godot viewer's checklist](../godot-viewer/parity.md#how-openbfme-draws-the-map-differently).
-- **studio**: the studio's Python renderer, offscreen on the GPU, which
-  reads terrain textures, models and INIs from the installed archives and
-  the extracted game data. [What it reproduces](#what-it-reproduces) was
-  measured against the game.
+  the first run builds OpenBFME, which takes minutes. Where its pictures
+  differ from the game's is [below](#where-it-differs-from-the-game).
 - **game**: the game itself, through [`mw capture`](testing-in-game.md#screenshots-from-the-game-mw-capture):
   each orbit view of a project's build as a cinematic shot from above its
   target, at the game's own resolution and field of view, HUD included; no top
@@ -35,8 +28,8 @@ mw render --map greywater-marches --out local/renders/greywater `
 
 `--map` takes a map project, a stock map name or a `.map` file (the Godot
 engine opens stock maps under the RotWK profile only). Each run writes one PNG
-per view plus `render.json` (map hash, the engine, camera settings; with the
-studio engine also missing assets and texture-size errors).
+per view plus `render.json` (map hash, the engine, the options, camera
+settings).
 
 To render single objects or a collage of them, see `mw item` and `mw items` in
 [finding assets](finding-assets.md#looking-mw-item-and-mw-items).
@@ -64,7 +57,7 @@ cell.
 | `ev=` | 0 | Exposure in stops: brighter above 0, darker below |
 
 The last four are photo effects the game does not have
-([render/photo.py](../../src/mapworkshop/render/photo.py)); the viewer's Photo
+([render/photo.py](../../src/mapworkshop/render/photo.py) has the lens); the viewer's Photo
 mode writes them, and **Copy view** gives a `mw render` command with them
 ([saved views](../viewer.md#photo-mode-and-the-camera-bar)). Depth of field
 counts 10 map units to the metre, so a real lens's blur: focused across the
@@ -86,29 +79,25 @@ Reusable view sets go in a JSON file passed with `--views`:
 
 | Option | Does |
 |---|---|
-| `--engine godot\|studio\|game` | what draws the pictures (above); godot by default |
-| `--lod low\|medium\|high` | the game detail level to imitate (default medium, as test games run): Medium has no terrain normal maps and uses stencil volume shadows; High adds normal maps and shadow mapping |
+| `--engine godot\|game` | what draws the pictures (above); godot by default |
 | `--weather PRESET`, `--sun NAME` | the viewer's weather presets (clear, haze, rain, snow, dusk) and light rigs (ember, copper, blood, sulphur, ash, violet) over the map's own |
 | `--no-weather` | ignore the map.ini Weather block (fog, falling rain or snow) |
-| `--time SECONDS` | animation time: the units' idle animations, falling rain and snow, the flow arrows (0; the studio engine also moves the water ripples, clouds and particle effects, which OpenBFME moves on its own clock) |
+| `--time SECONDS` | seconds after the map opens: the units' idle animations, falling rain and snow, the flow arrows (0; the water and the clouds move on OpenBFME's own clock) |
 | `--vegetation-limits` | keep only the game's first 1,200 trees and 2,000 shrubs, and 64 kinds of tree, as the game does (default: draw every one) |
-| `--editor-markers` | also draw the WorldBuilder-only models the game never shows, such as the AI's farm sites (default: leave them out, as the game does) |
-| `--no-units` | leave out the units (default: each horde as its members in their ranks, every unit in its idle pose; [units](../game/renderer/objects.md#units)) |
-| `--no-objects`, `--no-shadows`, `--no-clouds` | leave those out (the game draws the map's cloud texture moving over the terrain) |
-| `--normal-maps auto\|on\|off` | terrain normal maps; auto follows `--lod` |
+| `--no-units` | leave out the units (default: each horde as its members, animated as in a game) |
+| `--no-objects`, `--no-clouds` | leave out every placed object, or the map's cloud shadows on the terrain |
 | `--border` | draw the 30-cell border outside the playable area, which the game draws black (generators often fill it by repeating the edge, which looks streaked) |
 | `--grid` | a 100-unit world grid |
 | `--walkable` | the local walkability estimate, areas cut off from every start marked |
 | `--flow` | river flow arrows: yellow chevrons pointing downstream along each river strip, its banks in blue, its first cross-section green and its last red, so joins and overlaps between strips show |
 
-## What it reproduces
+## Where it differs from the game
 
-This section is about the studio engine. The renderer ports the game's own
-drawing: its effect files, its terrain compositing, its shadow volumes, its
-tree buffers and particle systems.
-[How the game draws a map](../game/renderer/README.md) records each part,
-what is ported and what is approximated; read it before changing the
-renderer or when a render and a game screenshot disagree. In short, not drawn:
-shroud, roads, point lights, shore waves and lightning; approximated: water
-techniques other than the common ones, High's shadow-map fitting and object
-material replacement.
+OpenBFME is a port of the game's engine, not the game; check what matters with
+`--engine game` or [in the game](testing-in-game.md). It draws one way, with
+no detail levels: no shadows, no terrain normal maps (as the game at Medium,
+which test games run) and no anti-aliasing. Standing water is a stand-in for
+the game's water shaders, lighter than the game's where rivers lie over it.
+Beyond the map it draws black. [How the game draws a map](../game/renderer/README.md)
+records each part as measured in the game, for when a picture and a game
+screenshot disagree.

@@ -1,4 +1,4 @@
-## The bar along the bottom, as the Python viewer's camera bar and status bar have them (docs/viewer.md, "Photo mode and
+## The bar along the bottom, a camera bar and a status bar in one (docs/viewer.md, "Photo mode and
 ## the camera bar"): at the left the camera, Edit or Photo, Views (the saved views with their thumbnails: go there,
 ## save the current one, rename, delete) and Copy view, and in Photo mode the lens (focal length, aperture, focus,
 ## exposure: the wheel or a sideways drag over a field changes it, a click opens its presets) and the framing aids

@@ -12,9 +12,8 @@ BFME2 has three kinds of wall object:
 - Castles (CastleBehavior): a CastleFlag is a site that unpacks the faction
   castle of whoever captures it (bases/castle_<faction>[NE|NW|SE|SW].bse, its
   CastleTemplates chunk) within MaxCastleRadius 420: keep, walls, gates,
-  elevators, tower nodes and props. `castle_site` places one; `castle_layout`
-  reads a castle's buildings, e.g. to keep the ground clear. The castle only
-  appears in the game: the renderer and viewer draw the flag alone.
+  elevators, tower nodes and props. `castle_site` places one. The castle only
+  appears in a game: the viewer draws the flag alone.
 - Decorative castle members (RohanEdorasWall, GondorCastleWall and the walls
   of the campaign maps' set pieces): ordinary objects for add_object.
 
@@ -38,7 +37,6 @@ import math
 
 CASTLE_RADIUS = 420.0           # CastleFlag's MaxCastleRadius (civilianbuildings.ini)
 CASTLE_DIRECTIONS = ('', 'NE', 'NW', 'SE', 'SW')
-CASTLE_FACTIONS = ('Men', 'Elves', 'Dwarves', 'Isengard', 'Mordor', 'Wild')
 
 
 @dataclass(frozen=True)
@@ -212,26 +210,3 @@ def castle_site(m, x, y, direction='', owner='PlyrNeutral', layer='Castles'):
     if direction not in CASTLE_DIRECTIONS:
         raise ValueError(f'Castle direction {direction!r}: use one of {CASTLE_DIRECTIONS}')
     add_object(m, 'CastleFlag'+direction, x, y, 0.0, layer=layer, extra=[('originalOwner', 3, owner_property(owner))])
-
-
-def castle_layout(faction='Men', direction='', assets=None):
-    """The buildings of a faction's castle (bases/castle_<faction><direction>.bse):
-    dict(name, buildings=[dict(template, x, y, z, angle)], radius), positions
-    relative to the castle's flag."""
-    from mapworkshop.formats.castles import decode
-    from mapworkshop.formats.map import Map
-    from mapworkshop.formats.map_archive import unpack
-    if assets is None:
-        from mapworkshop.assets.library import GameAssets
-        assets = GameAssets()
-    name = f'castle_{faction}{direction}'.lower()
-    data = assets.read(f'bases/{name}/{name}.bse')
-    if data[:4] != b'CkMp':
-        data = unpack(data)
-    m = Map(data)
-    chunk = m.chunk('CastleTemplates')
-    value = decode(chunk.data, m.names, chunk.version)
-    buildings = [dict(template=b['template'], x=b['position'][0], y=b['position'][1], z=b['position'][2],
-                      angle=b['angle']) for b in value['buildings'] if b['template']]
-    radius = max((math.hypot(b['x'], b['y']) for b in buildings), default=0.0)
-    return dict(name=value['faction'], buildings=buildings, radius=radius)

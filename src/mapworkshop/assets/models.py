@@ -1,16 +1,14 @@
-"""Static W3D models for preview rendering (native Z-up coordinates).
+"""Static W3D models: their meshes, bounds and bones (native Z-up coordinates).
 
 Meshes are placed using the HLOD's highest-detail LOD and its hierarchy
 (embedded or the referenced skeleton file). Skinned vertices are stored
 relative to their primary bone and are transformed by that bone. A model is
 in its bind pose, or still at the first frame of an animation when loaded as
-'model+animation' (units, assets.library.unit_animation); animation is not
-played.
+'model+animation'; animation is not played.
 
 Each part carries what the game's fixed-function path needs (vertex material,
 colour sources after MeshMatDescClass::Post_Load_Process, ShaderClass render
-states) or the FX material constants. `ModelCache.load_tree` gives the single
-mesh the tree and shrub buffers copy into their vertex buffers.
+states) or the FX material constants.
 """
 
 import struct
@@ -333,26 +331,6 @@ class ModelCache:
             return None
         return {bone['name']: m for bone, m in zip(bones, world)}
 
-    def load_tree(self, model):
-        """Geometry as W3DTreeBuffer/W3DShrubBuffer take it (addTreeType
-        0x000EC75D, vertex fill 0x000E7DF3): the first sub-object of the
-        model (HLodClass::Get_Sub_Object(0), the first mesh of the lowest
-        LOD), offset by the translation of its bone transform only, with the
-        mesh's own normals, DCG colour (alpha forced to 255, else white) and
-        UVs clamped to [0, 1]."""
-        key = ('tree', model)
-        if key in self.cache:
-            return self.cache[key]
-        result = None
-        file_key = self.assets.model_key(model)
-        if file_key is not None:
-            try:
-                result = self._build_tree(self.assets.read(file_key))
-            except (ValueError, KeyError, struct.error, IndexError) as error:
-                self._failed(model, error)
-        self.cache[key] = result
-        return result
-
     def _build_tree(self, data):
         top = list(chunks(data))
         meshes = {}
@@ -427,7 +405,7 @@ class ModelCache:
                                  for kk, q in chunks(p) if kk == 0x704])
                 if k == 0x705:
                     # The aggregate array: further render objects on bones,
-                    # such as particle emitters (render.effects draws them).
+                    # such as particle emitters.
                     aggregates += [(struct.unpack_from('<I', q)[0], cstr(q[4:36]))
                                    for kk, q in chunks(p) if kk == 0x704]
             if named is None and hierarchy_name:

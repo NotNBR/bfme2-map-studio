@@ -1,5 +1,5 @@
 """BFME W3D animation files: skeletons, their channels (adaptive-delta and
-time-coded) and the still poses the renderer draws units in (pose).
+time-coded) and a model's still pose at an animation's first frame (pose).
 
 GPL-3.0-only. Adaptive delta decoding follows OpenSAGE's
 W3dAdaptiveDeltaCodec / W3dAdaptiveDeltaBlock (see THIRD_PARTY.md).

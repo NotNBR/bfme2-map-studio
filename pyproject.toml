@@ -10,19 +10,14 @@ requires-python = ">=3.11"
 license = {file = "LICENSE.txt"}
 dependencies = ["numpy==2.5.3", "Pillow==12.3.0"]
 
-[project.optional-dependencies]
-render = ["moderngl==5.13.0"]
-video = ["imageio-ffmpeg==0.6.0"]
-
 [project.scripts]
 mw = "mapworkshop.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
-include = ["mapworkshop*", "maps*", "misc*"]
+include = ["mapworkshop*", "maps*"]
 exclude = ["*.tests", "*.tests.*", "*.__pycache__*"]
 
 [tool.setuptools.package-data]
 "mapworkshop.mapkit" = ["data/*.json"]
-"mapworkshop.video" = ["profiles.toml"]
 "mapworkshop.templates" = ["new_map/*.tmpl"]

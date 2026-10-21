@@ -24,7 +24,7 @@ searches both ([finding assets](finding-assets.md)).
 | [rivers](../../src/mapworkshop/mapkit/rivers.py) | a river's flowing surface over standing water (`add_river` along a line, `cross_sections`, `bank_width`) and shore waves (`add_shore_waves`) ([rivers and waves](../game/rivers-and-waves.md)). Water runs downhill only in flat steps: [water](../game/water.md) |
 | [cliffs](../../src/mapworkshop/mapkit/cliffs.py) | cliff texture mapping, so steep faces do not stretch their texture into streaks: `set_materials(..., cliffs=steep_cells(heights))`. One texture per map, and it goes last in the palette ([cliff mapping](../game/terrain-textures.md#cliff-mapping)) |
 | [bridges](../../src/mapworkshop/mapkit/bridges.py) | bridges the game spans between two points at any length (`add_bridge`; `bridge_type` for a map's own type), walkable; only models with left/span/right pieces work, which it checks ([spanned bridges](../game/roads-and-bridges.md#spanned-bridges)) |
-| [walls](../../src/mapworkshop/mapkit/walls.py) | the game's chainable walls (`wall_line` lays segments, hubs, gates and towers along a path for a faction's kit; `place_wall` adds them with an owner; `ground_rise` finds pieces on uneven ground) and castle sites (`castle_site`, `castle_layout`) ([walls and castles](../game/walls-and-castles.md)) |
+| [walls](../../src/mapworkshop/mapkit/walls.py) | the game's chainable walls (`wall_line` lays segments, hubs, gates and towers along a path for a faction's kit; `place_wall` adds them with an owner; `ground_rise` finds pieces on uneven ground) and castle sites (`castle_site`) ([walls and castles](../game/walls-and-castles.md)) |
 | [sites](../../src/mapworkshop/mapkit/sites.py) | outposts, inns, signal fires and shipwrights with their capture flags (`neutral_site`, `shipwright`), creep lairs (`creep_lair`), skirmish Gollum's spawn points (`gollum_spawns`), `spread` for evenly spaced points ([neutral sites](../game/neutral-sites.md)) |
 | [ambient](../../src/mapworkshop/mapkit/ambient.py) | a map's sound bed and emitters by kind of place (`ambient`, palettes per setting) |
 | [vegetation](../../src/mapworkshop/mapkit/vegetation.py) | keeps trees and shrubs past the game's 1,200 / 2,000 buffer limits visible as full models (crashes the game as it stands: see the Greywater Marches [README](../../maps/greywater_marches/README.md#checks)) |
@@ -55,7 +55,7 @@ searches both ([finding assets](finding-assets.md)).
 | [sections](../../src/mapworkshop/formats/sections.py) | every section of a map as Python values: `read(m, 'NamedCameras')`, change them, `write(m, ...)`; `Map.objects()` and `Map.set_objects()` do the same for objects |
 | [map](../../src/mapworkshop/formats/map.py), [map_archive](../../src/mapworkshop/formats/map_archive.py) | the CkMp container and its EAR/RefPack compression |
 | [terrain](../../src/mapworkshop/formats/terrain.py), [water](../../src/mapworkshop/formats/water.py), [lighting](../../src/mapworkshop/formats/lighting.py), [scripts](../../src/mapworkshop/formats/scripts.py), [castles](../../src/mapworkshop/formats/castles.py) | single sections with more than a layout to them |
-| [big](../../src/mapworkshop/formats/big.py), [w3d](../../src/mapworkshop/formats/w3d.py), [fxo](../../src/mapworkshop/formats/fxo.py) | the game's archives, models and compiled effects (`python -m mapworkshop.formats.fxo FILE.fxo --disassemble`) |
+| [big](../../src/mapworkshop/formats/big.py), [w3d](../../src/mapworkshop/formats/w3d.py) | the game's archives and models |
 
 The [map-file specification](../format/README.md) describes the bytes.
 
@@ -65,8 +65,8 @@ Below `mapkit` and `render`, which both read the installed game through it.
 
 | Module | For |
 |---|---|
-| [library](../../src/mapworkshop/assets/library.py) | `GameAssets`: the game's archives and loose files in its override order, its object templates (`templates`, `template_model`, a unit's idle animation), INIs, textures and models; `b.assets` in a build |
-| [models](../../src/mapworkshop/assets/models.py) | W3D models made ready to draw or measure (`ModelCache.load`, `load_tree`): meshes on their bones, materials and shader states |
+| [library](../../src/mapworkshop/assets/library.py) | `GameAssets`: the game's archives and loose files in its override order, its object templates (`templates`, `template_model`), INIs, textures and models; `b.assets` in a build |
+| [models](../../src/mapworkshop/assets/models.py) | W3D models made ready to measure (`ModelCache.load`): meshes on their bones, materials and shader states |
 | [ini](../../src/mapworkshop/assets/ini.py) | the one INI reader: a template with its parents and their #include files (`bodies`), its own top-level values (`inherited`; a module's Scale or Shadow is not the object's), the statements and the blocks they lie in (`statements`, `in_module`); `=` optional and `;`/`//` comments, as the game reads them |
 
 ## Around the build
@@ -75,10 +75,9 @@ Below `mapkit` and `render`, which both read the installed game through it.
 |---|---|
 | [project](../../src/mapworkshop/project.py) | the projects in `maps/` and the build pipeline ([projects and builds](projects-and-builds.md)) |
 | [game](../../src/mapworkshop/game.py) | the BFME2 installation: find it, extract its data, install maps (`mw setup`) |
-| [render](../../src/mapworkshop/render/) | the studio renderer (`mw render --engine studio`, `mw item`, map graphics: `engine.MapRenderer`, one part per subject in that subject's module, which [engine](../../src/mapworkshop/render/engine.py)'s docstring lists), the asset catalogue (`catalog`: `mw find`), single objects (`items`: `mw item`, `mw items`) and their measured outlines, footprints and named points, on their own or where a map places them (`footprint`: `mw item --section`, `mw where`, [measuring](finding-assets.md#measuring-outlines-footprints-and-positions)); [rendering](rendering.md), and [the renderer](../game/renderer/README.md) for what it reproduces of the game |
+| [render](../../src/mapworkshop/render/) | pictures through the viewer (`godot`: `mw render`, `mw item`, the build's minimap; the views in `camera` and `photo`, the river strips in `rivers`, the falling weather in `weather`), the asset catalogue (`catalog`: `mw find`), single objects (`items`: `mw item`, `mw items`) and their measured outlines, footprints and named points, on their own or where a map places them (`footprint`: `mw item --section`, `mw where`, [measuring](finding-assets.md#measuring-outlines-footprints-and-positions)); [rendering](rendering.md) |
 | [native](../../src/mapworkshop/native/) | the game itself: test games, its pathfinding grid, screenshots, the loading patch ([testing in-game](testing-in-game.md), [the runtime](../game/runtime.md)) |
-| [viewer](../../src/mapworkshop/viewer/) | the viewer on OpenBFME ([the viewer](../viewer.md)): `godot_viewer` starts it (`mw view`) and renders `mw render`'s pictures, `godot_link` is its companion, `viewer/godot/` the Godot project; the marks (`marks`, `marking`), saved views (`views`), the Properties window (`properties`) and the toolbar's jobs (`jobs`) |
-| [video](../../src/mapworkshop/video/) | FFmpeg encoding for the videos in `misc/` |
+| [viewer](../../src/mapworkshop/viewer/) | the viewer on OpenBFME ([the viewer](../viewer.md)): `godot_viewer` starts it (`mw view`), `godot_link` is its companion, `viewer/godot/` the Godot project; the marks (`marks`, `marking`), saved views (`views`), the Properties window (`properties`) and the toolbar's jobs (`jobs`) |
 
 ## Heightmaps
 

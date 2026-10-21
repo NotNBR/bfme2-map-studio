@@ -1,10 +1,10 @@
 # Objects and vegetation
 
-How the game lights and draws map objects, trees and shrubs, and what the
-renderer reproduces ([how the game draws a map](README.md)).
+How the game lights and draws map objects, trees and shrubs
+([how the game draws a map](README.md)).
 
-- Objects: W3D models in bind pose (HLOD, hierarchy, skins) with
-  `InstanceScaleFuzziness`; units in a still pose ([units](#units)). The light environment is the map's object
+- Objects: W3D models (HLOD, hierarchy, skins) with
+  `InstanceScaleFuzziness`; units as a new game creates them ([units](#units)). The light environment is the map's object
   ambient and object lights as `LightEnvironmentClass::Add_Light`
   (0x00140770) keeps them: lights below 0.05 in every channel are dropped
   (Greywater's third light), the rest sorted by brightness. At Low and Medium
@@ -18,14 +18,15 @@ renderer reproduces ([how the game draws a map](README.md)).
   (`MODULATE2X` when the map is overbright). Blending, depth writes and
   culling follow `ShaderClass::Apply`: alpha test >= 0x60, >= 1 for
   SrcAlpha/InvSrcAlpha blending, back faces culled unless the mesh is
-  two-sided. High's `ShaderMaterialReplacement` (DefaultW3D.fx) is not
-  reproduced.
+  two-sided. At High, `ShaderMaterialReplacement` (DefaultW3D.fx) replaces
+  this path; it is not traced.
 - FX materials: the technique is picked like water's (`InitializeShader`).
   `normalmapped.fx` runs `Default_M` at Medium (DirectionalLight[0] and [2]
   per vertex, DirectionalLight[1] bump-mapped, specular from light 0) and
-  `Default_L` at Low (vertex lighting, doubled); High's two-pass `Default`
-  is drawn with the `Default_M` port and flagged in the report
-  (`fx_materials`). Other effects are drawn as lit textured materials.
+  `Default_L` at Low (vertex lighting, doubled), and a two-pass `Default` at
+  High, which is not traced. Other effects are not traced either; the
+  studio's Python renderer drew High's `Default` as `Default_M` and the other
+  effects as lit textured materials.
 - Trees and shrubs: `KindOf TREE` / `KindOf SHRUB` templates with a
   `W3DTreeDraw` are handed to the tree and shrub buffers at map load with
   the map position, the map angle and the template's `Scale`: a new game
@@ -49,14 +50,7 @@ renderer reproduces ([how the game draws a map](README.md)).
   Alpha test >= 96; trees alpha-blend (`Vegetation.IsAlphaBlendEnabled`),
   shrubs do not; back faces are culled. Sway: `SwayOffsets` from the default
   breeze (ScriptEngine::reset) scaled by height above the tree's base, one
-  of ten random sway types per tree (none for `TaintedTree`), animated by
-  `--time`.
-
-
-Previews draw every tree and shrub of the map. The game keeps only the first
-1,200 trees and 2,000 shrubs in map order; `render --vegetation-limits` (or
-`MapRenderer(vegetation_limits=True)`) applies those limits, and the render
-report lists how many were dropped under `vegetation`.
+  of ten random sway types per tree (none for `TaintedTree`).
 
 A draw module's `ModelConditionState = WORLD_BUILDER` is the editor's: the
 game never enters that state. Templates whose only model is there are drawn
@@ -64,19 +58,15 @@ by WorldBuilder and not by the game: the AI's `FarmTemplate`,
 `ExpansionLocatorTemplate`, `WallHubTemplate` and `ThreatFinder`, the
 cinematic particle, fire and smoke proxies, and the summoning eggs
 (`FarmTemplate`: `DefaultModelConditionState` `Model = None`,
-`WORLD_BUILDER` `GBFarm_WB`). The renderer leaves these editor markers out
-(`render --engine studio --editor-markers` and `MapRenderer(editor_markers=True)`
-draw them, and the render report counts them
-under `editor_markers`). Hordes and castle centres also have only an editor
-model; the game shows their units or castle in its place. The renderer draws
-a horde's members instead ([units](#units)) and keeps the editor model as the
-castle centre's stand-in.
+`WORLD_BUILDER` `GBFarm_WB`). Hordes and castle centres also have only an
+editor model; the game shows their units ([units](#units)) or castle in its
+place.
 
 ## Units
 
-Templates with `EditorSorting = UNIT` (faction units, heroes, hordes, creeps)
-are drawn as a new game creates them, still (`assets.library`,
-`MapRenderer._placed_units`):
+A new game creates templates with `EditorSorting = UNIT` (faction units,
+heroes, hordes, creeps) as follows; the studio's Python renderer drew them
+so, still, read from the INI files and scripts named here:
 
 - A horde fills itself from its `HordeContain` (or `HorseHordeContain`):
   `InitialPayload` members (sizes from `gamedata.ini`'s `#define`s), each at
@@ -90,22 +80,20 @@ are drawn as a new game creates them, still (`assets.library`,
   way. Each takes the pose of the crew's `AnimationState = PASSENGER` plus the
   condition `BoneSpecificConditionState` gives its bone: the left side
   (`PASSENGER_VARIATION_1`) holds the ram with `IUUrukahi_BIDB`, the right
-  with `BIDA` (`GameAssets.siege_crew`).
-- A template with `BuildVariations` (`RohanPeasant`) becomes one of them; a
-  hash of the object stands in for the game's random pick.
-- Each other unit is posed at the first frame of its idle animation: the first
-  `AnimationName` of the draw module's `IdleAnimationState`, else the
-  `DefaultModelConditionState`'s animation, `#include`d files read
-  (`GameAssets.unit_animation`). The animation's bones replace the bind pose
-  by name (`ModelCache.load('model+animation')`); uncompressed (0x200),
-  timecoded (0x282) and BFME motion channels (0x284) are decoded
-  (`formats.w3d.channels`). A unit without one stays in its bind pose.
+  with `BIDA`.
+- A template with `BuildVariations` (`RohanPeasant`) becomes one of them, a
+  random pick.
+- Each other unit plays its idle animation: the first `AnimationName` of the
+  draw module's `IdleAnimationState`, else the `DefaultModelConditionState`'s
+  animation, `#include`d files read. The animation's bones replace the bind
+  pose by name; animations store uncompressed (0x200), timecoded (0x282) or
+  BFME motion channels (0x284) (`formats.w3d.channels` reads all three). A
+  unit without one stays in its bind pose.
 - Each unit leaves out the sub-objects its `OnCreated` script hides: the
   `AILuaEventsList` of its AI module names an `EventList` in
   `data/scripts/scriptevents.xml` (one without `OnCreated` takes its
   `Inherit`'s), whose function in `data/scripts/scripts.lua` calls
-  `ObjectHideSubObject[Permanently](self, "Name", true)`
-  (`GameAssets.hidden_subobjects`, `ModelCache.load('model|mesh,mesh')`).
+  `ObjectHideSubObject[Permanently](self, "Name", true)`.
   These are the upgrades' meshes, which the models carry unhidden: forged
   blades, fire arrow tips, shields. A list with no `OnCreated` hides nothing,
   so the Isengard berserker (`InfantryFunctions`) keeps its `Forged_Blade`
@@ -116,17 +104,16 @@ are drawn as a new game creates them, still (`assets.library`,
   field in a model condition state: no retail INI uses one and `game.dat`
   holds no such name.
 
-Not reproduced: the game's random idle choice and start frame (members
-differ slightly in the game, all alike here), banner carriers and
-`RandomTexture` swaps. `render --engine studio --no-units` leaves every unit
-out; the render report counts them under `units`
-(hidden, hordes, members, crew, posed).
+The game also picks each unit's idle animation and start frame at random (a
+horde's members differ slightly), adds banner carriers and makes
+`RandomTexture` swaps; the Python renderer, which posed every unit at its
+idle animation's first frame, did none of these.
 
 ## Open questions
 
 - Sway phases: the game rolls each sway type's speed and amplitude with
-  `GetGameClientRandomValueReal`; fixed factors stand in, and the cycle
-  assumes one sway step per logic frame (30 per second). Per-tree sway types
-  are a hash of the object index.
+  `GetGameClientRandomValueReal`; the Python renderer used fixed factors, a
+  hash of the object index for each tree's sway type, and one sway step per
+  logic frame (30 per second), which is assumed, not traced.
 - ShaderMaterialReplacement at High and normalmapped.fx `Default` (High) are
-  not ported (see Objects above).
+  not traced (see Objects above).

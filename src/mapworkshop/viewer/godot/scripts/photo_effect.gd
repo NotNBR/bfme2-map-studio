@@ -1,5 +1,5 @@
 ## Photo mode's exposure and depth of field over the finished frame: a compositor effect running shaders/photo.glsl
-## (a port of render/photo.py's Post) after the transparent pass, once OpenBFME's gamma composite has turned the colour
+## (render/photo.py has the method) after the transparent pass, once OpenBFME's gamma composite has turned the colour
 ## buffer back to linear light; it has to stay the camera's last effect (keep_last). It also reads the distance at a
 ## pixel for focusing on what is there (ask_distance, then `distance` once `answered` reaches the request), ground or
 ## object. The lens is set from the main thread; the passes run on the render thread.

@@ -28,13 +28,12 @@ deck that matches the walkable line) and CBBrdge1 have the sections.
     ini += bridge_type('MyStoneBridge', 'CBWBrdgeArc', scale=.8)   # wider; then
     add_bridge(m, 'MyStoneBridge', ..., map_ini=ini)
 
-The renderer and viewer draw them as the game builds them (W3DBridge::load and
+The game builds them so (W3DBridge::load and
 getIndicesNVertices, BFME2 1.06 via Open-BFME-2; pieces, layout, place): the
 model's BRIDGE_LEFT piece starts at the first point, BRIDGE_SPAN repeats as
 often as fits and BRIDGE_RIGHT ends at the second; the whole is scaled along
 its axis to fit exactly, and by BridgeScale across and up. A model without a
-span piece draws its left piece alone, stretched end to end. Each end lies
-FLOAT above the terrain plus the object's z (loadBridges).
+span piece draws its left piece alone, stretched end to end.
 """
 import math
 import re
@@ -114,7 +113,6 @@ def add_bridge(m, bridge, start, end, *, name, assets=None, map_ini='', layer='B
 
 
 # Geometry -------------------------------------------------------------------
-FLOAT = 0.25          # BRIDGE_FLOAT_AMT
 
 
 def pieces(model):

@@ -33,7 +33,7 @@ Explore a map, mark areas for an agent, and see edits reload in the viewer.
 
 You need **Windows**, your own copy of **BFME2 patched to 1.06**,
 [Python 3.11+](https://www.python.org/downloads/) and a graphics card with
-**OpenGL 4.3** and Vulkan support. The viewer and `mw render` also need
+Vulkan support. The viewer and `mw render` also need
 **Rise of the Witch-king 2.01** (English), whose files OpenBFME plays from
 ([getting started](docs/guide/getting-started.md)). An optional **Rise of the Witch-king** profile adds the
 expansion's assets to BFME2's library, with separate builds and caches; see
@@ -104,9 +104,8 @@ Agents start with [AGENTS.md](AGENTS.md).
 | Folder | |
 |---|---|
 | `maps/` | the map projects |
-| `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `video`, `native` (the game runtime: test games, the pathfinding grid, screenshots) and the `mw` command |
+| `src/mapworkshop/` | the toolkit: `formats` (native files), `mapkit` (building maps), `render`, `viewer`, `native` (the game runtime: test games, the pathfinding grid, screenshots) and the `mw` command |
 | `docs/` | `guide/` (using the workshop), `game/` (how BFME2 behaves), `format/` (the map file), `history/` (earlier work) |
-| `misc/` | things made with the workshop, such as the viewer trailer |
 | `local/` | ignored: the environment, the game data, builds, marks and renders |
 
 `mw test` runs the tests and the repository checks.

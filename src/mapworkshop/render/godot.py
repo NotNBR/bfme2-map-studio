@@ -52,7 +52,7 @@ FOV = 50.0            # degrees across the width: the Edit camera's (orbit_camer
 
 class Surface(Heights):
     """The visible surface on the height map's samples: terrain heights, raised to each standing water area's level
-    where the area covers a sample (render.engine's surface_at, sampled); `terrain` keeps the terrain's own, on which
+    where the area covers a sample; `terrain` keeps the terrain's own, on which
     mw render resolves views."""
 
     def __init__(self, m):
@@ -177,7 +177,6 @@ def falling(map_path, preview, playable, folder):
     from mapworkshop.assets.library import GameAssets
     from mapworkshop.mapkit import weather as presets
     from mapworkshop.render import weather
-    from mapworkshop.render.materials import bleed_alpha
     ini = map_path.with_name('map.ini')
     local = ini.read_text(encoding='cp1252', errors='replace') if ini.is_file() else ''
     if preview['weather'] != 'map':
@@ -189,7 +188,7 @@ def falling(map_path, preview, playable, folder):
     image = assets.image(w['snowtexture']) if len(emitters) else None
     if image is None:
         return None
-    Image.fromarray(bleed_alpha(image), 'RGBA').save(folder/'falling.png')
+    Image.fromarray(weather.bleed_alpha(image), 'RGBA').save(folder/'falling.png')
     (folder/'falling.f32').write_bytes(emitters.astype('<f4').tobytes())
     box, speed = float(max(int(w['snowboxheight']), 1)), float(w['snowspeed'])
     return dict(emitters='falling.f32', texture='falling.png', count=len(emitters), size=w['snowquadsize'], box=box,

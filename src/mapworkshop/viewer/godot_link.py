@@ -18,9 +18,9 @@ per line, and does in Python what the analysis and the studio's files need:
   local/views/<map>.json with the thumbnails beside it, and a view as the
   mw render command that draws it;
 - Preview: the map again as a copy with a weather preset or a sun
-  (godot_viewer.preview_map), which the viewer opens in its place;
+  (render.godot.preview_map), which the viewer opens in its place;
 - the View menu's overlays that need the map's analysis: the walkability
-  estimate (render.overlays, worked out once per build in the background) and
+  estimate (render.godot.walkability, worked out once per build in the background) and
   the river strips for the flow arrows (render.rivers).
 
 From the viewer:
@@ -372,7 +372,7 @@ class Companion:
                 self.editor.release()
             elif kind == 'click':
                 self.editor.click(None, 1.0)
-            # the cursor for what a press here would do, as the Python viewer sets it after every mouse event
+            # the cursor for what a press here would do, set again after every mouse event
             cursor = self.editor.pointer(None, 1.0, True)
         elif kind == 'tool':
             self.editor.set_tool(message.get('tool'))
@@ -407,7 +407,7 @@ class Companion:
             self.editor.toggle_visible()
         elif name == 'copy':
             out.append(self._copy())
-        elif name in ('delete', 'clear') and self.editor.visible:         # as the Python viewer: not on hidden marks
+        elif name in ('delete', 'clear') and self.editor.visible:         # not on hidden marks
             (self.editor.delete_selected if name == 'delete' else self.editor.clear)()
         elif name == 'open_map':
             out += self.open_map(message['map'])
@@ -477,7 +477,7 @@ class Companion:
         self.browsed = choose_map_file(folder)
 
     def open_properties(self):
-        """The Properties window for the map shown, as the Python viewer opens it: editable for a project, read-only
+        """The Properties window for the map shown: editable for a project, read-only
         for a game map; its Save writes map.toml and builds the project, which the viewer reloads. It opens once the
         game's files are loaded (their defaults for what a map leaves out)."""
         from mapworkshop.viewer.properties import PropertiesDialog, ini_texts
@@ -534,7 +534,7 @@ class Companion:
             if self.preview[key] != OWN[key]])
         return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=what), self.menu()]
 
-    # The saved views, as the Python viewer keeps them (viewer.views) ------------------------------------------
+    # The saved views, which viewer.views keeps ----------------------------------------------------------------
     def views_message(self):
         """The Views list, read again (another viewer may have saved one meanwhile)."""
         self.views.load()
@@ -544,7 +544,7 @@ class Companion:
         return dict(type='views', items=items, free=self.views.free_slot())
 
     def spec(self, camera):
-        """(mode, render.camera spec) of the viewer's camera, as the Python viewer's view_spec: an Edit view of the
+        """(mode, render.camera spec) of the viewer's camera: an Edit view of the
         orbit camera's goal, or a Photo view of the free camera where its eye is going."""
         from types import SimpleNamespace
         if camera['mode'] == 'photo':
@@ -594,7 +594,7 @@ class Companion:
             return [dict(type='status', text=f'{entry["name"]}: {error}', seconds=6)]
         camera.pop('view_projection')
         if view.eye is None:
-            camera['orbit']['heading'] = float(view.heading) % 360     # the view's own, as the Python viewer sets it
+            camera['orbit']['heading'] = float(view.heading) % 360     # the view's own heading
         return [dict(type='view', mode=entry['mode'], name=entry['name'], **camera)]
 
     def rename_view(self, message):
@@ -632,7 +632,7 @@ class Companion:
 
     def menu(self):
         """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game
-        choice, as the Python viewer's toolbar has them."""
+        choice."""
         from mapworkshop import game, project
         current = self.map_path.resolve()
         own = sorted(((str(p.map_file), p.title) for p in project.projects() if p.map_file.exists()),

@@ -33,13 +33,15 @@
   opens a map in about two seconds, with the Edit camera, and puts map points
   on the same pixels as `mw render`. Phase 2 is done: marking for agents, the
   marks panel, Copy for agent and live reload, through a Python companion.
-  Phase 3 is done ([the checklist](parity.md)): the new layout and toolbar,
+  Phase 3 is done ([the checklist](godot-viewer-parity.md)): the new layout and toolbar,
   the View menu's layers and overlays (grid, map border, the walkability
   estimate and the river flow arrows), Preview (the weather and sun presets,
   as a copy of the map), Photo mode (the free camera, the lens, frames and
   thirds, and `render/photo.py`'s depth of field as a compositor effect), the
-  saved views and Copy view, and Properties. Phase 4 is done but for the
-  Python renderer's removal ([phase 4](#phase-4-rendering-and-the-switch)).
+  saved views and Copy view, and Properties. Phase 4 is done
+  ([phase 4](#phase-4-rendering-and-the-switch)): `mw render` and `mw item`
+  draw on Godot, `mw view` opens the Godot viewer, and the Python viewer and
+  the Python renderer are gone.
 
 ## Where we are
 
@@ -280,7 +282,7 @@ and flow overlays; weather and sun presets; the top view, grid and border.
 Verified by: a checklist built from `docs/viewer.md`, item by item, with a
 screenshot of each in both viewers.
 
-Done ([the checklist](parity.md)): everything the Python viewer had, apart
+Done ([the checklist](godot-viewer-parity.md)): everything the Python viewer had, apart
 from what OpenBFME's library has no switch for, and the places where OpenBFME
 draws the map differently from the studio renderer (rivers, fog, rain), both
 listed there; phase 4 starts from those.
@@ -296,7 +298,7 @@ once the Godot one has matched it against the game's own screenshots.
 Verified by: the same views through all three engines; the docs updated in
 place (`docs/viewer.md`, `docs/guide/rendering.md`).
 
-Done (2026-10-21), but for the Python renderer's removal:
+Done (2026-10-21):
 
 - `mw render --engine godot` (the default) opens the map once in the Godot
   viewer on a hidden desktop of its own (`debugger.run_hidden`; Vulkan renders
@@ -309,13 +311,21 @@ Done (2026-10-21), but for the Python renderer's removal:
   interface (`viewer/app.py` with its toolbar, palette, camera bar, commands,
   session, overlay and cameras) is removed, the pieces the companion uses
   kept (`marks`, `marking`, `views`, `properties`, `jobs`).
-- One view of Water Lab through all three engines frames alike; the game and
-  the studio engine draw its rivers textured and light, OpenBFME dark and
-  flat. With that and the other differences in [the checklist](parity.md),
-  the Python renderer stays as `--engine studio`. Removing it needs two
-  things: OpenBFME drawing rivers, fog and rain as the game does (engine
-  work, in OpenBFME's own pull requests), and a Godot replacement for what
-  else draws with it, `mw item`, `mw items` and map graphics.
+- One view of Water Lab through all three engines frames alike.
+- What only the Python renderer drew, the Godot viewer draws too: the game's
+  tree and shrub limits and the units as View switches (a copy of the map
+  without them), the cloud shadows, rain and snow (the game's emitter
+  lattice, flake for flake as the Python renderer laid it), `--time`;
+  `mw item`, `mw items`, the build's minimap and `mw battle`'s plots. Rivers
+  come from OpenBFME as the game draws them, ported from the Python
+  renderer's measured `drawRiverWater`
+  ([#79](https://github.com/Open-BFME/openbfme-godot/pull/79), pinned as
+  `studio-2026-10-21-2`).
+- Then the Python renderer went (`--engine studio`, `render.engine` and its
+  parts, `formats.fxo`, moderngl), with what only it used. What it measured
+  of the game stays in [how the game draws a map](../game/renderer/README.md).
+  Not carried over: detail levels, shadows and normal maps (OpenBFME has
+  none), WorldBuilder's editor markers.
 
 ## The two reviewing agents
 

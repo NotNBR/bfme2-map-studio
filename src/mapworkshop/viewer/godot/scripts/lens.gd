@@ -1,8 +1,8 @@
 ## Photo mode's lens, as render/photo.py works it out (its docstring has the reasoning): a full-frame camera, 36 x 24
 ## mm; a frame of aspect 3:2 or wider is 36 mm wide on it, a narrower one 24 mm tall, and a focal length frames it
 ## with a horizontal field of view of 2 atan(w / 2f). Depth of field is the thin lens, with UNITS_PER_METRE map units
-## to the metre. The presets and the frames are the Python viewer's camera bar's, which phase 4 removed: this is
-## their only home (render/photo.py keeps the lens maths for mw render's studio engine).
+## to the metre. The presets and the frames are kept here and nowhere else
+## (render/photo.py keeps the lens maths for mw render's views).
 class_name Lens
 extends RefCounted
 

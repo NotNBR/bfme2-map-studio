@@ -1,7 +1,6 @@
 # Terrain
 
-How the game draws terrain, and what the renderer reproduces
-([how the game draws a map](README.md)).
+How the game draws terrain ([how the game draws a map](README.md)).
 
 - Terrain technique: `terrain.fx` is set up in `HeightMap` 0x000E153A with
   shader LOD 2 when `UseTerrainNormalMap` is on, else 1 with
@@ -15,9 +14,9 @@ How the game draws terrain, and what the renderer reproduces
   on the CPU (`getPointerToTileData` 0x000AED2E): base tile, then the blend
   and three-way tiles (`Use3WayTerrainBlends`) mixed by the 64x64 alpha ramps
   of `setupAlphaTiles`; the tiles' own alpha is not used, and cliff cells drop
-  the primary blend. The renderer mixes the same layers per pixel with the
-  per-corner ramps of `getAlphaUVData` (diagonal flips included), which give
-  the same weights. Tiles beyond `updateCenter`'s distance
+  the primary blend. Mixing the same layers per pixel with the per-corner
+  ramps of `getAlphaUVData` (diagonal flips included) gives the same weights,
+  as the studio's Python renderer did. Tiles beyond `updateCenter`'s distance
   (display width / 1024 clamped to 0.5..2.5, times 430, plus 25) use the 1x
   texture at 16 px per cell; nearer ones get 32 px per cell, and only with
   distance-dependent textures (so Low is 16 px per cell everywhere).
@@ -34,8 +33,8 @@ How the game draws terrain, and what the renderer reproduces
   T = (Nz, 0, -Nx), B = (0, Nz, -Ny); colour = vertex x texture + sun x
   (N.L x texture + specular), x2 under overbright, x cloud x macro. Textures
   without `_nrm` maps get a flat normal without gloss (B = 0): in game their
-  flat ground shows no sun glare, where B = 255 mirrored the sun over whole
-  fields seen from afar ([Specular Lab](../../../maps/specular_lab/map.py), High
+  flat ground shows no sun glare, where B = 255 in the studio's Python
+  renderer mirrored the sun over whole fields seen from afar ([Specular Lab](../../../maps/specular_lab/map.py), High
   screenshots facing the sun, 15 October 2026). Macro UV: stretched
   `(x + border, -(y + border)) / (samples x 10)`, else `(x, -y) / 660`.
   Cloud UV: world / CloudTextureSize plus Time x CloudOffsetPerSecond.
@@ -46,15 +45,15 @@ How the game draws terrain, and what the renderer reproduces
 ## Open questions
 
 - Terrain: the composited tile textures are 16-bit (format 25) or DXT1 in
-  game; the renderer samples the source textures at the same texel density
-  without that quantization. What the composited normal texture holds for
-  textures without `_nrm` maps is not recovered from the code; a flat normal
-  without gloss matches the Specular Lab screenshots. On its normal-mapped
-  half the renderer is a little brighter than the game (mean 30 against 27 of
-  255) with stronger sparkles. Fog and the Medium cloud/macro pass follow
-  native captures, not the passes' render states (FogEnable false,
-  ColorWriteEnable 0 on P1), which the engine evidently overrides; the order
-  (cloud and macro, then fog) follows the single-pass shaders. Low's fog is
-  assumed to match. The tessellated tile mesh (`isInMesh`), scene point
-  lights in `doTheLight`, weather darkening/lightning, shroud and taint are
-  not drawn.
+  game; the studio's Python renderer sampled the source textures at the same
+  texel density without that quantization. What the composited normal texture
+  holds for textures without `_nrm` maps is not recovered from the code; a
+  flat normal without gloss matches the Specular Lab screenshots. On the
+  lab's normal-mapped half the Python renderer came out a little brighter
+  than the game (mean 30 against 27 of 255), with stronger sparkles. Fog and
+  the Medium cloud/macro pass are taken from native captures, not the passes'
+  render states (FogEnable false, ColorWriteEnable 0 on P1), which the engine
+  evidently overrides; the order (cloud and macro, then fog) follows the
+  single-pass shaders. Low's fog is assumed to match. The tessellated tile
+  mesh (`isInMesh`), scene point lights in `doTheLight`, weather
+  darkening/lightning, shroud and taint are not traced.

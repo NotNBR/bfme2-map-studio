@@ -1,7 +1,7 @@
 """The Godot viewer's companion (viewer/godot_link.py): mouse events with a ray become marks through MarkEditor, the
 commands, the state the viewer draws, Copy for agent, the socket, live reload; and, when OpenBFME is built, the viewer
 itself driven headless: marks drawn and dragged by scripted input (the overlay picking the mark to drag) read in
-`mw marks` as the same marks drawn in the Python viewer's way."""
+`mw marks` as the marks MarkEditor makes from the same strokes driven directly."""
 import json
 import socket
 import tempfile
@@ -294,7 +294,7 @@ PHOTO = dict(EDIT, mode='photo', fly=dict(goal=[100.0, 200.0, 400.0], forward=[0
 
 
 class ViewsTests(unittest.TestCase):
-    """The saved views and Copy view, in the Python viewer's files and command."""
+    """The saved views (local/views/<map>.json, thumbnails beside it) and Copy view (a mw render command)."""
     setUp, send = CompanionTests.setUp, CompanionTests.send
 
     def test_a_view_is_saved_with_its_thumbnail_and_gone_back_to(self):
@@ -308,7 +308,7 @@ class ViewsTests(unittest.TestCase):
         self.assertEqual([(v['name'], v['slot'], v['mode']) for v in items], [('View 1', 3, 'edit')])
         with Image.open(items[0]['thumbnail']) as thumbnail:
             self.assertEqual(thumbnail.size, viewlib.THUMBNAIL)
-        saved = viewlib.Views(self.map_path).by_name('View 1')['spec']         # as the Python viewer reads it
+        saved = viewlib.Views(self.map_path).by_name('View 1')['spec']         # as viewer.views reads it
         self.assertEqual(saved, dict(target=[400, 300, 50], distance=1200, elevation=35, heading=90, fov=50))
         view = self.send(dict(type='command', name='apply_view', slot=3, size=[1600, 1000]))[0]
         self.assertEqual((view['type'], view['mode'], view['name']), ('view', 'edit', 'View 1'))

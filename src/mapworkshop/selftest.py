@@ -23,7 +23,7 @@ from urllib.parse import unquote
 
 from mapworkshop.config import ROOT
 
-LAYERS = dict(config=0, formats=1, assets=2, video=2, mapkit=3, render=5, game=5, project=5, templates=5, selftest=5,
+LAYERS = dict(config=0, formats=1, assets=2, mapkit=3, render=5, game=5, project=5, templates=5, selftest=5,
               native=5, viewer=6, cli=7, __main__=7)
 
 

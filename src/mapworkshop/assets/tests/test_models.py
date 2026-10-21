@@ -53,7 +53,6 @@ class ModelCacheTests(unittest.TestCase):
 
         cache = ModelCache(Assets())
         self.assertIsNone(cache.load('broken'))
-        self.assertIsNone(cache.load_tree('broken'))
         self.assertIsNone(cache.load('gone'))
         self.assertEqual(list(cache.unreadable), ['broken'])
 

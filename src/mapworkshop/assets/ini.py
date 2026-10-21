@@ -1,7 +1,7 @@
 """Reading the game's INI text: object templates and the blocks inside them.
 
 The one reader the toolkit has (assets.library, mapkit.pathing,
-render.catalog, render.effects, render.engine):
+render.catalog):
 
 - Comments, `;` and `//` to the end of the line, are not text (strip_comments).
 - A template stands with its ObjectReskin and ChildObject parents (chain); each

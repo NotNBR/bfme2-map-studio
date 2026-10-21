@@ -1,4 +1,4 @@
-## Photo mode's free camera, ported from the Python viewer's FlyCamera: an eye anywhere (nothing holds it above the
+## Photo mode's free camera: an eye anywhere (nothing holds it above the
 ## ground), turned by `heading` (0 north, 90 east), `pitch` (above the horizon) and `roll` (to the right), and a lens
 ## (Lens): `focal` mm, `aperture` (an f-number, 0 for everything sharp), `focus` (map units along the view) and `ev`.
 ## `frame` is the aspect of the picture within the window (0: the whole window); the focal length is on that frame's

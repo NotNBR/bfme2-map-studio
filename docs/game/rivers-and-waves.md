@@ -38,9 +38,11 @@ channel puts that fringe over open water as two hard lines along it.
 `bank_width(line, height_at, height)` gives `add_river` a width that runs out
 to where the ground stands above the river on both sides.
 
-The renderer draws rivers (`render.rivers`) as the game does, ported from
-`WaterRenderObjClass::drawRiverWater` (RVA 0x00100A0B, reconstructed in
-Open-BFME-2) and the game's `RiverWater.fx` (`shaders/compiled/riverwater.fxo`):
+The game draws a river with `WaterRenderObjClass::drawRiverWater` (RVA
+0x00100A0B, reconstructed in Open-BFME-2) and its `RiverWater.fx`
+(`shaders/compiled/riverwater.fxo`); `render.rivers` builds the same strip,
+and OpenBFME draws it so too
+([#79](https://github.com/Open-BFME/openbfme-godot/pull/79)):
 
 - One vertex pair per cross-section. The river and sparkle textures run 0 to
   0.5 across, the alpha edge 0 to 1; v advances evenly per cross-section, one
@@ -81,7 +83,7 @@ initial velocity, time to fade, time to compress, second wave offset
 `(28, 18, 50, 100, 5, 2000, 1000, 3000, 40)` and `wave256.tga`. The land lies
 to the left of the line from its first point to its second in 114 of 144.
 `add_shore_waves` lays waves along a shoreline given with the land to its
-left. The renderer does not draw shore waves; their units are not verified.
+left. Neither OpenBFME nor the viewer draws shore waves; their units are not verified.
 
 ## Shipwrights
 

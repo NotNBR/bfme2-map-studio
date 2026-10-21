@@ -167,9 +167,6 @@ class MarksSummary:
     def key_for(renderer, marks):
         return (id(renderer), str(marks.path), json.dumps(marks.plain()))
 
-    def invalidate(self):
-        self.key = None
-
     def update(self, renderer, marks, map_path):
         from mapworkshop.viewer import marks as marklib
         key = self.key_for(renderer, marks)

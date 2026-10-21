@@ -12,7 +12,7 @@ from mapworkshop.mapkit.blank import create, water_plane
 from mapworkshop.mapkit.rivers import (WAVE, add_river, add_shore_wave, add_shore_waves, bank_width, compass, courses,
                                        cross_sections, flow_text, point_along, runs)
 from mapworkshop.mapkit.sites import shipwright
-from mapworkshop.render.rivers import drawn, mesh, vertex_colour, water_diffuse
+from mapworkshop.render.rivers import mesh
 
 
 class Rivers(unittest.TestCase):
@@ -76,22 +76,6 @@ class Rivers(unittest.TestCase):
         self.assertEqual(triangles.tolist(), [[0, 1, 3], [2, 3, 5], [0, 3, 2], [2, 5, 4]])
         self.assertIsNone(mesh([(0, 0, 0, 10)], 151))
 
-    def test_vertex_colour_and_lod(self):
-        lights = [((0.0, 0.5, -0.8), (1.0, 0.9, 0.8)), ((0.0, 0.0, 0.5), (1.0, 1.0, 1.0))]   # the second points up
-        water = (185/255, 185/255, 185/255, 1.0)
-        r, g, b, a = vertex_colour((255, 255, 255, 0), (0.2, 0.2, 0.2), lights, water)
-        self.assertAlmostEqual(r, (0.2+0.8)*185/255)
-        self.assertAlmostEqual(b, (0.2+0.8*0.8)*185/255)
-        self.assertEqual(a, 1.0)
-        self.assertEqual(vertex_colour((0, 0, 0, 0), (0, 0, 0), [], water)[:3], (1.0, 1.0, 1.0))
-        self.assertEqual(vertex_colour((51, 102, 255, 0), (0, 0, 0), [], water)[:3], (0.2, 0.4, 1.0))
-        ini = 'WaterSet AFTERNOON\n  DiffuseColor = R:185 G:180 B:175 A:128\nEnd\n'
-        self.assertEqual(water_diffuse([ini], 2), (185/255, 180/255, 175/255, 128/255))
-        self.assertTrue(drawn('', 0) and drawn('Medium', 1))
-        self.assertFalse(drawn('Medium', 0))
-
-
-class Waves(unittest.TestCase):
     def test_waves_along_a_shore(self):
         m = create(200, 200, 30)
         self.assertEqual(add_shore_waves(m, 'Beach', [(0, 300), (1000, 300), (1000, 1300)], length=400, gap=50), 4)
