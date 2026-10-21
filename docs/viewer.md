@@ -157,8 +157,14 @@ of the units selected. The marks and their tools are put away meanwhile;
 | Esc | let go of the selection |
 | Middle drag | orbit (the left drag is the box); the right drag still pans, the wheel and the keys move the camera, but Z and X do not zoom |
 
-The panel at the top left pauses the game and sets its speed (0.5 to 4
-times). The first start takes about five seconds, while the game's objects
+The panel at the top left pauses the game, sets its speed (0.5 to 4 times)
+and draws **Paths**: the path each unit's AI follows, live, for the selected
+units (and their battalions' members) or for every unit. A path runs from the
+unit through the nodes still ahead to a cross at its end, the nodes behind it
+faint; it is orange while the unit waits for the pathfinder and red while it
+is blocked. A unit or battalion is drawn thick, a battalion's members thin.
+The game reads them from each unit's movement code
+(`GameWorld.get_object_path`, a commit on the [pin](guide/testing-in-game.md#the-pin-and-a-clean-submodule)). The first start takes about five seconds, while the game's objects
 load.
 
 The game reads the map from an archive the companion packs when the viewer

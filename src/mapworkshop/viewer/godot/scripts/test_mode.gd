@@ -7,12 +7,22 @@
 ## Left click a unit: select it (Shift adds); left drag: select the units in the box. Right click the ground: move
 ## there (Shift: a waypoint after the last); right click a unit of another owner: attack it. X stops, Esc lets go.
 ## The camera stays the Edit camera; its left drag is the box here, so the middle drag orbits.
+##
+## Paths (the panel): the path each unit's AI follows, live (GameWorld.get_object_path, its AIMover's): from the unit
+## through the nodes still ahead to the last, the nodes behind it faint, its goal a cross; orange while it waits for the
+## pathfinder, red while it is blocked. A unit or battalion standing on its own is drawn thick, a battalion's members thin.
 class_name TestMode
 extends Node
 
 const PICK_PIXELS := 18.0     # how near the cursor a unit's foot has to be, in pixels (a battalion: twice that)
 const RING := Color(0.45, 0.95, 0.45)
 const BOX := Color(0.85, 0.95, 0.85)
+const PATH := Color(1.0, 0.85, 0.25)        # a path's nodes still ahead
+const PATH_DONE := Color(1.0, 0.85, 0.25, 0.3)
+const WAITING := Color(1.0, 0.55, 0.15)     # waiting for the pathfinder
+const BLOCKED := Color(0.95, 0.3, 0.25)
+const LIFT := 3.0                           # map units over the ground, so the lines are not under it
+const PATHS := ["Off", "Selected", "All"]   # whose paths are drawn
 const KEYS := "Left click / drag  select (Shift adds)     Right click  move, or attack a unit (Shift: waypoint)     X  stop     Esc  let go     Middle drag  orbit"
 
 var world: Node                # the GameWorld
@@ -27,6 +37,7 @@ var _draw: Control
 var _info: Label
 var _pause_button: Button
 var _speed_button: OptionButton
+var paths := "Selected"       # PATHS
 
 
 ## The game on `map` (the archive's maps\<map>\) with these slots, over the viewer's file system `fs`. An empty string
@@ -83,6 +94,17 @@ func _build_ui() -> void:
 	_speed_button.select(1)
 	_speed_button.item_selected.connect(func(index: int) -> void: speed = _speed_button.get_item_id(index) / 10.0)
 	row.add_child(_speed_button)
+	var paths_label := Label.new()
+	paths_label.text = "   Paths"
+	row.add_child(paths_label)
+	var paths_button := OptionButton.new()
+	paths_button.focus_mode = Control.FOCUS_NONE
+	paths_button.tooltip_text = "The path each unit's AI follows: the selected units' (and their members'), or every unit's"
+	for p in PATHS:
+		paths_button.add_item(p)
+	paths_button.select(PATHS.find(paths))
+	paths_button.item_selected.connect(func(index: int) -> void: paths = PATHS[index])
+	row.add_child(paths_button)
 	column.add_child(row)
 	_info = Label.new()
 	_info.add_theme_color_override("font_color", UITheme.MUTED)
@@ -246,7 +268,65 @@ func stop() -> void:
 
 # The marks over the view ------------------------------------------------------------------------------------------
 
+## The units whose paths are drawn, each with whether it stands on its own (drawn thick; a battalion's member: thin): the
+## selected ones and their members, or every unit standing on its own and every battalion's members.
+func _path_units() -> Dictionary:
+	var out := {}
+	var ids: Array = selected if paths == "Selected" else (world.get_object_ids() if paths == "All" else [])
+	for id in ids:
+		var o: Dictionary = world.get_object(id)
+		if not _selectable(o):
+			continue
+		out[id] = true
+		for m in o.get("members", []):
+			out[m] = false
+	return out
+
+
+func _draw_paths() -> void:
+	var units := _path_units()
+	for id in units:
+		var r: Dictionary = world.get_object_path(id)
+		if not r.get("ok", false):
+			continue
+		var o: Dictionary = world.get_object(id)
+		var width := 3.0 if units[id] else 1.5
+		var colour := BLOCKED if r.blocked else (WAITING if r.waiting else PATH)
+		var points: Array = r.points
+		var current: int = r.current
+		var here := Vector3(o.x, o.y, o.z)
+		if points.is_empty():
+			if r.waiting:                              # no path yet: where it wants to go
+				_line(here, r.goal, WAITING, width)
+			continue
+		for i in range(1, points.size()):
+			_line(points[i - 1], points[i], PATH_DONE if current >= 0 and i <= current else colour, width)
+		if r.moving and current >= 0 and current + 1 < points.size():
+			_line(here, points[current + 1], colour, width)    # from the unit to the node it walks to
+		_cross(points[-1], colour, 5.0 if units[id] else 3.0)
+
+
+## A line between two map points over the ground, unless it runs behind the camera.
+func _line(a: Vector3, b: Vector3, colour: Color, width: float) -> void:
+	var pa := Surface.to_godot(a + Vector3(0, 0, LIFT))
+	var pb := Surface.to_godot(b + Vector3(0, 0, LIFT))
+	if _camera.is_position_behind(pa) or _camera.is_position_behind(pb):
+		return
+	_draw.draw_line(_camera.unproject_position(pa), _camera.unproject_position(pb), colour, width, true)
+
+
+func _cross(at: Vector3, colour: Color, size: float) -> void:
+	var p := Surface.to_godot(at + Vector3(0, 0, LIFT))
+	if _camera.is_position_behind(p):
+		return
+	var c := _camera.unproject_position(p)
+	_draw.draw_line(c - Vector2(size, size), c + Vector2(size, size), colour, 2.0, true)
+	_draw.draw_line(c - Vector2(size, -size), c + Vector2(size, -size), colour, 2.0, true)
+
+
 func _draw_marks() -> void:
+	if paths != "Off" and world.has_method("get_object_path"):
+		_draw_paths()
 	for id in selected:
 		var o: Dictionary = world.get_object(id)
 		if not _alive(o):

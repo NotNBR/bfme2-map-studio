@@ -285,7 +285,7 @@ engine change goes to OpenBFME as a pull request; the few the studio alone
 needs are commits on the pinned tag, listed below, each with what replaces it.
 This is decision 5 of the [Godot viewer plan](../history/godot-viewer-plan.md#decisions).
 
-The pin is `studio-2026-10-21-2`: OpenBFME's `main` (`1ee8f2e9`) with
+The pin is `studio-2026-10-21-3`: OpenBFME's `main` (`1ee8f2e9`) with
 
 | Commits | For | Until |
 |---|---|---|
@@ -293,6 +293,7 @@ The pin is `studio-2026-10-21-2`: OpenBFME's `main` (`1ee8f2e9`) with
 | rivers as the game draws them ([#79](https://github.com/Open-BFME/openbfme-godot/pull/79)) | the viewer's and `mw render`'s rivers: their texture, ripples, colour and additive blending | OpenBFME merges it |
 | siege, walkable walls, big battles ([#64](https://github.com/Open-BFME/openbfme-godot/pull/64), with [#63](https://github.com/Open-BFME/openbfme-godot/pull/63) and [#62](https://github.com/Open-BFME/openbfme-godot/pull/62)) | Helm's Deep's assault, and the battle log's siege phases | OpenBFME merges them |
 | extra archives (`OPENBFME_EXTRA_ARCHIVES`) | `mw play --godot`, `--check` and `mw battle` mount a studio map | games on a user map (part 2 of the user-maps change) |
+| a unit's path (`GameWorld.get_object_path`) | the viewer's Test mode draws the paths units follow | OpenBFME takes it, or the viewer reads paths another way |
 | `--no-shroud` | `mw play --godot` draws the map revealed | OpenBFME takes it as a debug option, or a pin without it and `--fog` as the default |
 | the headless battle log (`openbfme_peer --battle-log`) | `mw battle` | OpenBFME takes it, or the log moves into the studio |
 
