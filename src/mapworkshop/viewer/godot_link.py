@@ -33,7 +33,7 @@ From the viewer:
                                     focus: {z, distance, angle} of the Edit camera
     tool {tool}                     a palette tool armed ('pin', 'circle', 'rect', 'freehand' or null)
     command {name}                  undo, delete, clear, escape, toggle (the marks shown or not), copy, build, test,
-                                    open_folder, open_map {map}, browse, test_game {choice}, properties,
+                                    open_folder, open_map {map}, browse, reload, test_game {choice}, properties,
                                     overlay {overlay} ('walkable' or 'flow' switched on), preview {weather, sun}
                                     (either), save_view {camera, slot,
                                     thumbnail}, apply_view {view (its name) or slot, size}, rename_view {view, new},
@@ -394,6 +394,8 @@ class Companion:
             out += self.overlay(message['overlay'])
         elif name == 'preview':
             out += self.set_preview({k: message[k] for k in ('weather', 'sun') if message.get(k)})
+        elif name == 'reload':
+            out += self.set_preview({}, 'the map again')
         elif name in ('save_view', 'apply_view', 'rename_view', 'delete_view', 'copy_view'):
             out += getattr(self, name)(message)
         elif name == 'properties':
@@ -498,9 +500,10 @@ class Companion:
         self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
-    def set_preview(self, choice):
+    def set_preview(self, choice, what=None):
         """Preview's weather or sun: the map prepared again as that preview (the same map: the marks, the analysis
-        and the camera stay), and the viewer told to build it."""
+        and the camera stay), and the viewer told to build it; with no choice, the map read again (F5), `what` for
+        the toast."""
         if self.prepare is None:
             return [dict(type='status', text='this viewer shows the map as it is only', seconds=4)]
         try:
@@ -508,8 +511,8 @@ class Companion:
         except Exception as error:            # the menu back to what is shown
             return [dict(type='status', text=f'the preview did not work: {error}', seconds=8), self.menu()]
         self.preview = self.data['preview']
-        what = ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
-        return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=f'the preview: {what}'), self.menu()]
+        what = what or 'the preview: ' + ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
+        return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=what), self.menu()]
 
     # The saved views, as the studio viewer keeps them (viewer.views) ------------------------------------------
     def views_message(self):

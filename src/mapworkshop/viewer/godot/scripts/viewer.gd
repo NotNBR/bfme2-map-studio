@@ -188,6 +188,7 @@ func _build_stage() -> void:
 		for view in VIEWS:
 			entries.append([view[0], view[1], _views[view[0]]])
 		_frame.toolbar.set_views(entries)
+		_frame.toolbar.set_fps_limit(String(_scene.get("fps", "60")))    # mw view --fps
 		_link = Link.new()
 		var code := _link.open(int(_scene.port))
 		if code != OK:
@@ -760,6 +761,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and _view_key(event as InputEventKey):
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var k := event as InputEventKey
+		if k.keycode == KEY_F5:
+			_send({"type": "command", "name": "reload"})        # read the map again
+			return
+		if k.keycode == KEY_B and k.ctrl_pressed:
+			_send({"type": "command", "name": "build"})
+			return
 	if _mode == "photo" and _photo_input(event):
 		return
 	if event is InputEventMouseButton:

@@ -33,13 +33,12 @@
   opens a map in about two seconds, with the Edit camera, and puts map points
   on the same pixels as `mw render`. Phase 2 is done: marking for agents, the
   marks panel, Copy for agent and live reload, through a Python companion.
-  Phase 3 is under way: the new layout and toolbar (Map, Build, Test In-Game,
-  View), the View menu's layers and overlays (grid, map border, the
-  walkability estimate and the river flow arrows), Preview (the weather
-  and sun presets, as a copy of the map), Photo mode (the free camera, the
-  lens, frames and thirds, and `render/photo.py`'s depth of field as a
-  compositor effect), the saved views and Copy view, and Properties are
-  done.
+  Phase 3 is done ([the checklist](parity.md)): the new layout and toolbar,
+  the View menu's layers and overlays (grid, map border, the walkability
+  estimate and the river flow arrows), Preview (the weather and sun presets,
+  as a copy of the map), Photo mode (the free camera, the lens, frames and
+  thirds, and `render/photo.py`'s depth of field as a compositor effect), the
+  saved views and Copy view, and Properties. Next is phase 4.
 
 ## Where we are
 
@@ -279,6 +278,12 @@ and flow overlays; weather and sun presets; the top view, grid and border.
 
 Verified by: a checklist built from `docs/viewer.md`, item by item, with a
 screenshot of each in both viewers.
+
+Done ([the checklist](parity.md)): everything the studio viewer has, apart
+from what OpenBFME's library has no switch for (detail levels, shadows,
+normal maps, clouds, falling rain and snow, units, editor markers, object
+limits). The checklist also lists where OpenBFME draws the map differently
+from the studio renderer (rivers, fog, rain); phase 4 starts from those.
 
 ### Phase 4: rendering and the switch
 

@@ -178,7 +178,7 @@ def remove_previews():
 
 
 def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
-          preview=None):
+          preview=None, fps='60'):
     """Write the scene for map `name` (a project, stock map or .map file); (scene.json, its contents, the project or
     None, the Surface). A probe without a z stands on the terrain. `preview` ({weather, sun}, OWN's keys) opens a
     preview copy of the map (preview_map) instead of the map."""
@@ -198,7 +198,7 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
                              border=surface.border, cell=10.0),
                 playable=list(surface.playable), fov=FOV, marks=godot_link.marks_state(marklib.Marks(map_path), surface),
                 check=check, screenshot=str(Path(screenshot).resolve()) if screenshot else '',
-                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {})
+                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {}, fps=fps)
     if view:
         camera = resolve(view, surface.terrain, size)
         data['view'] = {k: v for k, v in camera.items() if k != 'view_projection'}
@@ -209,21 +209,22 @@ def scene(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, p
 
 
 def prepare(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, port=None, drive=None, views=None,
-            preview=None):
+            preview=None, fps='60'):
     """A map ready for the viewer: its build in the user maps folder (a project's) and its scene written; what
     scene() returns. The companion prepares the map again for a new build, another map or another preview."""
-    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views, preview)
+    prepared = scene(name, view, probes, screenshot, size, check, port, drive, views, preview, fps)
     if prepared[2] is not None:
         openbfme.install_user_map(prepared[2])
     return prepared
 
 
 def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, progress=print, timeout=None,
-        drive=None, views=None):
+        drive=None, views=None, preview=None, fps='60'):
     """Prepare and start the viewer on map `name`. With a screenshot or check, wait for it and return
     (exit code, the viewer's output lines); otherwise serve it as its companion until it closes and return its exit
     code. `drive` (tests): scripted input the viewer plays headless, with the companion, before it closes. `views`:
-    View switches to start with ({'grid': True, ...})."""
+    View switches to start with ({'grid': True, ...}); `preview` the weather and sun ({weather, sun}, OWN's keys);
+    `fps` the frame rate cap ('60', 'vsync', 'unlimited', ...)."""
     started = time.perf_counter()
     remove_previews()                     # any a viewer stopped before it could
     openbfme.assets(progress)
@@ -231,7 +232,7 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     interactive = not (screenshot or check)
     link = godot_link.Link() if interactive else None
     port = link.port if link else None
-    prepared = prepare(name, view, probes, screenshot, size, check, port, drive, views)
+    prepared = prepare(name, view, probes, screenshot, size, check, port, drive, views, preview, fps)
     path, data = prepared[:2]
     env = openbfme.environment([])
     headless = (check and not screenshot) or (drive and not any(step['do'] == 'screenshot' for step in drive))
@@ -260,16 +261,18 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
 
 
 def main(args):
-    """mw view MAP --godot [--view WORDS] [--probe X,Y[,Z] ...] [--screenshot PATH] [--size WxH]."""
+    """mw view MAP --godot [--view WORDS] [--probe X,Y[,Z] ...] [--screenshot PATH] [--size WxH] [--weather W]
+    [--sun S] [--fps F]."""
     size = tuple(int(v) for v in args.size.lower().split('x'))
     probes = [tuple(float(v) for v in p.split(',')) for p in (args.probe or [])]
     if probes and not args.view:
         raise SystemExit('--probe needs --view: the points are projected through that view')
     name = args.map or args.map_option
+    preview = dict(weather=args.weather, sun=args.sun)
     try:
         if not (args.screenshot or probes):
-            return run(name, args.view, size=size)
-        code, lines = run(name, args.view, probes, args.screenshot, size, check=not args.screenshot)
+            return run(name, args.view, size=size, preview=preview, fps=args.fps)
+        code, lines = run(name, args.view, probes, args.screenshot, size, check=not args.screenshot, preview=preview)
     except (LookupError, RuntimeError, ValueError) as error:
         raise SystemExit(f'mw view --godot: {error}')
     for line in lines:

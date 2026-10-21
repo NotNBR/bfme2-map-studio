@@ -1,8 +1,8 @@
 ## The toolbar across the top, as the studio viewer has it (docs/viewer.md, "The toolbar"): Map (the map projects,
 ## the game's maps, Open project folder, Browse...), Properties, Build with its chip, Test In-Game and what it starts,
 ## Preview (the weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay
-## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate. The
-## lists come from the companion's menu message.
+## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate with
+## its cap (a menu, as the studio viewer's). The lists come from the companion's menu message.
 class_name Toolbar
 extends PanelContainer
 
@@ -20,6 +20,7 @@ signal preview_chosen(option: String, value: String)
 signal action(name: String)
 
 const TEST_GAMES := {"original": "Original game", "openbfme": "OpenBFME (Godot)"}
+const FPS_LIMITS := ["30", "60", "90", "120", "144", "vsync", "unlimited"]    # viewer/app.py's; 60 at the start
 
 var _map: MenuButton
 var _maps := []               # the Map menu's .map paths, by item id
@@ -29,7 +30,8 @@ var _view: MenuButton
 var _views := []              # [key, title] of the View menu's entries, by item id
 var _preview: MenuButton
 var _previews := []           # [option, value] of the Preview menu's entries, by item id
-var _fps: Label
+var _fps: MenuButton
+var _fps_limit := "60"
 var _build := {}              # the build chip's last message
 
 
@@ -78,11 +80,18 @@ func _ready() -> void:
 	_add(row, "Top view", "Look straight down, north up (T)", func() -> void: action.emit("top"))
 	_add(row, "Reset view", "The whole map (Space)", func() -> void: action.emit("reset"))
 	_add(row, "Screenshot", "Save the view into the renders folder (P)", func() -> void: action.emit("screenshot"))
-	_fps = Label.new()
+	_fps = MenuButton.new()
+	_fps.tooltip_text = "The frame rate and its cap: click to change the cap"
 	_fps.add_theme_color_override("font_color", UITheme.MUTED)
-	_fps.custom_minimum_size = Vector2(60, 0)
-	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_fps.custom_minimum_size = Vector2(90, 0)
+	var caps := _fps.get_popup()
+	caps.add_separator("Frame rate cap")
+	for i in FPS_LIMITS.size():
+		var v: String = FPS_LIMITS[i]
+		caps.add_radio_check_item({"vsync": "VSync (monitor rate)", "unlimited": "Unlimited"}.get(v, "%s fps" % v), i)
+	caps.id_pressed.connect(func(id: int) -> void: set_fps_limit(FPS_LIMITS[id]))
 	row.add_child(_fps)
+	set_fps_limit("60")
 
 
 func _add(row: HBoxContainer, text: String, tip: String, pressed: Callable) -> Button:
@@ -97,8 +106,18 @@ func _add(row: HBoxContainer, text: String, tip: String, pressed: Callable) -> B
 
 
 func _process(_delta: float) -> void:
-	_fps.text = "%d fps" % Engine.get_frames_per_second()
+	var cap := "" if _fps_limit in ["vsync", "unlimited"] else " / %s" % _fps_limit
+	_fps.text = "%d fps%s" % [Engine.get_frames_per_second(), cap]
 	_show_build()
+
+
+## The frame rate cap: a number of frames a second, "vsync" (the monitor's rate) or "unlimited".
+func set_fps_limit(limit: String) -> void:
+	_fps_limit = limit
+	Engine.max_fps = int(limit) if limit.is_valid_int() else 0
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if limit == "vsync" else DisplayServer.VSYNC_DISABLED)
+	for i in FPS_LIMITS.size():
+		_fps.get_popup().set_item_checked(_fps.get_popup().get_item_index(i), FPS_LIMITS[i] == limit)
 
 
 ## The companion's menu message: the Map menu's entries and Test In-Game's choice.

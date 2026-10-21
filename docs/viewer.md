@@ -260,7 +260,7 @@ strips show. `mw render ... --flow` draws the same into still renders, and
 ## The Godot viewer
 
 ```powershell
-mw view MAP --godot [--view "target=X,Y distance=D ..."] [--size 1600x1000]
+mw view MAP --godot [--view "target=X,Y distance=D ..."] [--size 1600x1000] [--weather W] [--sun S] [--fps F]
 mw dev MAP --godot
 mw view MAP --godot --view "..." --screenshot PICTURE.png
 mw view MAP --godot --view "..." --probe X,Y[,Z] [--probe ...]

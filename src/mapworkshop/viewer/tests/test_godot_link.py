@@ -183,6 +183,13 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(self.companion.preview, preview)
         self.assertIs(self.companion.loaded, loaded)                   # the same map: its marks and analysis stay
 
+    def test_f5_reads_the_map_again_with_its_preview(self):
+        self.companion.prepare = mock.MagicMock(return_value=(Path('again.json'), self.data, None, FlatSurface()))
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
+            replies = self.send(dict(type='command', name='reload'))
+        self.companion.prepare.assert_called_once_with(str(self.map_path), godot_link.OWN)
+        self.assertEqual(replies[0], dict(type='reload', scene='again.json', new_map=False, what='the map again'))
+
     def test_a_preview_that_fails_puts_the_menu_back(self):
         self.companion.prepare = mock.MagicMock(side_effect=OSError('disk full'))
         with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')):
