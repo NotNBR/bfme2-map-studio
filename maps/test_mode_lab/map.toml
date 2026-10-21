@@ -1,0 +1,12 @@
+id = "test-mode-lab"
+title = "Test Mode Lab"
+native_name = "map mp test mode lab"
+players = 2
+description = "Test map: two small armies facing each other across open ground, a wood and rocks between them, for the viewer's Test mode."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+[play]
+slots = [                               # slot k takes start k
+    {faction = "Men", team = 1},        # you: the army in the south
+    {faction = "Mordor", team = 2, ai = "easy"},   # the army in the north
+]
