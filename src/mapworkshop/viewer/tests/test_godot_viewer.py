@@ -141,6 +141,18 @@ class ShotTests(unittest.TestCase):
         self.assertTrue(Path(shot['path']).is_absolute())               # the viewer runs in another folder
 
 
+class MainTests(unittest.TestCase):
+    def test_mw_view_opens_the_map_and_makes_it_the_last_one(self):
+        owner = mock.MagicMock()
+        with mock.patch.object(godot_viewer, 'run', return_value=0) as run,                 mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')),                 mock.patch.object(godot_viewer.project, 'for_map_file', return_value=owner),                 mock.patch.object(godot_viewer.project, 'remember') as remember:
+            self.assertEqual(godot_viewer.main(['lab', '--godot', '--weather', 'rain']), 0)   # --godot: the old flag
+            remember.assert_called_once_with(owner)
+            self.assertEqual(run.call_args.kwargs['preview'], dict(weather='rain', sun='own'))
+            run.return_value = (0, [])
+            godot_viewer.main(['lab', '--screenshot', 'x.png'])
+            remember.assert_called_once()                               # a picture is no visit
+
+
 class EngineTests(unittest.TestCase):
     def test_a_view_becomes_the_games_cinematic_shot(self):
         from mapworkshop.render import cli
@@ -169,7 +181,7 @@ class ViewTests(unittest.TestCase):
         # heading 90: the camera stands west of the target and looks east
         self.assertAlmostEqual(camera['eye'][0], 500 - 1000*np.cos(np.radians(30)), places=6)
         self.assertAlmostEqual(camera['eye'][2], 20 + 500, places=6)
-        # the Edit camera orbits the target from the eye: viewer.camera.Camera.aim's goal
+        # the Edit camera orbits the target from the eye: the Python viewer's aim
         self.assertEqual(camera['orbit']['x'], 500.0)
         self.assertAlmostEqual(camera['orbit']['heading'], 90.0, places=6)
         self.assertAlmostEqual(camera['orbit']['elevation'], 30.0, places=6)

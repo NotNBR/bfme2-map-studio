@@ -1,7 +1,9 @@
 # How the game draws a map
 
 The workshop's renderer ([render/](../../../src/mapworkshop/render/)) draws
-maps for `mw render`, `mw item` and the viewer ([rendering](../../guide/rendering.md)). These
+maps for `mw render --engine studio`, `mw item` and map graphics
+([rendering](../../guide/rendering.md)); the viewer and `mw render`'s default
+engine draw on OpenBFME instead ([the viewer](../../viewer.md)). These
 pages record how BFME2 1.06 draws each part of a map, read from `game.dat`, the
 retail effect files and the openbfme2/EA source and checked against game
 screenshots; what the renderer ports of it; and what it approximates. Read the
@@ -73,7 +75,7 @@ run to 0.1 units) and the native framing to within one pixel.
 
 ## Animation
 
-By the viewer's clock, or `render --time SECONDS` for stills (time 0 by default):
+By `render --time SECONDS` for stills (time 0 by default):
 
 - Water: WaterShader's preshader scrolls both ripple frames by Time x (WindSpeed + WaveSpeed) along WindAngle -/+
   WaveAngle/2, Time being WW3D's sync time in seconds.

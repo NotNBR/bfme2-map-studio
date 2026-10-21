@@ -1,8 +1,8 @@
 ## Photo mode's lens, as render/photo.py works it out (its docstring has the reasoning): a full-frame camera, 36 x 24
 ## mm; a frame of aspect 3:2 or wider is 36 mm wide on it, a narrower one 24 mm tall, and a focal length frames it
 ## with a horizontal field of view of 2 atan(w / 2f). Depth of field is the thin lens, with UNITS_PER_METRE map units
-## to the metre. The presets and the frames are viewer/camerabar.py's. Phase 4 of docs/godot-viewer/plan.md removes
-## the Python viewer; this is then the presets' only home (render/photo.py keeps the lens for mw render).
+## to the metre. The presets and the frames are the Python viewer's camera bar's, which phase 4 removed: this is
+## their only home (render/photo.py keeps the lens maths for mw render's studio engine).
 class_name Lens
 extends RefCounted
 
@@ -11,7 +11,7 @@ const UNITS_PER_METRE := 10.0
 const FOCAL_RANGE := Vector2(10.0, 600.0)
 const MAX_BLUR := 0.06                    # the largest blur circle's diameter, as a share of the image width
 const SHARP := 1.0 / 1500.0               # the blur counted as sharp, as a share of the frame's diagonal
-const FOCAL_STEP := 1.12                  # focal length factor per wheel notch (viewer/camera.py)
+const FOCAL_STEP := 1.12                  # focal length factor per wheel notch
 const FOCUS_STEP := 1.15                  # focus distance factor per wheel notch
 
 ## [value, label, width / height (0: the whole window)]

@@ -1,7 +1,6 @@
-"""The Godot viewer's companion: what `mw view MAP --godot` does while the
-viewer is open. It talks to the viewer (viewer/godot/) over a local socket,
-one JSON object per line, and keeps doing in Python what the studio viewer
-does there:
+"""The viewer's companion: what `mw view MAP` does while the viewer is open.
+It talks to the viewer (viewer/godot/) over a local socket, one JSON object
+per line, and does in Python what the analysis and the studio's files need:
 
 - the marks: viewer.marks' Marks writes local/marks/<map>.json, and
   viewer.marking's MarkEditor turns the viewer's mouse and keys into marks
@@ -11,13 +10,13 @@ does there:
   (marks.describe, worked out in the background as jobs.MarksSummary does);
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
   user maps folder, and the viewer builds the map again in place;
-- the toolbar's jobs, with the studio viewer's own (viewer.jobs): another map
-  from the Map menu (Browse... for a project's build or a stock map), Build,
-  Test In-Game, the project folder; Properties opens the studio viewer's
-  window (viewer.properties), whose Save builds the project;
-- the saved views and Copy view, in the studio viewer's own files and
-  command (viewer.views): local/views/<map>.json with the thumbnails beside
-  it, and a view as the mw render command that draws it;
+- the toolbar's jobs (viewer.jobs): another map from the Map menu
+  (Browse... for a project's build or a stock map), Build, Test In-Game, the
+  project folder; Properties opens its window (viewer.properties), whose Save
+  builds the project;
+- the saved views and Copy view, in their files and command (viewer.views):
+  local/views/<map>.json with the thumbnails beside it, and a view as the
+  mw render command that draws it;
 - Preview: the map again as a copy with a weather preset or a sun
   (godot_viewer.preview_map), which the viewer opens in its place;
 - the View menu's overlays that need the map's analysis: the walkability
@@ -73,30 +72,64 @@ from pathlib import Path
 
 import numpy as np
 
+from mapworkshop import project
 from mapworkshop.config import save_setting, setting
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.weather import preview_choices, preview_labels
 from mapworkshop.viewer import jobs
 from mapworkshop.viewer import marks as marklib
-from mapworkshop.viewer.camera import march
 from mapworkshop.viewer.jobs import MarksSummary
-from mapworkshop.viewer.loading import map_title
 from mapworkshop.viewer.marking import MarkEditor, summary_lines
-from mapworkshop.viewer.overlay import MarkOverlay
 from mapworkshop.viewer.views import THUMBNAIL, Views, edit_spec, photo_spec, render_command
 
 POLL = 0.25            # seconds between looks at the socket and the build
 
 
+def drape(points, surface, lift=3.0):
+    """Map points (x, y) on the surface, `lift` units over it: (n, 3)."""
+    pts = np.asarray(points, float).reshape(-1, 2)
+    z = np.asarray(surface(pts[:, 0], pts[:, 1]), float) + lift
+    return np.column_stack([pts, z])
+
+
+def march(origin, direction, surface, reach):
+    """The first point along a ray at or below `surface` within `reach` (ray march + bisection), or None."""
+    t = np.linspace(0, reach, 1500)
+    points = origin+np.outer(t, direction)
+    below = points[:, 2] <= surface(points[:, 0], points[:, 1])
+    hits = np.nonzero(below)[0]
+    if not len(hits):
+        return None
+    i = hits[0]
+    lo, hi = t[max(i-1, 0)], t[i]
+    for _ in range(20):
+        mid = (lo+hi)/2
+        p = origin+direction*mid
+        if p[2] <= surface(p[0], p[1]):
+            hi = mid
+        else:
+            lo = mid
+    return origin+direction*hi
+
+
+def map_title(path):
+    """A game map's title from its file name ('map mp fords of isen' -> 'Fords Of Isen'), without touching the disk."""
+    words = Path(path).stem.split()
+    for prefix in (['map', 'mp'], ['bfmexbar']):
+        if [w.lower() for w in words[:len(prefix)]] == prefix and len(words) > len(prefix):
+            words = words[len(prefix):]
+    return ' '.join(w[:1].upper()+w[1:] for w in words)
+
+
 def marks_state(marks, surface, editor=None):
-    """What the viewer draws of the marks: each mark's outline draped on the surface (MarkOverlay.drape), the mark
+    """What the viewer draws of the marks: each mark's outline draped on the surface (drape), the mark
     being drawn, the selected mark's handles (marks.handles, its centre, a rectangle's rotate anchor), and the editor's
     tool, hover and hint."""
-    drape = lambda points: MarkOverlay.drape(points, surface.height_at).round(1).tolist()
+    on_surface = lambda points: drape(points, surface.height_at).round(1).tolist()
 
     def shown(mark):
         points, closed = marklib.outline(mark)
-        return dict(id=mark.get('id'), kind=mark['kind'], world=drape(points), closed=bool(closed))
+        return dict(id=mark.get('id'), kind=mark['kind'], world=on_surface(points), closed=bool(closed))
 
     state = dict(type='marks', marks=[shown(m) for m in marks.items], preview=None, selected=None, hovered=None,
                  handles=None, tool=None, visible=True, hint=None)
@@ -108,7 +141,7 @@ def marks_state(marks, surface, editor=None):
     if mark is not None and mark['kind'] in ('circle', 'rect'):
         spots = [list(p) for p in marklib.handles(mark)]
         extra = [list(marklib.center(mark))] + ([list(marklib.rotate_anchor(mark)[1])] if mark['kind'] == 'rect' else [])
-        world = drape(np.array(spots + extra, float))
+        world = on_surface(np.array(spots + extra, float))
         state['handles'] = dict(spots=world[:len(spots)], center=world[len(spots)],
                                 rotate=world[len(spots) + 1] if mark['kind'] == 'rect' else None)
     return state
@@ -119,7 +152,7 @@ def _ids(picks):
     return {k: int(v) if isinstance(v, float) else v for k, v in picks.items()}
 
 
-OWN = dict(weather='map', sun='own')     # Preview's choice when it shows the map as it is (the studio viewer's values)
+OWN = dict(weather='map', sun='own')     # Preview's choice when it shows the map as it is (the Python viewer's values)
 
 
 class Picks:
@@ -142,8 +175,8 @@ class Picks:
 
 
 class World:
-    """MarkEditor's world: the ground under the event's ray (the surface Python sent the viewer, as viewer.camera's
-    pick), and the Edit camera's focus as the viewer reports it."""
+    """MarkEditor's world: the ground under the event's ray (on the surface Python sent the viewer, by march), and the
+    Edit camera's focus as the viewer reports it."""
 
     def __init__(self, surface):
         self.surface, self.event = surface, {}
@@ -235,7 +268,7 @@ def flow_strips(m):
 
 
 def walkability(loaded, map_ini, path):
-    """The walkability estimate of the map as the studio viewer works it out (render.overlays), its image saved at
+    """The walkability estimate of the map as render.overlays works it out, its image saved at
     `path`: the viewer's walkable message."""
     from types import SimpleNamespace
     from PIL import Image
@@ -360,7 +393,7 @@ class Companion:
                 self.editor.release()
             elif kind == 'click':
                 self.editor.click(None, 1.0)
-            # the cursor for what a press here would do, as the studio viewer sets it after every mouse event
+            # the cursor for what a press here would do, as the Python viewer sets it after every mouse event
             cursor = self.editor.pointer(None, 1.0, True)
         elif kind == 'tool':
             self.editor.set_tool(message.get('tool'))
@@ -395,7 +428,7 @@ class Companion:
             self.editor.toggle_visible()
         elif name == 'copy':
             out.append(self._copy())
-        elif name in ('delete', 'clear') and self.editor.visible:         # as the studio viewer: not on hidden marks
+        elif name in ('delete', 'clear') and self.editor.visible:         # as the Python viewer: not on hidden marks
             (self.editor.delete_selected if name == 'delete' else self.editor.clear)()
         elif name == 'open_map':
             out += self.open_map(message['map'])
@@ -465,7 +498,7 @@ class Companion:
         self.browsed = choose_map_file(folder)
 
     def open_properties(self):
-        """The Properties window for the map shown, as the studio viewer opens it: editable for a project, read-only
+        """The Properties window for the map shown, as the Python viewer opens it: editable for a project, read-only
         for a game map; its Save writes map.toml and builds the project, which the viewer reloads. It opens once the
         game's files are loaded (their defaults for what a map leaves out)."""
         from mapworkshop.viewer.properties import PropertiesDialog, ini_texts
@@ -501,6 +534,8 @@ class Companion:
         if self.prepare is None:
             return [dict(type='status', text='this viewer shows one map only', seconds=4)]
         self._show(*self.prepare(name, self.preview))
+        if self.owner is not None:
+            project.remember(self.owner)          # `mw` alone opens it next time
         self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
@@ -518,9 +553,9 @@ class Companion:
         what = what or 'the preview: ' + ' · '.join(preview_labels(self.preview['weather'], self.preview['sun']))
         return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=what), self.menu()]
 
-    # The saved views, as the studio viewer keeps them (viewer.views) ------------------------------------------
+    # The saved views, as the Python viewer keeps them (viewer.views) ------------------------------------------
     def views_message(self):
-        """The Views list, read again (the studio viewer may have saved one meanwhile)."""
+        """The Views list, read again (another viewer may have saved one meanwhile)."""
         self.views.load()
         items = [dict(name=v['name'], slot=v['slot'], mode=v['mode'],
                       thumbnail=str(path) if (path := self.views.thumbnail_path(v['name'])).is_file() else '')
@@ -528,7 +563,7 @@ class Companion:
         return dict(type='views', items=items, free=self.views.free_slot())
 
     def spec(self, camera):
-        """(mode, render.camera spec) of the viewer's camera, as the studio viewer's view_spec: an Edit view of the
+        """(mode, render.camera spec) of the viewer's camera, as the Python viewer's view_spec: an Edit view of the
         orbit camera's goal, or a Photo view of the free camera where its eye is going."""
         from types import SimpleNamespace
         if camera['mode'] == 'photo':
@@ -579,7 +614,7 @@ class Companion:
             return [dict(type='status', text=f'{entry["name"]}: {error}', seconds=6)]
         camera.pop('view_projection')
         if view.eye is None:
-            camera['orbit']['heading'] = float(view.heading) % 360     # the view's own, as the studio viewer sets it
+            camera['orbit']['heading'] = float(view.heading) % 360     # the view's own, as the Python viewer sets it
         return [dict(type='view', mode=entry['mode'], name=entry['name'], **camera)]
 
     def rename_view(self, message):
@@ -615,12 +650,12 @@ class Companion:
 
     def menu(self):
         """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game
-        choice, as the studio viewer's toolbar has them."""
+        choice, as the Python viewer's toolbar has them."""
         from mapworkshop import game, project
         current = self.map_path.resolve()
         own = sorted(((str(p.map_file), p.title) for p in project.projects() if p.map_file.exists()),
                      key=lambda e: e[1].lower())
-        stock = sorted(((str(m), map_title(m, {})) for m in game.stock_maps()), key=lambda e: e[1].lower())
+        stock = sorted(((str(m), map_title(m)) for m in game.stock_maps()), key=lambda e: e[1].lower())
         entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current)
         preview = dict(preview_choices(), current=self.preview,
                        label=' · '.join(preview_labels(self.preview['weather'], self.preview['sun'])))
@@ -715,7 +750,7 @@ class Companion:
 
     def watch(self):
         """A reload message when a new build of a project has settled (the map file and its map.ini unchanged for a
-        moment, as the studio viewer waits), else None. A build that cannot be read is reported and the last good one
+        moment), else None. A build that cannot be read is reported and the last good one
         stays."""
         stamp = self._build_stamp()
         if stamp == self.stamp or self.owner is None or self.prepare is None:

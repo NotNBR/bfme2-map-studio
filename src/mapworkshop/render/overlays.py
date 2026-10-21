@@ -28,14 +28,6 @@ class OverlaysMixin:
         result['info'] = grid['info']
         return result, np.ascontiguousarray(walkable.overlay(result))
 
-    def walkability_task(self):
-        """Capture CPU data only; a worker must never own live GPU resources."""
-        from functools import partial
-        from types import SimpleNamespace
-        data = SimpleNamespace(map=self.map, pathing_assets=self.pathing_assets,
-                               map_ini=self.map_ini, model_cache=self.model_cache)
-        return partial(OverlaysMixin.compute_walkability, data)
-
     def install_walkability(self, prepared):
         """Install a worker result on the context-owning thread."""
         from mapworkshop.mapkit import walkable

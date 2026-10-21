@@ -44,7 +44,7 @@ maps' build logs. Its commands do not exist here.
 ## Work in progress
 
 [The Godot viewer](godot-viewer/plan.md): the plan for moving the viewer onto
-OpenBFME, and [how it compares](godot-viewer/parity.md) with the studio viewer,
+OpenBFME, and [how it compares](godot-viewer/parity.md) with the Python viewer,
 feature by feature.
 
 ## Licenses

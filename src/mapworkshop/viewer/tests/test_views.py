@@ -10,7 +10,7 @@ from PIL import Image
 
 from mapworkshop.render.camera import parse_view, view_from_dict
 from mapworkshop.viewer import views as viewlib
-from mapworkshop.viewer.camera import Camera, FlyCamera
+from types import SimpleNamespace
 
 
 def flat(x, y):
@@ -27,11 +27,13 @@ class ViewsTests(unittest.TestCase):
 
     def test_saved_views_are_a_views_file_mw_render_reads(self):
         views = viewlib.Views('maps/x/my map.map')
-        fly = FlyCamera(flat)
-        fly.place(np.array([10.0, 20.0, 300.0]), np.array([0.0, 1.0, -0.5]), focus=400)
-        fly.aperture, fly.ev, fly.roll = 2.8, 0.5, 4.0
+        ahead = np.array([0.0, 1.0, -0.5])/np.linalg.norm([0.0, 1.0, -0.5])
+        fly = SimpleNamespace(goal=np.array([10.0, 20.0, 300.0]), forward=lambda: ahead, focus=400.0, focal=35.0,
+                              roll=4.0, aperture=2.8, ev=0.5)
         views.save('photo', viewlib.photo_spec(fly), slot=3, thumbnail=Image.new('RGB', viewlib.THUMBNAIL))
-        views.save('edit', viewlib.edit_spec(Camera(flat, (1000, 800))))
+        orbit = SimpleNamespace(goal=dict(x=500.0, y=400.0, distance=1500.0, elevation=45.0, heading=0.0),
+                                ground=lambda x, y: float(flat(x, y)), fov=50.0)
+        views.save('edit', viewlib.edit_spec(orbit))
         data = json.loads(views.path.read_text())
         self.assertEqual(views.path.name, 'my map.json')
         for name, spec in data['views'].items():
@@ -64,17 +66,14 @@ class ViewsTests(unittest.TestCase):
         self.assertEqual(parse_view(words).describe()['aperture'], 2.8)
 
     def test_the_command_carries_the_preview_where_it_differs_from_mw_render(self):
-        shown = dict(size=(1600, 1200), lod='medium', weather=None, sun=None, time=0.0, normal_maps=None,
-                     objects=True, units=True, shadows=True, clouds=True, weather_fx=True, limits=False,
-                     markers=False, grid=False, border=False, walkable=False, flow=False)
+        shown = dict(size=(1600, 1200), weather=None, sun=None, objects=True, weather_fx=True, grid=False,
+                     border=False, walkable=False, flow=False)
         self.assertEqual(viewlib.render_flags(shown), [])
-        shown.update(size=(1920, 816), lod='high', weather='rain', sun='ember', time=12.34, normal_maps=False,
-                     units=False, clouds=False, grid=True)
+        shown.update(size=(1920, 816), weather='rain', sun='ember', weather_fx=False, grid=True)
         self.assertEqual(viewlib.render_flags(shown),
-                         ['--size 1920x816', '--lod high', '--weather rain', '--sun ember', '--time 12.3',
-                          '--normal-maps off', '--no-units', '--no-clouds', '--grid'])
+                         ['--size 1920x816', '--weather rain', '--sun ember', '--no-weather', '--grid'])
         command = viewlib.render_command('lab', 'v', dict(target=[1, 2]), shown)
-        self.assertIn('-views --size 1920x816 --lod high', command)
+        self.assertIn('-views --size 1920x816 --weather rain', command)
         self.assertTrue(command.endswith('--view v target=1,2'))
 
 

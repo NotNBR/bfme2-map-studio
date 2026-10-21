@@ -121,7 +121,7 @@ def sky(weather=None, sun=None):
 
 
 def preview_choices():
-    """The viewers' Preview choices, {'weather': [(value, label)], 'sun': [...]}: 'map' and 'own' are the map's
+    """The viewer's Preview choices, {'weather': [(value, label)], 'sun': [...]}: 'map' and 'own' are the map's
     own weather and the weather's own sun."""
     return dict(weather=[('map', "Map's own")] + [(k, k.title()) for k in PRESETS],
                 sun=[('own', "Weather's own")] + [(k, v['label']) for k, v in SUNS.items()])

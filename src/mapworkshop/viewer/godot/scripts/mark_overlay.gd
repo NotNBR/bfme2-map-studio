@@ -1,4 +1,4 @@
-## The marks over the map, as the studio viewer draws them (viewer/overlay.py, MarkOverlay): each outline draped on the
+## The marks over the map, as the Python viewer's MarkOverlay drew them: each outline draped on the
 ## surface (Python sends the draped points: godot_link.marks_state), projected with the camera every frame and drawn
 ## on top as a thick line, a translucent fill for areas, discs for pins and a numbered tag per mark. Red marks; the one
 ## under the cursor lighter, the selected one yellow with square handles to resize it and, for a rectangle, a round

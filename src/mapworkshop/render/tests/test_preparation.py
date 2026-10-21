@@ -71,19 +71,6 @@ class PreparationTests(unittest.TestCase):
             self.assertIn('extra', base.for_map('Object Extra\nEnd\n').templates)
             self.assertNotIn('extra', base.templates)
 
-    def test_walkability_task_does_not_capture_renderer_gpu_resources(self):
-        import weakref
-        import gc
-        renderer = MapRenderer.__new__(MapRenderer)
-        renderer.map, renderer.pathing_assets = object(), object()
-        renderer.map_ini, renderer.model_cache = '', object()
-        ref = weakref.ref(renderer)
-        task = renderer.walkability_task()
-        del renderer
-        gc.collect()
-        self.assertIsNone(ref())
-        self.assertFalse(hasattr(task.args[0], 'ctx'))
-
     def test_world_builder_models_are_editor_markers_unless_they_stand_in(self):
         draw = ('  Draw = W3DScriptedModelDraw ModuleTag_01\n'
                 '    DefaultModelConditionState\n      Model = {default}\n    End\n'

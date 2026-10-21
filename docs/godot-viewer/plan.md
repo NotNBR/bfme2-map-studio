@@ -3,9 +3,9 @@
 ## TL;DR
 
 - **What:** the studio's map viewer moves onto OpenBFME, the Godot rebuild of
-  RotWK. The Python viewer goes away once the new one does everything it does.
+  RotWK. It replaced the Python viewer in phase 4.
 - **Why:** OpenBFME draws a map like the game, units animated, and opens
-  Helm's Deep in about 4 seconds, where the Python viewer takes about 30.
+  Helm's Deep in about 4 seconds, where the Python viewer took about 30.
 - **How:** OpenBFME stays an untouched submodule, the official repository's
   `main`, and is used as a library. Everything the studio adds (marks, Photo
   mode, cameras, menus, overlays) lives in the studio's own small Godot
@@ -38,9 +38,8 @@
   estimate and the river flow arrows), Preview (the weather and sun presets,
   as a copy of the map), Photo mode (the free camera, the lens, frames and
   thirds, and `render/photo.py`'s depth of field as a compositor effect), the
-  saved views and Copy view, and Properties. Phase 4 is under way: `mw render`
-  draws with the Godot viewer by default, unseen on a hidden desktop, and
-  `--engine studio` and `--engine game` choose the studio renderer or the game.
+  saved views and Copy view, and Properties. Phase 4 is done but for the
+  Python renderer's removal ([phase 4](#phase-4-rendering-and-the-switch)).
 
 ## Where we are
 
@@ -48,7 +47,7 @@
 (`godot/scripts/map_viewer.gd`) opened the studio's Helm's Deep build,
 measured on 2026-10-20:
 
-| | OpenBFME's map viewer | Studio viewer |
+| | OpenBFME's map viewer | Python viewer |
 |---|---|---|
 | Open the map | 3.8 s in all (Godot start, game files, screenshot); the map itself in 0.29 s | about 30 s |
 | Units | 1,298 static and 10,748 animated objects, no model missing | 12,024 objects, frozen in their first idle frame |
@@ -221,7 +220,7 @@ point at known map coordinates lands where `mw render` puts it.
 
 **Done (2026-10-21).** `mw view MAP --godot` opens a project's build from the
 user maps folder, or a stock map from the archives
-([the viewer](../viewer.md#the-godot-viewer)); `viewer/godot_viewer.py` is the
+([the viewer](../viewer.md)); `viewer/godot_viewer.py` is the
 Python side, `viewer/godot/` the Godot project. Measured:
 
 | | |
@@ -258,12 +257,12 @@ the viewer's companion, `viewer/godot_link.py`: JSON lines over a local
 socket. The editing stays in Python: Godot draws the marks over the map and
 finds what is under the cursor with `overlay.py`'s rules (`mark_overlay.gd`),
 sends each press, drag, release, click and hover with the cursor's ray, and
-the companion's MarkEditor (the studio viewer's own) changes and saves the
+the companion's MarkEditor (the Python viewer's own) changes and saves the
 marks and answers with what to draw, the panel and the status. Measured:
 
 | | |
 |---|---|
-| Marks drawn by scripted mouse input in the Godot viewer | a circle and a rectangle drawn, then the circle dragged by its rim (the overlay picking it): the same marks file, and the same `mw marks` text, as the same strokes through the studio viewer's MarkEditor (`viewer/tests/test_godot_link.py`, headless) |
+| Marks drawn by scripted mouse input in the Godot viewer | a circle and a rectangle drawn, then the circle dragged by its rim (the overlay picking it): the same marks file, and the same `mw marks` text, as the same strokes through the Python viewer's MarkEditor (`viewer/tests/test_godot_link.py`, headless) |
 | A rebuild to the reloaded view | 2.9 and 3.2 s (two runs) after the build wrote the map (its file's time: an upper bound of the time after the build finished), for Blend Lab; the viewer's reload 2.5 s of it, more than its first opening, 1.6 s |
 | The protocol and the companion | unit tests without Godot: drawing, selecting, moving, deleting, undo, escape, the state and when it is sent, the panel, Copy for agent, errors, the socket, reload and a build that cannot be read |
 
@@ -281,11 +280,10 @@ and flow overlays; weather and sun presets; the top view, grid and border.
 Verified by: a checklist built from `docs/viewer.md`, item by item, with a
 screenshot of each in both viewers.
 
-Done ([the checklist](parity.md)): everything the studio viewer has, apart
-from what OpenBFME's library has no switch for (detail levels, shadows,
-normal maps, clouds, falling rain and snow, units, editor markers, object
-limits). The checklist also lists where OpenBFME draws the map differently
-from the studio renderer (rivers, fog, rain); phase 4 starts from those.
+Done ([the checklist](parity.md)): everything the Python viewer had, apart
+from what OpenBFME's library has no switch for, and the places where OpenBFME
+draws the map differently from the studio renderer (rivers, fog, rain), both
+listed there; phase 4 starts from those.
 
 ### Phase 4: rendering and the switch
 
@@ -298,6 +296,27 @@ once the Godot one has matched it against the game's own screenshots.
 Verified by: the same views through all three engines; the docs updated in
 place (`docs/viewer.md`, `docs/guide/rendering.md`).
 
+Done (2026-10-21), but for the Python renderer's removal:
+
+- `mw render --engine godot` (the default) opens the map once in the Godot
+  viewer on a hidden desktop of its own (`debugger.run_hidden`; Vulkan renders
+  there, a window larger than the screen included: a 5700 x 5700 top view of
+  Glacial Crossroads in 25 s) and saves each view in turn, orthographic top
+  views included; Water Lab's two views, top view, walkability and grid take
+  13 s. Its top views frame as the studio engine's, pixel for pixel.
+  `--engine game` takes orbit views of a project's build through `mw capture`.
+- `mw view` and `mw dev` open the Godot viewer; the Python viewer's
+  interface (`viewer/app.py` with its toolbar, palette, camera bar, commands,
+  session, overlay and cameras) is removed, the pieces the companion uses
+  kept (`marks`, `marking`, `views`, `properties`, `jobs`).
+- One view of Water Lab through all three engines frames alike; the game and
+  the studio engine draw its rivers textured and light, OpenBFME dark and
+  flat. With that and the other differences in [the checklist](parity.md),
+  the Python renderer stays as `--engine studio`. Removing it needs two
+  things: OpenBFME drawing rivers, fog and rain as the game does (engine
+  work, in OpenBFME's own pull requests), and a Godot replacement for what
+  else draws with it, `mw item`, `mw items` and map graphics.
+
 ## The two reviewing agents
 
 | Agent | Checks |
@@ -307,12 +326,12 @@ place (`docs/viewer.md`, `docs/guide/rendering.md`).
 
 ## Risks
 
-- **Decals on OpenBFME's terrain shader** are unverified; marks then become
-  meshes draped on the terrain, as the Python viewer draws them.
+- **Decals on OpenBFME's terrain shader**: not needed; the marks are drawn in
+  screen space over the map (phase 2), as the Python viewer drew them.
 - **Shadows and detail levels** are missing from OpenBFME's map drawing; they
   need engine work, as pull requests of their own.
-- **Rendering on a hidden desktop** with Vulkan or Direct3D 12 is unverified;
-  without it, `mw render` would show a window while it works.
+- **Rendering on a hidden desktop**: works with Vulkan (phase 4), windows
+  larger than the screen included.
 - **OpenBFME's library interface is not declared stable**; the pin and the
   headless check catch a breaking update.
 - **Review time** for the user-maps pull request is OpenBFME's; the minimal

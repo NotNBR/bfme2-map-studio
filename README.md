@@ -15,9 +15,10 @@ Explore a map, mark areas for an agent, and see edits reload in the viewer.
 - **Maps as code.** A map is a folder with a `map.toml` and a `map.py`: heights,
   textures, water, objects and sky, in Python. Every build is reproducible and
   kept.
-- **A live viewer.** The game's own textures, models and shaders, rendered on your
-  GPU. It reloads whenever the map is rebuilt, so `mw dev` turns saving a file
-  into seeing the result.
+- **A live viewer.** The map as the game draws it, on OpenBFME (a port of the
+  game's engine to Godot), with the units in their idle animations. It reloads
+  whenever the map is rebuilt, so `mw dev` turns saving a file into seeing the
+  result.
 - **Marks for agents.** Pin, circle, frame or draw around a place, press **Copy
   for agent** and ask for "a forest in mark 2". The marks come with their map
   coordinates and the objects inside them.
@@ -32,7 +33,9 @@ Explore a map, mark areas for an agent, and see edits reload in the viewer.
 
 You need **Windows**, your own copy of **BFME2 patched to 1.06**,
 [Python 3.11+](https://www.python.org/downloads/) and a graphics card with
-**OpenGL 4.3** support. An optional **Rise of the Witch-king** profile adds the
+**OpenGL 4.3** and Vulkan support. The viewer and `mw render` also need
+**Rise of the Witch-king 2.01** (English), whose files OpenBFME plays from
+([getting started](docs/guide/getting-started.md)). An optional **Rise of the Witch-king** profile adds the
 expansion's assets to BFME2's library, with separate builds and caches; see
 [ROTWK setup](docs/guide/getting-started.md#rise-of-the-witch-king). ROTWK 2.01
 supports direct skirmish tests and the free camera with the verified engine;

@@ -28,7 +28,9 @@ python -m misc.studio_showcase.showcase                 # the video, with its sc
 ```
 
 `showcase.py` draws every frame with the workshop's renderer from the step
-builds, with the viewer's own toolbar and mark overlay. The changes between
+builds, with the Python viewer's own toolbar and mark overlay; that viewer is
+gone since phase 4 of [the Godot viewer](../../docs/godot-viewer/plan.md), so
+run it at commit 7b5ab1a (`git worktree add ../showcase 7b5ab1a`). The changes between
 steps animate the renderer's own data: heights rise from the flat field, the
 river fills, textures spread from the water, objects grow at their places,
 and new light sweeps across. `score.py` is the original music.

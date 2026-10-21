@@ -21,7 +21,7 @@ reproduces ([how the game draws a map](README.md)).
   completed fall. Each drop is a quad spanned by the camera's right vector
   and world Z, 0.707 x SnowQuadSize either side of its centre, alpha blended
   without depth writes, with no distance cull (only the near clip).
-  `--no-weather` and viewer key 6 turn it off.
+  `--no-weather` turns it off.
 
 ## Open questions
 

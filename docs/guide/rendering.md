@@ -4,7 +4,7 @@
 iteration, and check what matters in the game itself
 ([testing in the game](testing-in-game.md)). `--engine` picks what draws them:
 
-- **godot** (the default): the [Godot viewer](../viewer.md#the-godot-viewer)
+- **godot** (the default): [the viewer](../viewer.md)
   on OpenBFME's library, a port of the game's own engine, started unseen on a
   hidden desktop of its own (no window appears, the focus stays where it is).
   It opens the map once and takes every view in turn: a few seconds to open,

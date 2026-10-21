@@ -70,7 +70,6 @@ def parser():
     s = sub.add_parser('dev', help='Rebuild on every save, with the viewer open')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
     s.add_argument('--no-view', action='store_true', help="Don't open the viewer")
-    s.add_argument('--godot', action='store_true', help='Open the Godot viewer on OpenBFME instead (mw view --godot)')
     s.add_argument('--no-cache', action='store_true', help="Make every calculation again instead of reusing earlier builds' results")
     s = sub.add_parser('build', help='Build a map')
     s.add_argument('map', nargs='?', help='Map project (default: the last map)')
@@ -193,7 +192,7 @@ def cmd_setup(args):
         import subprocess
         say('Fetching the bfme2-map-quickload submodule (faster map loading)...')
         subprocess.run(['git', 'submodule', 'update', '--init', '--', 'src/mapworkshop/native/loading'], cwd=ROOT, check=False)
-    # OpenBFME's submodule (about 90 MB) is fetched on first use (mw play --godot, mw battle); one a recursive clone brought
+    # OpenBFME's submodule (about 90 MB) is fetched on first use (mw view, mw render, mw play --godot); one a recursive clone brought
     # is brought to the pin, with Git LFS off in its config (native/openbfme.py source())
     from mapworkshop.native import openbfme
     if (openbfme.SOURCE/'.git').exists():
@@ -250,7 +249,7 @@ def cmd_doctor(args):
           'Run `git submodule update --init` (or `mw setup`).', required=False)
     from mapworkshop.native import openbfme
     ok, text = openbfme.status()
-    check(ok, f'OpenBFME (mw play --godot): {text}', required=False)
+    check(ok, f'OpenBFME (the viewer, mw render, mw play --godot): {text}', required=False)
     if (openbfme.SOURCE/'.git').exists():
         dirt = openbfme.differences()
         check(not dirt, 'OpenBFME submodule: at the commit recorded here, unchanged' if not dirt else
@@ -264,13 +263,8 @@ def cmd_doctor(args):
         ctx.release()
         check(True, f'OpenGL 4.3: {renderer}')
     except Exception as error:
-        check(False, 'OpenGL 4.3', f'The renderer and viewer need OpenGL 4.3 ({error}). Update the graphics driver.')
-    try:
-        import glfw
-        check(bool(glfw.init()), 'Viewer windows (GLFW)', 'GLFW could not start; the viewer needs a desktop session.')
-        glfw.terminate()
-    except Exception as error:
-        check(False, 'Viewer windows (GLFW)', str(error))
+        check(False, 'OpenGL 4.3', f'The studio renderer (mw render --engine studio, mw item, map graphics) needs '
+                                   f'OpenGL 4.3 ({error}). Update the graphics driver.')
     try:
         import imageio_ffmpeg
         check(bool(imageio_ffmpeg.get_ffmpeg_exe()), 'ffmpeg (videos only)', required=False)
@@ -723,7 +717,7 @@ def cmd_dev(args, extra):
     if not p.map_file.exists() or _changed_since_build(p):
         _build(p, extra)
     viewer = None
-    view = [sys.executable, '-m', 'mapworkshop.viewer.app', p.id, *(['--godot'] if args.godot else [])]
+    view = [sys.executable, '-m', 'mapworkshop.viewer.godot_viewer', p.id]
     if not args.no_view and p.map_file.exists():
         viewer = subprocess.Popen(view, cwd=ROOT)
     say(f'Watching {p.folder} - save a file to rebuild, Ctrl+C to stop.')
@@ -762,7 +756,7 @@ def cmd_test(args, extra):
     return selftest.main([*extra, *(['--corpus'] if args.corpus else []), *(['-v'] if args.verbose else [])])
 
 
-PASSTHROUGH = {'view': 'mapworkshop.viewer.app', 'marks': 'mapworkshop.viewer.marks',
+PASSTHROUGH = {'view': 'mapworkshop.viewer.godot_viewer', 'marks': 'mapworkshop.viewer.marks',
                'render': 'mapworkshop.render.cli', 'graphics': 'mapworkshop.mapkit.graphics',
                'workspace': 'mapworkshop.mapkit.workspace',
                'find': 'mapworkshop.render.catalog',

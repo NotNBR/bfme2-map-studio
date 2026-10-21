@@ -1,8 +1,8 @@
-## The toolbar across the top, as the studio viewer has it (docs/viewer.md, "The toolbar"): Map (the map projects,
+## The toolbar across the top, as the Python viewer had it (docs/viewer.md, "The toolbar"): Map (the map projects,
 ## the game's maps, Open project folder, Browse...), Properties, Build with its chip, Test In-Game and what it starts,
 ## Preview (the weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay
 ## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate with
-## its cap (a menu, as the studio viewer's). The lists come from the companion's menu message.
+## its cap (a menu, as the Python viewer's was). The lists come from the companion's menu message.
 class_name Toolbar
 extends PanelContainer
 
@@ -20,7 +20,7 @@ signal preview_chosen(option: String, value: String)
 signal action(name: String)
 
 const TEST_GAMES := {"original": "Original game", "openbfme": "OpenBFME (Godot)"}
-const FPS_LIMITS := ["30", "60", "90", "120", "144", "vsync", "unlimited"]    # viewer/app.py's; 60 at the start
+const FPS_LIMITS := ["30", "60", "90", "120", "144", "vsync", "unlimited"]    # godot_viewer.FPS_LIMITS; 60 at the start
 
 var _map: MenuButton
 var _maps := []               # the Map menu's .map paths, by item id

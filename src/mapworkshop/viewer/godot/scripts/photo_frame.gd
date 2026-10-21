@@ -1,4 +1,4 @@
-## Photo mode's framing aids over the view, as viewer/camerabar.py's draw_frame: bands darkening what is outside the
+## Photo mode's framing aids over the view, as the Python viewer drew them: bands darkening what is outside the
 ## frame's aspect (Lens.frame_rect, which screenshots crop to), thirds lines in it, and a focus mark at the centre
 ## while the lens blurs.
 class_name PhotoFrame

@@ -1,6 +1,6 @@
 """OpenBFME's parts that need neither the engine nor the game: the archives
 it mounts, the merged map cache, the launcher's pins, gathering game files,
-the Godot project's copy, when build() imports it, the studio viewer's
+the Godot project's copy, when build() imports it, the viewer's
 assembly, and the submodule's cleanliness check (on a small repository of
 its own)."""
 import hashlib

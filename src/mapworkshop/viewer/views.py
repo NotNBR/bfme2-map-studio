@@ -29,7 +29,8 @@ def _round(value, digits=1):
 
 
 def edit_spec(camera):
-    """An Edit view of viewer.camera.Camera's goal."""
+    """An Edit view of an orbit camera's goal: `camera` has goal {x, y, distance, elevation, heading}, ground(x, y)
+    (the visible surface) and fov."""
     g = camera.goal
     target = (g['x'], g['y'], camera.ground(g['x'], g['y']))
     return dict(target=[_round(v) for v in target], distance=_round(g['distance']),
@@ -37,7 +38,8 @@ def edit_spec(camera):
 
 
 def photo_spec(fly):
-    """A Photo view of a viewer.camera.FlyCamera, where its eye is going."""
+    """A Photo view of a free camera, where its eye is going: `fly` has goal (the eye's), forward(), focus, focal,
+    roll, aperture (None or 0: everything sharp) and ev."""
     target = fly.goal + fly.forward()*fly.focus
     spec = dict(eye=[_round(v) for v in fly.goal], target=[_round(v) for v in target], focal=_round(fly.focal))
     if abs(fly.roll) > 0.05:
@@ -60,35 +62,25 @@ def render_words(spec):
     return ' '.join(out)
 
 
-# Preview settings that are on/off flags of `mw render`: (key, the value that
-# needs the flag, the flag). The others are --size, --lod, --weather, --sun,
-# --time and --normal-maps (render_flags).
-SWITCHES = (('objects', False, '--no-objects'), ('units', False, '--no-units'), ('shadows', False, '--no-shadows'),
-            ('clouds', False, '--no-clouds'), ('weather_fx', False, '--no-weather'),
-            ('limits', True, '--vegetation-limits'), ('markers', True, '--editor-markers'),
-            ('grid', True, '--grid'), ('border', True, '--border'), ('walkable', True, '--walkable'),
-            ('flow', True, '--flow'))
-RENDER_SIZE, RENDER_LOD = (1600, 1200), 'medium'      # mw render's defaults
+# The viewer's View switches that are on/off flags of `mw render`: (key, the
+# value that needs the flag, the flag). The others are --size, --weather and
+# --sun (render_flags).
+SWITCHES = (('objects', False, '--no-objects'), ('weather_fx', False, '--no-weather'), ('grid', True, '--grid'),
+            ('border', True, '--border'), ('walkable', True, '--walkable'), ('flow', True, '--flow'))
+RENDER_SIZE = (1600, 1200)      # mw render's default
 
 
 def render_flags(preview):
     """`mw render` options that reproduce the viewer's `preview`, each only
-    where it differs from mw render's default: size (w, h) in pixels, lod,
-    weather and sun (None: the map's own), time (seconds), normal_maps (None:
-    as the lod has them) and the SWITCHES."""
+    where it differs from mw render's default: size (w, h) in pixels, weather
+    and sun (None: the map's own) and the SWITCHES."""
     flags = []
     size = preview.get('size')
     if size and tuple(size) != RENDER_SIZE:
         flags.append(f'--size {size[0]}x{size[1]}')
-    if preview.get('lod', RENDER_LOD) != RENDER_LOD:
-        flags.append(f'--lod {preview["lod"]}')
     for key in ('weather', 'sun'):
         if preview.get(key):
             flags.append(f'--{key} {preview[key]}')
-    if preview.get('time'):
-        flags.append(f'--time {preview["time"]:.1f}')
-    if preview.get('normal_maps') is not None:
-        flags.append('--normal-maps ' + ('on' if preview['normal_maps'] else 'off'))
     flags += [flag for key, needs, flag in SWITCHES if key in preview and bool(preview[key]) == needs]
     return flags
 
@@ -97,12 +89,12 @@ def _slug(text, default):
     return re.sub(r'[^\w-]+', '-', text.strip().lower()).strip('-') or default
 
 
-def render_command(map_arg, name, spec, preview=None, label=None, engine=None):
+def render_command(map_arg, name, spec, preview=None, label=None):
     """The `mw render` command that renders a view of `map_arg` (a project id
     or a quoted path) into local/renders/<label>-views/ (label: the project
     id, or the map file's name), with the options that reproduce the viewer's
-    `preview` (render_flags), and `--engine` when one is given."""
-    flags = ''.join(' ' + flag for flag in [*([f'--engine {engine}'] if engine else []), *render_flags(preview or {})])
+    `preview` (render_flags)."""
+    flags = ''.join(' ' + flag for flag in render_flags(preview or {}))
     return (f'mw render --map {map_arg} --out local/renders/{_slug(label or map_arg, "map")}-views{flags} '
             f'--view {_slug(name, "view")} {render_words(spec)}')
 

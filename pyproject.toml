@@ -11,7 +11,7 @@ license = {file = "LICENSE.txt"}
 dependencies = ["numpy==2.5.3", "Pillow==12.3.0"]
 
 [project.optional-dependencies]
-render = ["moderngl==5.13.0", "glfw==2.10.2"]
+render = ["moderngl==5.13.0"]
 video = ["imageio-ffmpeg==0.6.0"]
 
 [project.scripts]

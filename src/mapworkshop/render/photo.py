@@ -64,7 +64,7 @@ def sensor(aspect):
 def image_size(aspect, frame=None):
     """(width, height) in mm on the sensor's scale of an image of `aspect`
     holding a centred frame of aspect `frame` (None: the image is the frame),
-    as viewer.camerabar.frame_rect fits a frame in the window."""
+    as the viewer's Photo mode fits a frame in the window (lens.gd's frame_rect)."""
     if not frame:
         return sensor(aspect)
     fw, fh = sensor(frame)

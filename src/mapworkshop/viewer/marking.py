@@ -1,10 +1,10 @@
-"""Editing marks in the viewer: the palette's tools, selecting a mark and
+"""Editing marks in the viewer: the marks tools, selecting a mark and
 moving, resizing or rotating it, deleting and undoing, and Esc stepping
-back.
+back. The companion (viewer.godot_link) drives it with the viewer's mouse
+events.
 
-MarkEditor holds no GL state. The overlay (viewer.overlay) answers what is
-under the cursor in framebuffer pixels, and `world` turns window positions
-into map points:
+The overlay (godot_link.Picks: what the viewer found under the cursor)
+answers what is there, and `world` turns window positions into map points:
 
     world.ground_hit(pos, z=None)   terrain point under pos, else the plane at z
     world.plane_hit(pos, z)         the point on the plane at height z
@@ -74,9 +74,9 @@ class MarkEditor:
 
     # Mouse ------------------------------------------------------------------
     def press(self, pos, at, k):
-        """A left press at window position `pos` (framebuffer pixel `at`,
-        `k` framebuffer pixels per window pixel). True when it acts on marks,
-        False to leave it to navigation.
+        """A left press at window position `pos` (`at` and `k`: where and at
+        what scale the overlay looks; the companion's picks need neither).
+        True when it acts on marks, False to leave it to navigation.
 
         A handle of the selected mark resizes or rotates it; with no tool a
         mark's tag, pin or outline (or the inside of the selected area) moves
@@ -192,8 +192,7 @@ class MarkEditor:
     def pointer(self, at, k, active):
         """Highlight the mark under the cursor and return the cursor that
         shows what a press there does: 'draw', 'move', a resize direction,
-        'rotate', or None. `active`: the cursor is over the scene, not a
-        toolbar or menu."""
+        'rotate', or None. `active`: the cursor is over the map."""
         hovered = cursor = None
         if active and self.visible:
             handle = self.overlay.handle_at(at, k)

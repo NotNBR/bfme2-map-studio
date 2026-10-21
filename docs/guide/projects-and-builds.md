@@ -106,7 +106,7 @@ folder), `CHECK` (its checkpoints) and `TARGET` (where the map goes). Without a
 
 `mw build [MAP]` (and **Build** in the viewer, and `mw dev`) builds in a fresh
 Python process. `mw dev` rebuilds on every save with the viewer open
-(`--no-view` without it, `--godot` with the [Godot viewer](../viewer.md#the-godot-viewer)).
+(`--no-view` without it).
 
 - The build runs in its own folder, `local/history/<id>/<time>/`, with its plans,
   `report.json` and `build.json` (time, source hash, git commit, map hash).

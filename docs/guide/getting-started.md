@@ -6,7 +6,14 @@ You need:
   never changes them.
 - **Python 3.11 or newer** from [python.org](https://www.python.org/downloads/).
   Tick "Add python.exe to PATH" in the installer.
-- A graphics card with **OpenGL 4.3**, which any card from the last ten years has.
+- For the viewer and `mw render`: **Rise of the Witch-king 2.01** (English)
+  beside BFME2 1.06. Both run on [OpenBFME](testing-in-game.md#openbfme-mw-play---godot),
+  a port of the game's engine to Godot, which plays from those files;
+  `mw play --godot --download` fetches the ones your installs lack. The first
+  start builds OpenBFME, which takes a few minutes.
+- A graphics card with **OpenGL 4.3** (for `mw render --engine studio`, `mw item`
+  and map graphics) and Vulkan (for the viewer), which any card from the last
+  ten years has.
 
 ## Install
 
@@ -50,7 +57,8 @@ game. Commands and their child processes keep that profile for their lifetime.
 ROTWK uses `local/profiles/rotwk/` for extracted data, caches, builds, build
 history, marks and renders. BFME2 keeps its existing `local/` paths. Map source
 projects are shared, so build a project in the selected profile before viewing
-or playing it. Both profiles' stock maps appear in their viewer's Map menu.
+or playing it. Both profiles' stock maps appear in the viewer's Map menu; the
+viewer opens them under the RotWK profile, from RotWK's archives.
 
 `mw play` and **Test In-Game** start a ROTWK skirmish directly on the build,
 you against an easy AI, in an isolated runtime with clean 2.01 assets. This

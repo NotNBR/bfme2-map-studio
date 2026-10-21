@@ -27,7 +27,7 @@ Effects are shown as on a map that has run for a while:
 
 Each particle's state is a closed-form function of its age, so any instant
 renders without simulating up to it. Randomness is a hash of the object, the
-emission and the particle, so stills are reproducible and the viewer animates.
+emission and the particle, so stills are reproducible at any time.
 
 - **Emitters** (WW3D2 `part_emt.cpp`, `part_buf.cpp`, `pointgr.cpp`):
   - Emission every `int(1000 / rate)` ms, in bursts.

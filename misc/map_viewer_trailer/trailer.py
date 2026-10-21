@@ -1,5 +1,8 @@
 """Trailer for the map viewer: mark the map, hand it to Claude Code, see the edit.
 
+It draws the Python viewer's toolbar and marks, which phase 4 of the Godot
+viewer removed: run it at commit 7b5ab1a (`git worktree add ../trailer 7b5ab1a`).
+
     python -m misc.map_viewer_trailer.trailer [--stills 12,20,36] [--out DIR]
 
 Every frame is drawn by the workshop's renderer (render.engine) at 1920x1080

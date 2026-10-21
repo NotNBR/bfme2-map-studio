@@ -46,7 +46,7 @@ func height_at(x: float, y: float) -> float:
 		+ fy * ((1.0 - fx) * heights[i + columns] + fx * heights[i + columns + 1]))
 
 
-## The first surface point along a ray in map coordinates within `reach`, or Vector3.INF (viewer.camera.march: 1500
+## The first surface point along a ray in map coordinates within `reach`, or Vector3.INF (godot_link.march: 1500
 ## steps, then bisection).
 func march(origin: Vector3, direction: Vector3, reach: float) -> Vector3:
 	var steps := 1500

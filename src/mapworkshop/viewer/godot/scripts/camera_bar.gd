@@ -1,4 +1,4 @@
-## The bar along the bottom, as the studio viewer's camera bar and status bar have them (docs/viewer.md, "Photo mode and
+## The bar along the bottom, as the Python viewer's camera bar and status bar have them (docs/viewer.md, "Photo mode and
 ## the camera bar"): at the left the camera, Edit or Photo, Views (the saved views with their thumbnails: go there,
 ## save the current one, rename, delete) and Copy view, and in Photo mode the lens (focal length, aperture, focus,
 ## exposure: the wheel or a sideways drag over a field changes it, a click opens its presets) and the framing aids
@@ -22,7 +22,7 @@ signal view_delete(name: String)
 signal view_copy()
 
 const FIELDS := ["focal", "aperture", "focus", "ev"]
-const SCRUB_PIXELS := 6.0     # a sideways drag of this many pixels is a notch (viewer/app.py)
+const SCRUB_PIXELS := 6.0     # a sideways drag of this many pixels is a notch
 
 var _status: Label
 var _readout: Label

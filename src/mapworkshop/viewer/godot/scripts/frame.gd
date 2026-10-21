@@ -25,7 +25,7 @@ Views
   Ctrl+1-9  go to the view saved there     Ctrl+Shift+1-9  save the view there
   Ctrl+C  copy the view as a mw render command"""
 
-## Photo mode's controls, above the camera bar (viewer/camerabar.py's PHOTO_KEYS).
+## Photo mode's controls, above the camera bar.
 const PHOTO_KEYS := """Photo mode
   Mouse  look        Right drag  slide        W A S D  fly             Space / C  up / down
   Wheel  forward / back        Q / E, R  roll, level        Alt+wheel  focal length

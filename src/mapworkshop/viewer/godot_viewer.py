@@ -1,6 +1,6 @@
-"""The Godot viewer: `mw view MAP --godot` shows a map in the studio's own Godot
-project (viewer/godot/, docs/godot-viewer/plan.md) on OpenBFME's library,
-which draws the map as the game does, units animated.
+"""The viewer: `mw view MAP` shows a map in the studio's own Godot project
+(viewer/godot/, docs/viewer.md) on OpenBFME's library, which draws the map as
+the game does, units animated.
 
 Python prepares what the viewer needs and starts it:
 
@@ -32,7 +32,7 @@ A view (`--view`, the key=value words of `mw render --view`) is resolved here
 as mw render resolves it (on the terrain's own heights), and the viewer puts
 its camera at the eye and target it gets, so the camera projects a map point
 onto the pixel mw render does: `--probe X,Y[,Z]` prints it from each. The Edit
-camera then orbits from that view (viewer.camera.Camera.aim's orbit). A view
+camera then orbits from that view (orbit_camera.gd's aim). A view
 with an aperture or an exposure opens in Photo mode with its lens, so a
 screenshot of it has mw render's depth of field and exposure.
 """
@@ -62,7 +62,7 @@ SCENES = openbfme.HOME/'scenes'
 SIZE = (1600, 1000)
 OWN = godot_link.OWN
 PREVIEW = ' studio preview'               # the name of a preview copy in the user maps folder: '<map> studio preview'
-FOV = 50.0            # degrees across the width, as the studio viewer's Edit camera (viewer.camera.Camera)
+FOV = 50.0            # degrees across the width: the Edit camera's (orbit_camera.gd)
 
 
 class Heights:
@@ -126,7 +126,7 @@ def resolve(view, terrain, size):
     return dict(eye=eye.tolist(), target=target.tolist(),
                 fov=fov_from_focal(view.focal, camera['sensor']) if view.focal else float(view.fov),
                 roll=float(view.roll or 0.0), near=float(camera['near']), far=float(camera['far']),
-                # viewer.camera.Camera.aim: orbit the target from the eye
+                # orbit_camera.gd's aim: orbit the target from the eye
                 orbit=dict(x=float(target[0]), y=float(target[1]), distance=distance,
                            heading=math.degrees(math.atan2(-offset[0], -offset[1])),
                            elevation=math.degrees(math.asin(max(-1.0, min(1.0, offset[2]/(distance or 1.0)))))),
@@ -145,7 +145,7 @@ def preview_map(map_path, name, weather='map', sun='own'):
     """A copy of the map as Preview shows it, in the user maps folder, as the studio renderer previews it
     (mapkit.weather): a weather preset's world weather and lighting, and its Weather block in place of the map's in
     map.ini; a sun's light rig over it, and its fog after; the sky they bring on the map's WaterReflectionSkydome
-    objects (the studio viewer swaps the texture of every sky dome; a copy can only change these templates). The
+    objects (the studio renderer swaps the texture of every sky dome; a copy can only change these templates). The
     map's map.str and solo.ini go with it. Returns the copy's name."""
     from mapworkshop.mapkit import weather as presets
     m = Map(map_path.read_bytes())
@@ -347,9 +347,33 @@ def render(name, views, out, size=(1600, 1200), top_scale=2.0, switches=None, pr
             for (n, v), shot in zip(views, data['shots'])]
 
 
-def main(args):
-    """mw view MAP --godot [--view WORDS] [--probe X,Y[,Z] ...] [--screenshot PATH] [--size WxH] [--weather W]
-    [--sun S] [--fps F]."""
+FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')    # the toolbar's (toolbar.gd)
+
+
+def parse_args(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(prog='mw view', description='Open a map in the viewer (docs/viewer.md).')
+    parser.add_argument('map', nargs='?', help='Map project, stock map or .map file of either (default: the last one)')
+    parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
+    parser.add_argument('--size', default='1600x1000', help='The window size, WIDTHxHEIGHT (1600x1000)')
+    parser.add_argument('--weather', default='map', help="Preview's weather: 'map' (the map's own) or clear, haze, "
+                                                         "rain, snow, dusk")
+    parser.add_argument('--sun', default='own', help="Preview's sun: 'own' (the weather's) or ember, copper, blood, "
+                                                     "sulphur, ash, violet")
+    parser.add_argument('--fps', default='60', choices=FPS_LIMITS, help='The frame rate cap (60)')
+    parser.add_argument('--view', help='Start at this view: the key=value words of `mw render --view`')
+    parser.add_argument('--probe', action='append', metavar='X,Y[,Z]',
+                        help='With --view: print where this map point lands in the picture, in the viewer and as '
+                             'mw render projects it (repeatable)')
+    parser.add_argument('--screenshot', type=Path, help='Save the view (or --view) as this PNG, unseen, and close')
+    parser.add_argument('--godot', action='store_true', help=argparse.SUPPRESS)   # the viewer's flag before phase 4
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    """mw view [MAP] [--view WORDS] [--probe X,Y[,Z] ...] [--screenshot PATH] [--size WxH] [--weather W] [--sun S]
+    [--fps F]."""
+    args = parse_args(argv)
     size = tuple(int(v) for v in args.size.lower().split('x'))
     probes = [tuple(float(v) for v in p.split(',')) for p in (args.probe or [])]
     if probes and not args.view:
@@ -358,11 +382,18 @@ def main(args):
     preview = dict(weather=args.weather, sun=args.sun)
     try:
         if not (args.screenshot or probes):
+            owner = project.for_map_file(project.map_path(name))
+            if owner is not None:
+                project.remember(owner)                  # `mw` alone opens it next time
             return run(name, args.view, size=size, preview=preview, fps=args.fps)
         code, lines = run(name, args.view, probes, args.screenshot, size, check=not args.screenshot, preview=preview)
     except (LookupError, RuntimeError, ValueError) as error:
-        raise SystemExit(f'mw view --godot: {error}')
+        raise SystemExit(f'mw view: {error}')
     for line in lines:
         if line.startswith('VIEWER'):
             print(line)
     return code
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

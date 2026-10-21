@@ -65,8 +65,8 @@ by WorldBuilder and not by the game: the AI's `FarmTemplate`,
 cinematic particle, fire and smoke proxies, and the summoning eggs
 (`FarmTemplate`: `DefaultModelConditionState` `Model = None`,
 `WORLD_BUILDER` `GBFarm_WB`). The renderer leaves these editor markers out
-(`render --editor-markers`, `MapRenderer(editor_markers=True)` and the
-viewer's **Editor markers** draw them, and the render report counts them
+(`render --engine studio --editor-markers` and `MapRenderer(editor_markers=True)`
+draw them, and the render report counts them
 under `editor_markers`). Hordes and castle centres also have only an editor
 model; the game shows their units or castle in its place. The renderer draws
 a horde's members instead ([units](#units)) and keeps the editor model as the
@@ -118,8 +118,8 @@ are drawn as a new game creates them, still (`assets.library`,
 
 Not reproduced: the game's random idle choice and start frame (members
 differ slightly in the game, all alike here), banner carriers and
-`RandomTexture` swaps. `render --no-units` and the viewer's
-**Units** leave every unit out; the render report counts them under `units`
+`RandomTexture` swaps. `render --engine studio --no-units` leaves every unit
+out; the render report counts them under `units`
 (hidden, hordes, members, crew, posed).
 
 ## Open questions

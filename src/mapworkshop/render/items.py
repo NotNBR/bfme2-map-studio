@@ -13,7 +13,7 @@ points, in the object's own frame (render.footprint).
 
 An item stands alone on a plain background (white unless --background) with
 a soft ground shadow, lit by the game's renderer: the same models, materials
-and textures as in the map renders and the viewer. Each image is cropped to
+and textures as in the map renders. Each image is cropped to
 the object and its shadow and scaled to fill the tile, so a scale bar in its
 corner gives the size (map units, measured at the object's centre; exact in
 top views). `--heading` (the way the camera faces: 0 north, 90 east) and

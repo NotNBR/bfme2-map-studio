@@ -1,4 +1,4 @@
-## The Edit camera: the studio viewer's orbit camera (viewer/camera.py, Camera), ported move for move. It orbits a
+## The Edit camera: the Python viewer's orbit camera, ported move for move. It orbits a
 ## ground point; heading, elevation and the field of view are in degrees, the field of view across the width.
 ## Every move changes the goal and update() eases the camera towards it, except pan(), which keeps the grabbed point
 ## exactly under the cursor.

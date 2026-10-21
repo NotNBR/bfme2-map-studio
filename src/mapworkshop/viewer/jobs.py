@@ -1,19 +1,16 @@
-"""The viewer's background work: building the project, Test In-Game, the
-walkability estimate and the marks panel's summary. Each runs on its own
-thread and reports to the toolbar's status text (Status); none touches the
-GL context, so the 3D view keeps drawing while they run.
+"""The viewer's background work, run by its companion (viewer.godot_link):
+building the project, Test In-Game and the marks panel's summary. Each runs
+on its own thread and reports to the status line (Status).
 """
 
 import json
 import threading
 import time
 
-from mapworkshop.viewer.loading import LatestTask
-
 
 class Status:
-    """The toolbar's status text: the latest message, shown for its time.
-    Jobs set it from their threads."""
+    """The status line's text: the latest message, shown for its time. Jobs
+    set it from their threads."""
 
     def __init__(self):
         self.text, self.until = '', 0.0
@@ -155,46 +152,6 @@ def play_openbfme(owner, status, events=lambda event: None):
 
     status.set('preparing OpenBFME' + (f' with {owner.title}...' if owner else '...'), 600)
     threading.Thread(target=work, daemon=True).start()
-
-
-class Walkability:
-    """The walkability estimate of the scene shown, computed in the
-    background when View > Walkable is on and installed between frames."""
-
-    def __init__(self, status):
-        self.status = status
-        self.loader = LatestTask()
-        self.pending = None       # (renderer, request)
-
-    def request(self, renderer):
-        """Compute it for `renderer` if its layer is on and it has none yet;
-        a request for an earlier scene is cancelled."""
-        if self.pending:
-            self.pending[1].cancelled.set()
-            self.pending = None
-        if renderer is None or not renderer.visible['walkable'] or hasattr(renderer, '_walk'):
-            return
-        calculate = renderer.walkability_task()
-        self.pending = renderer, self.loader.submit(lambda request: calculate())
-        self.status.set('Computing walkability...', 60)
-
-    def advance(self, current):
-        """Install a finished result, if it is still for the scene shown."""
-        if not self.pending or not self.pending[1].done.is_set():
-            return
-        renderer, request = self.pending
-        self.pending = None
-        if request.cancelled.is_set() or renderer is not current or not renderer.visible['walkable']:
-            return
-        if request.error:
-            renderer.visible['walkable'] = False
-            self.status.set(f'Walkability failed: {request.error}', 10)
-            return
-        renderer.install_walkability(request.take())
-        self.status.set(f'Walkability ready: {len(renderer.walkable["cut_off"])} cut-off areas', 5)
-
-    def close(self):
-        self.loader.close()
 
 
 class MarksSummary:

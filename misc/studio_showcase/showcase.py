@@ -1,5 +1,8 @@
 """Showcase: one new map, Brightwater Fold, from `mw new` to its last details.
 
+It draws the Python viewer's toolbar and marks, which phase 4 of the Godot viewer
+removed: run it at commit 7b5ab1a (`git worktree add ../showcase 7b5ab1a`).
+
     python -m misc.studio_showcase.showcase [--stills 12,20,36] [--out DIR]
 
 Everything shown happened. Brightwater Fold was made for this video in

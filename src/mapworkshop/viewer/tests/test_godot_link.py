@@ -1,7 +1,7 @@
 """The Godot viewer's companion (viewer/godot_link.py): mouse events with a ray become marks through MarkEditor, the
 commands, the state the viewer draws, Copy for agent, the socket, live reload; and, when OpenBFME is built, the viewer
 itself driven headless: marks drawn and dragged by scripted input (the overlay picking the mark to drag) read in
-`mw marks` as the same marks drawn in the studio viewer's way."""
+`mw marks` as the same marks drawn in the Python viewer's way."""
 import json
 import socket
 import tempfile
@@ -170,6 +170,14 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(self.companion.map_path, other)
         self.assertEqual(self.companion.marks.items, [])               # that map's marks, not this one's
 
+    def test_another_project_becomes_the_last_map(self):
+        owner = mock.MagicMock(id='other')
+        self.companion.prepare = mock.MagicMock(
+            return_value=(Path('other.json'), dict(self.data, title='Other'), owner, FlatSurface()))
+        with mock.patch.object(self.companion, 'menu', return_value=dict(type='menu')),                 mock.patch.object(godot_link.project, 'remember') as remember:
+            self.send(dict(type='command', name='open_map', map='other'))
+        remember.assert_called_once_with(owner)                        # `mw` alone opens it next time
+
     def test_a_preview_prepares_the_same_map_again_with_it(self):
         preview = dict(weather='rain', sun='own')
         self.companion.prepare = mock.MagicMock(
@@ -275,7 +283,7 @@ PHOTO = dict(EDIT, mode='photo', fly=dict(goal=[100.0, 200.0, 400.0], forward=[0
 
 
 class ViewsTests(unittest.TestCase):
-    """The saved views and Copy view, in the studio viewer's files and command."""
+    """The saved views and Copy view, in the Python viewer's files and command."""
     setUp, send = CompanionTests.setUp, CompanionTests.send
 
     def test_a_view_is_saved_with_its_thumbnail_and_gone_back_to(self):
@@ -289,7 +297,7 @@ class ViewsTests(unittest.TestCase):
         self.assertEqual([(v['name'], v['slot'], v['mode']) for v in items], [('View 1', 3, 'edit')])
         with Image.open(items[0]['thumbnail']) as thumbnail:
             self.assertEqual(thumbnail.size, viewlib.THUMBNAIL)
-        saved = viewlib.Views(self.map_path).by_name('View 1')['spec']         # as the studio viewer reads it
+        saved = viewlib.Views(self.map_path).by_name('View 1')['spec']         # as the Python viewer reads it
         self.assertEqual(saved, dict(target=[400, 300, 50], distance=1200, elevation=35, heading=90, fov=50))
         view = self.send(dict(type='command', name='apply_view', slot=3, size=[1600, 1000]))[0]
         self.assertEqual((view['type'], view['mode'], view['name']), ('view', 'edit', 'View 1'))
@@ -332,6 +340,19 @@ class ViewsTests(unittest.TestCase):
         self.assertIn('mw render always draws it', replies[0]['what'])             # the water was hidden
 
 
+class HelperTests(unittest.TestCase):
+    def test_a_game_maps_title_comes_from_its_file_name_without_the_disk(self):
+        with mock.patch.object(Path, 'resolve', side_effect=AssertionError('disk lookup')):
+            self.assertEqual(godot_link.map_title(Path('map mp my valley.map')), 'My Valley')
+            self.assertEqual(godot_link.map_title(Path('bfmexbar fords.map')), 'Fords')
+
+    def test_a_ray_finds_the_ground(self):
+        hit = godot_link.march(np.array([0.0, 0.0, 100.0]), np.array([0.6, 0.0, -0.8]), FlatSurface().height_at, 500)
+        self.assertAlmostEqual(hit[2], 50.0, places=3)
+        self.assertAlmostEqual(hit[0], 37.5, places=3)
+        self.assertIsNone(godot_link.march(np.zeros(3) + 100, np.array([0.0, 0.0, 1.0]), FlatSurface().height_at, 500))
+
+
 class LinkTests(unittest.TestCase):
     def test_json_lines_both_ways(self):
         link = godot_link.Link()
@@ -351,7 +372,7 @@ class LinkTests(unittest.TestCase):
 
 
 class Ground:
-    """The studio viewer's world for MarkEditor, hitting the map points it is told (as its camera picks them)."""
+    """A world for MarkEditor that hits the map points it is told: the strokes as a camera picking them would."""
 
     def __init__(self):
         self.at = None
@@ -402,7 +423,7 @@ class DrivenViewerTests(unittest.TestCase):
             self.assertEqual(code, 0)
             map_path = godot_viewer.source('blend-lab')[0]
             godot = json.loads(marklib.marks_path(map_path).read_text(encoding='utf-8'))
-            # the same marks through MarkEditor as the studio viewer drives it, its camera picking those points
+            # the same marks through MarkEditor driven directly, a camera picking those points
             studio_marks = marklib.Marks(Path(tmp)/'studio.map')        # a marks file of its own
             ground, status = Ground(), mock.MagicMock()
             overlay = mock.MagicMock(**{'handle_at.return_value': None, 'grab_at.return_value': None})

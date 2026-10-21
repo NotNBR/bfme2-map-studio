@@ -1,10 +1,11 @@
-# The Godot viewer against the studio viewer
+# The Godot viewer against the Python viewer
 
 Phase 3's check ([the plan](plan.md#phase-3-parity)): every feature of
-[the viewer](../viewer.md), section by section, in the Godot viewer
-(`mw view MAP --godot`). Each item is one of:
+the Python viewer, as [the viewer's page](../viewer.md) described it then,
+section by section, in the Godot viewer (then `mw view MAP --godot`; since
+phase 4 the viewer, `mw view MAP`). Each item is one of:
 
-- **same**: it behaves as the studio viewer's, checked as the last column says;
+- **same**: it behaves as the Python viewer's, checked as the last column says;
 - **drawn differently**: the feature is there, but OpenBFME's library draws the
   map differently from the studio renderer;
 - **missing**: it is not in the Godot viewer, and why.
@@ -12,8 +13,8 @@ Phase 3's check ([the plan](plan.md#phase-3-parity)): every feature of
 Checked on 2026-10-21 at `aa4026b`, with Battle of Helm's Deep (a night map
 with rain) and Water Lab. The screenshot pairs are made by a script outside
 the repository into `local/renders/parity/<item>-studio.png` and
-`<item>-godot.png`. The studio side is `mw render` (the studio viewer's
-renderer) at 1600 x 1000, or for `open` the studio viewer's own window; the
+`<item>-godot.png`. The studio side is `mw render` (the Python viewer's
+renderer) at 1600 x 1000, or for `open` the Python viewer's own window; the
 Godot side is the Godot viewer's `--screenshot` or a scripted run with its
 companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 
@@ -34,7 +35,7 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 
 | Item | State | Checked by |
 |---|---|---|
-| The Edit camera: orbit, pan, zoom to the cursor, fly to a double-click, the keys, the whole map, top-down | same (a port of `viewer/camera.py`'s Camera) | phase 1, by hand; `open`, `top` pairs |
+| The Edit camera: orbit, pan, zoom to the cursor, fly to a double-click, the keys, the whole map, top-down | same (a port of the Python viewer's Camera) | phase 1, by hand; `open`, `top` pairs |
 | V, Ctrl+1..9, Ctrl+Shift+1..9, Ctrl+C | same | `ViewsTests`, a scripted run |
 | 1, 2, 6, 7, 8, M, G, B, P, F5, Ctrl+B, F1, Del, Ctrl+Z, Esc | same | `CompanionTests`, scripted runs |
 | 3, 4, 5, 9, U (shadows, normal maps, clouds, editor markers, units) | missing: OpenBFME draws none of them as a switch | |
@@ -43,7 +44,7 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 
 | Item | State | Checked by |
 |---|---|---|
-| The free camera, its mouse and keys | same (a port of `viewer/camera.py`'s FlyCamera) | a scripted run |
+| The free camera, its mouse and keys | same (a port of the Python viewer's FlyCamera) | a scripted run |
 | Views: thumbnails, go, save, rename, delete; the same `local/views` files | same; renaming and deleting sit at the end of the list | `ViewsTests`, a scripted run |
 | Copy view | same command; units, shadows, clouds, detail, time and normal maps stay at `mw render`'s defaults | `ViewsTests` |
 | The lens: focal length, aperture, focus, exposure; the presets, wheel and drag | same | `lens` pair: the blur matches |
@@ -65,8 +66,8 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 | Item | State | Checked by |
 |---|---|---|
 | Map: projects, the game's maps, Open project folder, Browse... | same; Browse... opens a project's build or a stock map only | `CompanionTests` |
-| Properties | same window (the studio viewer's own); its Save builds, and the build reloads | `CompanionTests` |
-| Build, its chip; Test In-Game and its choice | same, the studio viewer's own jobs | `CompanionTests` |
+| Properties | same window (the Python viewer's own); its Save builds, and the build reloads | `CompanionTests` |
+| Build, its chip; Test In-Game and its choice | same, the Python viewer's own jobs | `CompanionTests` |
 | Preview: Weather, Sun | same lighting, fog and sky (a copy of the map); no falling rain or snow; the sky only on `WaterReflectionSkydome` objects | `rain`, `ember` pairs, `PreviewTests` |
 | Preview: Detail | missing: OpenBFME has no detail levels | |
 | View: objects, water, roads, fog, Animate, grid, border, walkable, flow, marks | same, with the border drawn differently (below) | the overlay pairs |
@@ -77,7 +78,7 @@ companion. The tests named are in `src/mapworkshop/viewer/tests/`.
 
 | Item | State | Checked by |
 |---|---|---|
-| The tools, selecting, moving, resizing, rotating, Del, Ctrl+Z, Esc | same: the studio viewer's MarkEditor does the editing | `DrivenViewerTests`: the same marks as the studio viewer's for the same strokes |
+| The tools, selecting, moving, resizing, rotating, Del, Ctrl+Z, Esc | same: the Python viewer's MarkEditor does the editing | `DrivenViewerTests`: the same marks as the Python viewer's for the same strokes |
 | The marks panel, Copy for agent, `mw marks` | same text, from the same marks file | `CompanionTests` |
 
 ## Overlays

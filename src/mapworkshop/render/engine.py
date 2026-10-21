@@ -1,7 +1,7 @@
 """Offscreen renderer for BFME2 maps (moderngl, headless OpenGL 4.3).
 
-MapRenderer reads a map (prepare, on any thread), puts it on the GPU (upload,
-on the thread that owns the context) and draws it (draw, render). Each subject
+MapRenderer reads a map, puts it on the GPU (upload) and draws it (draw,
+render). Each subject
 it draws is a part of its own, a mixin in that subject's module, all sharing
 the renderer's state:
 
@@ -51,17 +51,12 @@ class MapRenderer(MaterialsMixin, LightingMixin, TerrainMixin, WaterMixin, River
     def __init__(self, source, assets=None, ctx=None, objects=True, normal_maps=None,
                  clouds=True, macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,
                  progress=None, vegetation_limits=False, sun=None, editor_markers=False, units=True):
-        """Synchronous entry point for CLI rendering; the viewer uses prepare/upload."""
+        """Read the map and put it on the GPU (a standalone context unless `ctx`)."""
         import moderngl
         self._prepare(source, assets, objects, normal_maps, clouds, macro, samples, lod,
                       shadows, shared, weather, progress, vegetation_limits, sun, editor_markers, units)
         for _ in self.upload(ctx or moderngl.create_standalone_context(require=430), shared):
             pass
-
-    @classmethod
-    def prepare(cls, source, **options):
-        """CPU-only scene construction, safe to perform in a loader worker."""
-        return cls.__new__(cls)._prepare(source, **options)
 
     def _prepare(self, source, assets=None, objects=True, normal_maps=None, clouds=True,
                  macro=True, samples=4, lod='medium', shadows=True, shared=None, weather=None,

@@ -1016,8 +1016,8 @@ void main() {
 }
 """
 
-# The flow overlay over a river strip (mw render --flow, the viewer's River
-# flow): chevrons pointing downstream, one per v repeat and drifting
+# The flow overlay over a river strip (mw render --engine studio --flow; the
+# viewer's port is river_flow.gdshader): chevrons pointing downstream, one per v repeat and drifting
 # downstream with time; the strip's banks as thin lines, its first cross-section
 # green and its last red. At least a pixel or two wide at any distance.
 RIVER_FLOW_FS = """
