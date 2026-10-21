@@ -30,6 +30,7 @@ var _until := 0.0
 var _hint := ""
 var _edit: Button
 var _photo: Button
+var _test: Button
 var _lens_row: HBoxContainer      # the lens and the framing aids, in Photo mode
 var _fields := {}              # field -> Button
 var _presets := {}             # field -> PopupMenu
@@ -57,6 +58,8 @@ func _ready() -> void:
 	_edit.pressed.connect(func() -> void: mode_chosen.emit("edit"))
 	_photo = _toggle(row, "Photo", "The free camera with a lens, for pictures (V)", group)
 	_photo.pressed.connect(func() -> void: mode_chosen.emit("photo"))
+	_test = _toggle(row, "Test", "Run the map as a game on OpenBFME: select units, order them to move or attack", group)
+	_test.pressed.connect(func() -> void: mode_chosen.emit("test"))
 	row.add_child(VSeparator.new())
 	_views = MenuButton.new()
 	_views.text = "Views  ▾"
@@ -208,6 +211,7 @@ func _ask_rename(id: int) -> void:
 func set_mode(mode: String) -> void:
 	_edit.set_pressed_no_signal(mode == "edit")
 	_photo.set_pressed_no_signal(mode == "photo")
+	_test.set_pressed_no_signal(mode == "test")
 	_lens_row.visible = mode == "photo"
 
 

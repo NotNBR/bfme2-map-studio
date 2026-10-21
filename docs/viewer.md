@@ -45,7 +45,8 @@ has `mw render`'s depth of field and exposure.
 ## Moving around
 
 The viewer has two cameras; **V** or the camera bar switches between them,
-and the view stays where it is.
+and the view stays where it is. The camera bar's third mode, **Test**, runs
+the map as a game ([Test mode](#test-mode-the-map-as-a-game)).
 
 - **Edit**, the default, orbits a point on the ground, as in a 3D editor. Use
   it to work on the map: the marks, their tools and the marks panel are shown.
@@ -98,7 +99,8 @@ camera bar.
 
 The **camera bar** along the bottom holds, from the left:
 
-- **Edit / Photo**, the camera.
+- **Edit / Photo**, the camera, and **Test**, the map run as a game
+  ([Test mode](#test-mode-the-map-as-a-game)).
 - **Views**: the saved views with their thumbnails, Photo or Edit and their
   key. Click one to go there; **Save the current view** puts it in the first
   free slot, and **Rename...** and **Delete** at the end of the list change
@@ -135,6 +137,40 @@ The **camera bar** along the bottom holds, from the left:
   tilt; in Photo the camera's position, heading, tilt, roll, the frame's field
   of view and, with an aperture, the distances that stay sharp (blur under
   1/1500 of the frame's diagonal).
+
+## Test mode: the map as a game
+
+**Test** on the camera bar runs the map as a game: OpenBFME's GameWorld, the
+game's own logic, takes the place of the still objects. Battalions form up,
+units animate, and they move and fight as ordered. Every slot of the map's
+line-up (`map.toml`'s `[play]`, else Men against Mordor) is human, so no AI
+moves an army, and both armies take orders: an order goes out as the owner
+of the units selected. The marks and their tools are put away meanwhile;
+**Edit** or **Photo** ends the game, and the map is as it was.
+
+| Mouse or key | Does |
+|---|---|
+| Left click a unit, left drag a box | select it, or the units in the box (Shift adds); one owner's units at a time |
+| Right click the ground | move the selection there (Shift: a waypoint after the last) |
+| Right click a unit of another owner | attack it |
+| X | stop |
+| Esc | let go of the selection |
+| Middle drag | orbit (the left drag is the box); the right drag still pans, the wheel and the keys move the camera, but Z and X do not zoom |
+
+The panel at the top left pauses the game and sets its speed (0.5 to 4
+times). The first start takes about five seconds, while the game's objects
+load.
+
+The game reads the map from an archive the companion packs when the viewer
+starts ([native/openbfme.py](../src/mapworkshop/native/openbfme.py),
+`pack_for_test`): OpenBFME runs a game only on a map in its archives (a game
+on a user map is part 2 of the user-maps change, not written yet), and the
+archive stays open while the viewer runs. So after a new build, another map
+or another Preview, **Test** starts the viewer again on the map as it is,
+at the same camera, in Test mode. [Test Mode Lab](../maps/test_mode_lab/map.py)
+(`mw view test-mode-lab`) has two small armies for it. The game's HUD (the
+command bar, powers, building) is not there; **Test In-Game** with OpenBFME
+has it.
 
 ## Live reload
 

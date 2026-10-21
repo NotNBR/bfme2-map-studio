@@ -55,7 +55,9 @@ var _overlays: Overlays
 var _objects_node: Node3D     # the object layer, beside the terrain so that the terrain alone can be built again
 var _views := {}              # View key -> on
 var _link: Link
-var _mode := "edit"           # "edit": the orbit camera; "photo": the free camera with its lens
+var _mode := "edit"           # "edit": the orbit camera; "photo": the free camera with its lens; "test": the game runs
+var _test: TestMode           # the game in Test mode
+var _right_at := Vector2.INF  # where a right press was, in Test mode: a click there is an order
 var _fly: FlyCamera
 var _photo: PhotoEffect
 var _captured := false        # Photo mode has the mouse: moving it looks around
@@ -259,6 +261,8 @@ func _open_map() -> void:
 		return
 	_probe()
 	_send({"type": "ready", "ms": done - started})
+	if _scene.get("test_start", false) and _link != null:
+		_set_mode("test")                              # started again for Test mode, on the new build
 	if not _shots.is_empty():
 		_next_shot(WARMUP_FRAMES)
 	if _scene.get("check", false) and _shots.is_empty():
@@ -358,6 +362,8 @@ func _apply_views(keys: Array = []) -> void:
 ## A new build, another map (`new_map`) or a preview (`what` names it): the scene and its surface read and the map
 ## built in place. The camera stays for a new build and a preview; another map starts at its whole map.
 func _reload(path: String, new_map: bool, what: String = "") -> void:
+	if _test != null:
+		_leave_test()                                  # the game ran on the map as it was
 	var started := Time.get_ticks_msec()
 	var previous := _scene_path
 	_scene_path = path
@@ -429,6 +435,8 @@ func _process(delta: float) -> void:
 	if _views.get("animate", true) and _shots.is_empty():     # shots stand at their own time (_next_shot)
 		_advance(_clock + delta)
 	_serve_link()
+	if _test != null:
+		_test.advance(delta)
 	if _orbit != null and _mode == "photo":
 		_process_photo(delta)
 	elif _orbit != null:
@@ -437,8 +445,8 @@ func _process(delta: float) -> void:
 		var turn := _axis(KEY_E) - _axis(KEY_Q)
 		var tilt := _axis(KEY_R) - _axis(KEY_F)
 		var zoom := _axis(KEY_X) - _axis(KEY_Z)
-		if Input.is_key_pressed(KEY_CTRL):
-			zoom = 0.0             # Ctrl+Z undoes
+		if Input.is_key_pressed(KEY_CTRL) or _mode == "test":
+			zoom = 0.0             # Ctrl+Z undoes; in Test mode X stops (the wheel zooms)
 		if forward != 0.0 or right != 0.0 or turn != 0.0 or tilt != 0.0 or zoom != 0.0:
 			_free()
 		if not _fixed:
@@ -449,7 +457,7 @@ func _process(delta: float) -> void:
 			_orbit.apply(_camera)
 		if _frame != null:
 			_frame.bar.set_orbit(_orbit)
-		if _hover and _drag.is_empty():
+		if _hover and _drag.is_empty() and _mode != "test":
 			_send(_event("hover", get_viewport().get_mouse_position()))
 		_hover = false
 	_play_drive()
@@ -607,6 +615,11 @@ func _status(text: String, seconds: float) -> void:
 ## Edit or Photo, without moving the view: Photo starts where the orbit camera is (unless `place` is false: it is
 ## placed already), with its lens as it was left; Edit orbits the ground Photo looks at.
 func _set_mode(mode: String, place := true) -> void:
+	if mode == "test" and _mode != "test" and _orbit != null:
+		_ask_test()
+		return
+	if _mode == "test" and mode != "test":
+		_leave_test()
 	if mode == _mode or _orbit == null:
 		if _frame != null:
 			_frame.bar.set_mode(_mode)
@@ -632,6 +645,101 @@ func _set_mode(mode: String, place := true) -> void:
 	if _frame != null:
 		_frame.set_photo_mode(mode == "photo")
 	print("VIEWER mode ", mode)
+
+
+## Test mode asked of the companion, which answers with the map to run and its line-up ("test_mode"), or starts the
+## viewer again when the map shown is not the one packed for it.
+func _ask_test() -> void:
+	if _link == null:
+		print("VIEWER Test mode runs with the companion: open the map with mw view")
+		return
+	_frame.bar.set_mode(_mode)                         # until the game runs
+	_frame.toast("busy", "Starting Test mode", "the game on OpenBFME", 30)
+	_send({"type": "command", "name": "test_mode", "camera": _camera_state(), "views": _views})
+
+
+## The game started (TestMode.start: a few seconds, the first time) in place of the still objects, the marks and their
+## tools put away.
+func _enter_test(message: Dictionary) -> void:
+	await get_tree().process_frame                     # the toast shows before the game loads
+	await get_tree().process_frame
+	if _mode == "photo":
+		_set_mode("edit")
+	var test := TestMode.new()
+	add_child(test)
+	var started := Time.get_ticks_msec()
+	var error := test.start(_fs, String(message.map), message.slots, _camera)
+	if not error.is_empty():
+		test.queue_free()
+		_frame.toast("failed", "Test mode did not start", error, 10)
+		_frame.bar.set_mode(_mode)
+		return
+	_test = test
+	_mode = "test"
+	_drag = ""
+	_send({"type": "tool", "tool": null})
+	if _objects_node != null:
+		_objects_node.visible = false
+	_overlay.visible = false
+	_frame.set_test_mode(true)
+	_frame.toast("done", "Test mode", "the game runs (%.1f s to start): left button selects, right orders" % [
+		(Time.get_ticks_msec() - started) / 1000.0], 5)
+	print("VIEWER mode test")
+
+
+## Back to Edit: the game goes, the still objects and the marks come back.
+func _leave_test() -> void:
+	_test.queue_free()
+	_test = null
+	_mode = "edit"
+	_drag = ""
+	if _objects_node != null:
+		_objects_node.visible = _views.get("objects", true)
+	_overlay.visible = _views.get("marks", true)
+	_frame.set_test_mode(false)
+	print("VIEWER mode edit")
+
+
+## Test mode's mouse and keys: the left button selects (a click, or a box), a right click orders, the middle drag
+## orbits; X stops, Esc lets go. The marks' keys do nothing. True when it was one of them.
+func _test_input(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		match b.button_index:
+			MOUSE_BUTTON_LEFT:
+				if b.pressed:
+					_test.box_start(b.position)
+				elif _test.dragging():
+					_test.left_up(b.position, b.shift_pressed)
+				return true
+			MOUSE_BUTTON_RIGHT:
+				if b.pressed:
+					_right_at = b.position
+				elif b.position.distance_to(_right_at) < CLICK_PIXELS:
+					var done := _test.order(b.position, _orbit.pick(_camera, b.position), b.shift_pressed)
+					if not done.is_empty():
+						_status(done, 3)
+				return false                               # a right drag still pans
+			MOUSE_BUTTON_MIDDLE:
+				_drag = "orbit" if b.pressed else ""
+				return true
+	elif event is InputEventMouseMotion and _test.dragging():
+		_test.box_move((event as InputEventMouseMotion).position)
+		return true
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var k := event as InputEventKey
+		match k.keycode:
+			KEY_X:
+				_test.stop()
+				return true
+			KEY_ESCAPE:
+				_test.selected.clear()
+				return true
+			KEY_DELETE, KEY_BACKSPACE, KEY_M:
+				return true
+			KEY_Z:
+				return k.ctrl_pressed
+	return false
 
 
 ## The free camera at the scene's view (Python resolved it): its eye towards its target, its roll and lens.
@@ -718,7 +826,8 @@ func _play_drive() -> void:
 	match String(step.do):
 		"press", "release":
 			var b := InputEventMouseButton.new()
-			b.button_index = MOUSE_BUTTON_LEFT
+			b.button_index = {"left": MOUSE_BUTTON_LEFT, "right": MOUSE_BUTTON_RIGHT,
+				"middle": MOUSE_BUTTON_MIDDLE}[String(step.get("button", "left"))]
 			b.pressed = step.do == "press"
 			b.position = pos
 			b.global_position = pos
@@ -742,6 +851,8 @@ func _play_drive() -> void:
 			_lens_pick(String(step.field), step.value)         # as the camera bar's preset
 		"view":
 			_switch_view(String(step.key), bool(step.on))      # as the View menu
+		"mode":
+			_set_mode(String(step.mode))                     # as the camera bar
 		"command":
 			var command := step.duplicate()       # its name and arguments, as the toolbar sends them
 			command.erase("do")
@@ -807,6 +918,10 @@ func _serve_link() -> void:
 			"toast":
 				_frame.toast(String(message.kind), String(message.title), String(message.get("detail", "")),
 					float(message.get("seconds", 3)))
+			"test_mode":
+				_enter_test(message)
+			"quit":                                    # the companion starts the viewer again (Test mode, a new build)
+				get_tree().quit(0)
 			"window":
 				if message.minimized:
 					_capture(false)                    # the game is up: the mouse is the game's
@@ -904,6 +1019,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_send({"type": "command", "name": "build"})
 			return
 	if _mode == "photo" and _photo_input(event):
+		return
+	if _mode == "test" and _test_input(event):
 		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton

@@ -41,6 +41,8 @@ Nothing is written into the submodule; everything else stays in local/openbfme/:
                 OpenBFME launcher uses (its pinned owner, MD5-checked).
     maps/       <native name>.big and .ini (its map-cache entry) per map
     mapcache.big  the merged maps\\mapcache.ini, mounted last
+    test/       the viewer's Test mode: a folder per viewer run, the map it
+                shows packed with its map-cache entry (pack_for_test)
     appdata/    the APPDATA the game gets: its options, logs and saves stay here
     logs/       build, import and check logs, check-<map>.json;
                 import-<project or viewer>.pending while an import is due
@@ -70,6 +72,7 @@ HOME = LOCAL/'openbfme'
 TOOLS, BUILD, PROJECT, VIEWER, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('tools', 'build', 'project', 'viewer', 'assets',
                                                                                 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
+TEST = HOME/'test'
 STUDIO = Path(__file__).resolve().parents[1]/'viewer'/'godot'         # the studio's Godot project, assembled into VIEWER
 
 LLVM_MINGW = 'llvm-mingw-20261006-ucrt-x86_64'
@@ -544,6 +547,45 @@ def archives():
     cache = merged_cache(retail, [p.with_suffix('.ini').read_text(encoding='cp1252') for p in maps])
     write_big(MAPCACHE, [('maps/mapcache.ini', cache.replace('\n', '\r\n').encode('cp1252'))])
     return [*maps, MAPCACHE]
+
+
+def pack_for_test(map_file, name, title):
+    """The map at `map_file` (with the map.ini, map.str and .tga files beside it) packed as maps/<name>/ for a live
+    game in the viewer's Test mode, with a map cache that names it: the archives to mount. OpenBFME's GameWorld
+    finds a map only in its archives (a game on a user map is not ported yet: its stop S-5160), and they are mounted
+    when the viewer starts (OPENBFME_EXTRA_ARCHIVES, read once) and stay open while it runs, so each run packs into a
+    folder of its own under TEST; the folders no viewer holds any more go."""
+    from mapworkshop.formats.big import BigArchive
+    from mapworkshop.formats.map import Map
+    from mapworkshop.mapkit.cache import cache_entry
+    TEST.mkdir(parents=True, exist_ok=True)
+    for old in TEST.iterdir():
+        shutil.rmtree(old, ignore_errors=True)               # a running viewer's archives stay: they are open
+    folder = TEST/f'{time.time_ns()}'
+    folder.mkdir()
+    files = [p for p in sorted(map_file.parent.iterdir())
+             if p == map_file or p.suffix.lower() in ('.tga', '.str') or p.name.lower() == 'map.ini']
+    archive = folder/f'{name}.big'
+    write_big(archive, [(f'maps/{name}/{name}.map' if p == map_file else f'maps/{name}/{p.name}', p) for p in files])
+    entry = cache_entry(map_file, Map(map_file.read_bytes()), name, title, title)
+    cache = merged_cache(BigArchive(ASSETS/'rotwk'/'_patch201maps.big').read('maps/mapcache.ini'), [entry])
+    write_big(folder/'mapcache.big', [('maps/mapcache.ini', cache.replace('\n', '\r\n').encode('cp1252'))])
+    return [archive, folder/'mapcache.big']
+
+
+def world_slots(project):
+    """GameWorld's slots for a live game in the viewer's Test mode: map.toml's [play] line-up (runtime.lineup), each
+    slot's Player_<n> with its faction and team, every slot human, so that no skirmish AI moves an army (an order goes
+    out as whoever owns the units ordered); without a line-up, or a faction, Men against Mordor."""
+    from mapworkshop.native import runtime
+    try:
+        seats = runtime.lineup(project) if project is not None else None
+    except ValueError:
+        seats = None
+    seats = seats or [dict(faction=None, team=-1), dict(faction=None, team=-1)]
+    defaults = ('Men', 'Mordor')
+    return [dict(player=f'Player_{i + 1}', faction='Faction' + (s['faction'] or defaults[i % 2]), human=True,
+                 team=s['team'] if s['team'] >= 0 else i, start_index=i) for i, s in enumerate(seats)]
 
 
 # Running it ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ View
   1  objects     2  water     6  fog     7  walkable     8  river flow arrows     G  grid     B  map border     M  marks
 
   V  Photo mode     P  screenshot     F5  read the map again     Ctrl+B  build     F1  these controls
+  Test (the camera bar)  run the map as a game: select and order its units
 
 Views
   Ctrl+1-9  go to the view saved there     Ctrl+Shift+1-9  save the view there
@@ -109,6 +110,12 @@ func toast(kind: String, title: String, detail: String, seconds: float) -> void:
 	_toast.reset_size()
 	_toast.visible = true
 	_toast_until = Time.get_ticks_msec() / 1000.0 + seconds
+
+
+## Test mode (`on`) or Edit: the marks put away while the game runs (TestMode shows its own controls).
+func set_test_mode(on: bool) -> void:
+	marks.visible = not on
+	bar.set_mode("test" if on else "edit")
 
 
 ## Photo mode (`on`) or Edit: the framing aids and Photo's controls, or the marks.
