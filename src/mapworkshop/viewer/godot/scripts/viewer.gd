@@ -492,7 +492,7 @@ func _show_clouds(on: bool) -> void:
 func _advance(time: float) -> void:
 	while time - _clock > 1e-6:                      # a shot's --time in steps, as frames would take it
 		var step := minf(time - _clock, 0.1)
-		if _objects != null:
+		if _objects != null and _test == null:     # Test's GameWorld owns the visible objects; keep the idle layer still
 			_objects.advance(step)
 		if _overlays != null:
 			_overlays.advance(step)

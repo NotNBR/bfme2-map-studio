@@ -48,6 +48,9 @@ func start(fs: RefCounted, map: String, slots: Array, camera: Camera3D) -> Strin
 	var setup: Dictionary = world.setup(fs)
 	if not setup.ok:
 		return "the game's object world did not load: %s" % [setup.get("errors", [])]
+	var profile: Dictionary = world.set_simulation_profile("uber")
+	if not profile.ok:
+		return "Uber mode did not start: %s" % [profile.get("error", "unknown error")]
 	var rep: Dictionary = world.load_map(map, {"slots": slots})
 	if not rep.ok:
 		return "the game did not start: %s" % [", ".join(PackedStringArray(rep.get("errors", []).slice(0, 3)))]

@@ -142,7 +142,8 @@ The **camera bar** along the bottom holds, from the left:
 
 **Test** on the camera bar runs the map as a game: OpenBFME's GameWorld, the
 game's own logic, takes the place of the still objects. Battalions form up,
-units animate, and they move and fight as ordered. Every slot of the map's
+units animate, and they move and fight as ordered. Test uses OpenBFME's Uber
+performance profile. Every slot of the map's
 line-up (`map.toml`'s `[play]`, else Men against Mordor) is human, so no AI
 moves an army, and both armies take orders: an order goes out as the owner
 of the units selected. The marks and their tools are put away meanwhile;
