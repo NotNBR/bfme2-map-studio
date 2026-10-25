@@ -80,7 +80,7 @@ have the game's own, freed to zoom out and tilt.
 | V | Edit or Photo |
 | Ctrl+1..9, Ctrl+Shift+1..9 | Go to saved view 1-9, save the view there |
 | Ctrl+C | Copy the view as a `mw render` command |
-| 1 2 6 7 8 | Objects, water, fog, walkable, river flow arrows |
+| 1 2 3 6 7 8 | Objects, water, starting positions, fog, walkable, river flow arrows |
 | M | Show or hide the marks |
 | G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, read the map again, build, controls |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change (Edit) |
@@ -321,6 +321,10 @@ itself ([AGENTS.md](../AGENTS.md)); `--json` gives the exact outlines, and
 `--near` the distance around pins and open paths that counts as inside (150).
 
 ## Overlays
+
+**View → Starting positions** (key 3) shows numbered gold rings on the ground
+at the map's `Player_N_Start` waypoints. They are on by default while exploring
+a map and hidden during Test mode. Automated renders leave them out by default.
 
 **View → Walkable** (key 7) draws the local walkability estimate: open ground
 green, shallow water blue, bridge decks cyan, blocked cells red and striped

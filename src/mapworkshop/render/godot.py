@@ -24,6 +24,7 @@ an aperture or an exposure is taken in Photo mode with its lens.
 
 import json
 import math
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -48,6 +49,17 @@ OWN = dict(weather='map', sun='own', limits=False, units=True)
 PREVIEW = ' studio preview'               # the name of a preview copy in the user maps folder: '<map> studio preview'
 LOOSE = ' studio map'                     # and of a map that is neither a project's build nor in RotWK's archives
 FOV = 50.0            # degrees across the width: the Edit camera's (orbit_camera.gd)
+
+
+def starting_positions(m):
+    """Numbered skirmish starts from the map's waypoint objects, in player order."""
+    starts = []
+    for obj in m.objects():
+        name = next((value for key, _, value in obj['properties'] if key == 'waypointName'), '')
+        match = re.fullmatch(r'Player_(\d+)_Start', str(name), re.IGNORECASE)
+        if match:
+            starts.append(dict(number=int(match[1]), x=float(obj['x']), y=float(obj['y'])))
+    return sorted(starts, key=lambda start: start['number'])
 
 
 class Surface(Heights):
@@ -214,7 +226,8 @@ def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=
     `extra` goes into the scene as it is (mw render's overlays); `m` is the map read already; `marks(map_path,
     surface)` gives the marks the viewer draws (viewer.godot_link.marks_state), none without it."""
     map_path, native, user_map, owner = source(name)
-    surface = Surface(m or Map(map_path.read_bytes()))
+    map_data = m or Map(map_path.read_bytes())
+    surface = Surface(map_data)
     folder = SCENES/native
     folder.mkdir(parents=True, exist_ok=True)
     (folder/'surface.f32').write_bytes(surface.heights.astype('<f4').tobytes())
@@ -227,7 +240,8 @@ def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=
                 user_map_folder=str(openbfme.user_maps()) if user_map else '', size=list(size),
                 surface=dict(file='surface.f32', columns=surface.heights.shape[1], rows=surface.heights.shape[0],
                              border=surface.border, cell=10.0),
-                playable=list(surface.playable), fov=FOV, check=check, screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {},
+                playable=list(surface.playable), starts=starting_positions(map_data), fov=FOV, check=check,
+                screenshots=str(RENDERS/'godot'), port=port, drive=drive or [], views=views or {},
                 fps=fps, **(extra or {}))
     data['falling'] = falling(map_path, preview, surface.playable, folder)
     if marks is not None:

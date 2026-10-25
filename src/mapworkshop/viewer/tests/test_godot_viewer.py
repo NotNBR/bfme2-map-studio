@@ -11,6 +11,7 @@ from unittest import mock
 import numpy as np
 
 from mapworkshop import project
+from mapworkshop.config import ROOT
 from mapworkshop.formats.lighting import decode
 from mapworkshop.formats.map import Map
 from mapworkshop.formats.sections import read
@@ -57,6 +58,14 @@ class SurfaceTests(unittest.TestCase):
             s = godot.Surface(FakeMap())
         self.assertAlmostEqual(float(s.height_at(5, 5)),
                                float(np.mean(FakeMap().heightmap()['elevations'][1:3, 1:3]*0.0390625)), places=4)
+
+
+class StartingPositionTests(unittest.TestCase):
+    def test_compact_map_has_all_sixteen_numbered_starts_for_the_viewer(self):
+        path = ROOT/'maps'/'nanduhirion_compact_16p'/'references'/'compact.map'
+        starts = godot.starting_positions(Map(path.read_bytes()))
+        self.assertEqual([start['number'] for start in starts], list(range(1, 17)))
+        self.assertEqual(len({(start['x'], start['y']) for start in starts}), 16)
 
 
 class PreviewTests(unittest.TestCase):

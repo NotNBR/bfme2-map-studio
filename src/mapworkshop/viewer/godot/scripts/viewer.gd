@@ -32,7 +32,8 @@ const CLICK_PIXELS := 4.0     # a press and release closer than this is a click,
 ## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; each title's key in brackets)
 const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
 	["fog", "Fog, rain and snow (6)", true], ["clouds", "Cloud shadows", true], ["animate", "Animate", true],
-	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
+	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["starts", "Starting positions (3)", false],
+	["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
 	["units", "Units", true], ["limits", "The game's tree and shrub limits", false]]
 const COPY_VIEWS := ["units", "limits"]       # the switches the map's copy carries (render.godot.preview_map)
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
@@ -166,6 +167,7 @@ func _build_stage() -> void:
 	var layer := CanvasLayer.new()
 	for view in VIEWS:
 		_views[view[0]] = view[2]
+	_views["starts"] = _scene.get("port") != null  # shown while exploring; render outputs stay as requested
 	for key in _scene.get("views", {}):           # the scene's own switches (screenshots of an overlay)
 		_views[key] = bool(_scene.views[key])
 	for key in COPY_VIEWS:                        # and those of the copy it opens
@@ -310,6 +312,7 @@ func _build_map() -> Dictionary:
 	add_child(objects)
 	_apply_lighting(object_report)
 	_overlays.build(_surface, Vector2(_scene.playable[0], _scene.playable[1]), int(_scene.surface.border))
+	_overlays.set_starts(_scene.get("starts", []), _surface)
 	_build_falling()
 	_apply_views()
 	return {"terrain_ms": built_terrain - started, "objects_ms": Time.get_ticks_msec() - built_terrain,
@@ -681,6 +684,7 @@ func _enter_test(message: Dictionary) -> void:
 	if _objects_node != null:
 		_objects_node.visible = false
 	_overlay.visible = false
+	_overlays.show_starts(false)
 	_frame.set_test_mode(true)
 	_frame.toast("done", "Test mode", "the game runs (%.1f s to start): left button selects, right orders" % [
 		(Time.get_ticks_msec() - started) / 1000.0], 5)
@@ -696,6 +700,7 @@ func _leave_test() -> void:
 	if _objects_node != null:
 		_objects_node.visible = _views.get("objects", true)
 	_overlay.visible = _views.get("marks", true)
+	_overlays.show_starts(_views.get("starts", false))
 	_frame.set_test_mode(false)
 	print("VIEWER mode edit")
 
@@ -1104,6 +1109,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_V: _set_mode("photo")
 			KEY_1: _switch_view("objects", not _shown("objects"))
 			KEY_2: _switch_view("water", not _shown("water"))
+			KEY_3: _switch_view("starts", not _shown("starts"))
 			KEY_6: _switch_view("fog", not _shown("fog"))
 			KEY_G: _switch_view("grid", not _shown("grid"))
 			KEY_B: _switch_view("border", not _shown("border"))
@@ -1287,6 +1293,8 @@ func _switch_view(key: String, on: bool) -> void:
 			_overlays.set_grid(on)
 		"border":
 			_overlays.set_border(on)
+		"starts":
+			_overlays.show_starts(on and _mode != "test")
 		"walkable", "flow":
 			if on and _link == null and _scene.has(key):
 				# worked out in Python with the scene (mw render's pictures, no companion)

@@ -12,6 +12,7 @@ const FLOW_SHADER := preload("res://shaders/river_flow.gdshader")
 var _ground: MeshInstance3D
 var _ground_material := ShaderMaterial.new()
 var _flow: Node3D
+var _starts: Node3D
 var _playable := Vector2.ONE
 var _time := 0.0              # the flow arrows' clock: View > Animate stops it
 
@@ -91,6 +92,60 @@ func set_walkable(path: String, size: Vector2) -> void:
 	_ground_material.set_shader_parameter("walk_tex", ImageTexture.create_from_image(image))
 	_ground_material.set_shader_parameter("walk_size", size)
 	_ground_material.set_shader_parameter("walk", true)
+
+
+## Numbered skirmish starts: rings follow the terrain rather than sitting on a flat plane.
+func set_starts(starts: Array, surface: Surface) -> void:
+	if _starts != null:
+		_starts.queue_free()
+	_starts = Node3D.new()
+	_starts.name = "StartingPositions"
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.albedo_color = Color(1.0, 0.78, 0.24, 0.9)
+	for start in starts:
+		var x := float(start.x)
+		var y := float(start.y)
+		var vertices := PackedVector3Array()
+		var indices := PackedInt32Array()
+		var segments := 48
+		for i in segments:
+			var angle := TAU * i / segments
+			for radius in [42.0, 52.0]:
+				var px: float = x + cos(angle) * radius
+				var py: float = y + sin(angle) * radius
+				vertices.append(Surface.to_godot(Vector3(px, py, surface.height_at(px, py) + 3.0)))
+			var a := i * 2
+			var b := ((i + 1) % segments) * 2
+			indices.append_array(PackedInt32Array([a, b, a + 1, a + 1, b, b + 1]))
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_INDEX] = indices
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var ring := MeshInstance3D.new()
+		ring.mesh = mesh
+		ring.material_override = material
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_starts.add_child(ring)
+		var label := Label3D.new()
+		label.text = str(start.number)
+		label.font_size = 48
+		label.pixel_size = 0.5
+		label.outline_size = 8
+		label.modulate = Color(1.0, 0.92, 0.7)
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.position = Surface.to_godot(Vector3(x, y, surface.height_at(x, y) + 23.0))
+		_starts.add_child(label)
+	add_child(_starts)
+
+
+func show_starts(on: bool) -> void:
+	if _starts != null:
+		_starts.visible = on
 
 
 ## The river strips' flow arrows: [{vertices: [x, y, z, u, v] * n, triangles: [i, j, k] * m, length}], or [] to hide.
