@@ -19,10 +19,21 @@ float noise(vec2 p) {
 }
 
 float grass_colony(vec2 p) {
- return noise(p*0.019+vec2(18.7,4.2))*0.55+noise(p*0.13+vec2(9.1,7.6))*0.45;
+ // Warp the small clumps so their edges do not follow a repeated grid.
+ vec2 warp=vec2(noise(p*0.043+19.1),noise(p*0.043+71.4))*8.0;
+ return noise(p*0.019+vec2(18.7,4.2))*0.48+noise((p+warp)*0.19+vec2(9.1,7.6))*0.52;
 }
-float grass_density(vec2 p, float mask) {
- return smoothstep(0.25,0.90,mask)*mix(0.08,0.92,smoothstep(0.38,0.66,grass_colony(p)));
+float grass_verge(vec2 p, float mask) {
+ return smoothstep(0.035,0.78,mask+(noise(p*0.37+12.7)-0.5)*0.22);
+}
+float grass_density(vec2 p, float mask, vec3 ground_color) {
+ // Unlit terrain chroma: green/olive meadow keeps an understory between tufts.
+ float lush=smoothstep(0.78,1.0,ground_color.g/max(ground_color.r,0.02))
+            *smoothstep(1.05,1.5,ground_color.g/max(ground_color.b,0.02));
+ float colony=grass_colony(p);
+ float bare=smoothstep(mix(0.30,0.08,lush),mix(0.44,0.22,lush),noise(p*0.055+vec2(61.0,9.0)));
+ float clusters=mix(mix(0.025,0.38,lush),0.95,smoothstep(0.37,0.63,colony))*bare;
+ return step(0.012,mask)*grass_verge(p,mask)*clusters;
 }
 vec3 grass_palette(vec3 regional, vec2 p) {
  float dry=noise(p*0.012+vec2(3.4,81.2));

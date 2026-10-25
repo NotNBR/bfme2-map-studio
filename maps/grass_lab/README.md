@@ -6,9 +6,10 @@ retail `.map` project; it has no map build and needs no retail assets.
 
 Nine plots compare 25/50/100% density, grass-to-earth and grass-to-stone
 transitions, a winding path, short/tall blades and a slope. Density, height
-and wind sliders update immediately. Keys 1-4 select comparison views; WASD
+and wind sliders update immediately. The tall plot also demonstrates leaf
+litter; all plots use the mixed blade shapes, clumps and root shading. Keys 1-4 select comparison views; WASD
 moves, right-drag orbits, the wheel zooms, G toggles grass, T ground detail,
-and Space wind. MSAA 4x is enabled for this scene only.
+and Space wind. MSAA 8x is enabled for this scene only.
 
 The shader and scene snapshot comes from the optional ground-cover work in
 OpenBFME. Its shaders keep their GPL-3.0 notices and live under a separate

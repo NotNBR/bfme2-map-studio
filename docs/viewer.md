@@ -68,7 +68,10 @@ Grass selects MSAA 8x and restores the previous setting when switched off.
 Sample coverage replaces the noisy pixel fade; slightly wider distant blades
 and reduced distant wind also limit shimmer. Blade distance is twice the
 previous screen-size cutoff. Grass keeps 65% of the ground colour and 35% of
-the meadow tint, with restrained brightness variation. It avoids roads,
+the meadow tint, with restrained brightness variation. Mixed blade shapes
+grow in uneven clumps, with shorter flattened verges and subtle root shading.
+Sparse leaves near tree templates, dead stems and small pebbles share the
+Grass toggle. It avoids roads,
 water and steep slopes; interactive trampling and building-footprint clearance are not
 implemented.
 

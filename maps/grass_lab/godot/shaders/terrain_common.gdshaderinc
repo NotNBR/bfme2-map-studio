@@ -108,9 +108,10 @@ vec3 grass_canopy(vec3 original, vec4 vcol) {
  vec2 guv=(v_ground_xy-world_origin)/(grid_size*10.0);
  vec4 guide=texture(terrain_guide,guv);
  float inside=step(0.0,guv.x)*step(0.0,guv.y)*step(guv.x,1.0)*step(guv.y,1.0);
- float coverage=grass_density(v_ground_xy,guide.a)*inside;
+ vec3 regional=textureLod(terrain_guide,guv,1.0).rgb;
+ float coverage=grass_density(v_ground_xy,guide.a,regional)*inside;
  float amount=grass_surface_mix(vec2(v_ground_xy.x,-v_ground_xy.y),v_grass_depth);
- vec3 base=grass_palette(textureLod(terrain_guide,guv,1.0).rgb,v_ground_xy);
+ vec3 base=grass_palette(regional,v_ground_xy);
  float footprint=max(length(dFdx(v_ground_xy)),length(dFdy(v_ground_xy)));
  float fine=(noise(v_ground_xy*1.1)-0.5)*(1.0-smoothstep(0.5,2.0,footprint));
  // Broad moving light variation survives zoom; amplitude stays subtle to avoid sliding texture.
@@ -119,7 +120,9 @@ vec3 grass_canopy(vec3 original, vec4 vcol) {
  vec3 sun=overbright ? sun_color*0.5 : sun_color;
  vec3 light=(vcol.rgb+0.5*lightning_color+sun*max(normalize(sun_dir_sage).z,0.15))*(overbright ? 2.0 : 1.0);
  vec3 canopy=base*light*(0.94+fine*0.12+ripple);
- return mix(original,canopy,clamp(amount*coverage*0.90,0.0,0.90));
+ // Restrained contact darkening ties roots to the soil, strongest under dense nearby clumps.
+ float contact=1.0-0.13*coverage*(1.0-amount);
+ return mix(original*contact,canopy,clamp(amount*coverage*0.90,0.0,0.90));
 }
 
 

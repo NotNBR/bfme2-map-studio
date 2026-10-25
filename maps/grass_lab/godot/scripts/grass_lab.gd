@@ -5,7 +5,7 @@ const ORIGIN := Vector2(-40, -340)
 const GRID := 41
 const TITLES := ["01   SPARSE / 25%", "02   MEDIUM / 50%", "03   DENSE / 100%",
 	"04   GRASS > EARTH", "05   GRASS > STONE", "06   WINDING PATH",
-	"07   SHORT / 0.55x", "08   TALL / 1.65x", "09   SLOPE / 16 degrees"]
+	"07   SHORT / 0.55x", "08   TALL + LEAF LITTER", "09   SLOPE / 16 degrees"]
 var camera: Camera3D
 var focus := Vector3(132, 0, 132)
 var distance := 400.0
@@ -29,7 +29,7 @@ var wind_slider: HSlider
 
 func _ready() -> void:
 	get_window().size = Vector2i(1600, 1000)
-	get_viewport().msaa_3d = Viewport.MSAA_4X
+	get_viewport().msaa_3d = Viewport.MSAA_8X
 	noise.seed = 4701
 	noise.frequency = 0.16
 	for arg in OS.get_cmdline_user_args():
@@ -104,6 +104,16 @@ func _build() -> void:
 			var lz := wz - row*100
 			if col >= 0 and col < 3 and row >= 0 and row < 3 and lx >= 0 and lx < 64 and lz >= 0 and lz < 64:
 				guide.set_pixel(x,y,_sample(row*3+col,lx,lz))
+	guide.generate_mipmaps()
+	var habitat := Image.create(410,410,false,Image.FORMAT_RGBA8)
+	for y in 410:
+		for x in 410:
+			var wx := ORIGIN.x+x+0.5
+			var wz := -(ORIGIN.y+y+0.5)
+			var leaf_fall := maxf(0.0,1.0-Vector2(wx-132,wz-232).length()/35.0)
+			habitat.set_pixel(x,y,Color(leaf_fall,1.0 if guide.get_pixel(x,y).a>0.01 else 0.0,0))
+	habitat.generate_mipmaps()
+	var habitat_tex := ImageTexture.create_from_image(habitat)
 	var guide_tex := ImageTexture.create_from_image(guide)
 	var height_tex := ImageTexture.create_from_image(height_image)
 	var flip_tex := ImageTexture.create_from_image(flip_image)
@@ -142,12 +152,12 @@ func _build() -> void:
 			ground.mesh = slope
 		add_child(ground)
 		var terrain: ShaderMaterial = ground.mesh.surface_get_material(0)
-		# Keep the engine-built blend records, but use the optional lab shader variant.
+		# Preserve engine-built blend records while selecting the namespaced lab shader.
 		var inherited := {}
 		for key in ["base_atlas", "records", "atlas_size"]:
 			inherited[key] = terrain.get_shader_parameter(key)
 		terrain.shader = load("res://labs/grass/shaders/terrain.gdshader")
-		for key in inherited: terrain.set_shader_parameter(key, inherited[key])
+		for key in inherited: terrain.set_shader_parameter(key,inherited[key])
 		terrain.set_shader_parameter("normal_atlas",ImageTexture.create_from_image(neutral))
 		terrain.set_shader_parameter("meadow_mask",ImageTexture.create_from_image(mask))
 		terrain.set_shader_parameter("turf_detail",load("res://labs/grass/assets/turf_detail.png"))
@@ -156,10 +166,16 @@ func _build() -> void:
 		terrain.set_shader_parameter("sun_color",Vector3(0.22,0.22,0.22))
 		terrain.set_shader_parameter("overbright",false)
 		terrain.set_shader_parameter("debug_mode",0)
+		terrain.set_shader_parameter("terrain_guide",guide_tex)
+		terrain.set_shader_parameter("world_origin",ORIGIN)
+		terrain.set_shader_parameter("grid_size",Vector2(GRID,GRID))
+		terrain.set_shader_parameter("grass_surface_enabled",true)
 		terrain_materials.append(terrain)
 		var mat := ShaderMaterial.new()
 		mat.shader = load("res://labs/grass/shaders/ground_cover.gdshader")
 		mat.set_shader_parameter("terrain_guide",guide_tex)
+		mat.set_shader_parameter("habitat_guide",habitat_tex)
+		mat.set_shader_parameter("habitat_enabled",true)
 		mat.set_shader_parameter("height_map",height_tex)
 		mat.set_shader_parameter("flip_map",flip_tex)
 		mat.set_shader_parameter("grid_size",Vector2(GRID,GRID))
@@ -257,7 +273,9 @@ func _apply() -> void:
 	for i in materials.size():
 		materials[i].set_shader_parameter("blade_height_scale",heights[i]*height_scale)
 		materials[i].set_shader_parameter("wind_strength",wind)
-	for mat in terrain_materials: mat.set_shader_parameter("natural_ground_enabled",detail)
+	for mat in terrain_materials:
+		mat.set_shader_parameter("natural_ground_enabled",detail)
+		mat.set_shader_parameter("grass_surface_enabled",grass_visible)
 
 func _view(index: int) -> void:
 	yaw=0; pitch=0.88
