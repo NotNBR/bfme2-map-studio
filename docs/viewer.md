@@ -75,14 +75,6 @@ Grass toggle. It avoids roads,
 water and steep slopes; interactive trampling and building-footprint clearance are not
 implemented.
 
-## Grass Lab
-
-Click **Grass Lab** in the toolbar or startup map picker, or run
-`mw view --grass-lab`. It opens the [nine-plot grass test scene](../maps/grass_lab/README.md)
-in a separate window with density, height and wind sliders. The current map
-stays open. This standalone lab needs no retail assets. Use **View > Grass** on the map
-itself to preview the same blade renderer in context.
-
 ## Moving around
 
 The viewer has two cameras; **V** or the camera bar switches between them,

@@ -1321,10 +1321,6 @@ func _show(names: Array, on: bool) -> void:
 
 
 func _toolbar_action(name: String) -> void:
-	if name == "grass_lab":
-		var pid := OS.create_process(OS.get_executable_path(), ["--path", ProjectSettings.globalize_path("res://"), "res://labs/grass/scenes/grass_lab.tscn"])
-		if pid < 0: push_error("Could not open Grass Lab")
-		return
 	if name != "screenshot":
 		_set_mode("edit")
 	match name:

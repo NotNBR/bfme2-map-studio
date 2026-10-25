@@ -237,7 +237,7 @@ class AssembleTests(unittest.TestCase):
                 imports.append(args)
                 return subprocess.CompletedProcess(args, 0, '', '')
 
-            with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', VIEWER=tmp/'viewer', STUDIO=tmp/'studio', GRASS_LAB=tmp/'lab',
+            with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', VIEWER=tmp/'viewer', STUDIO=tmp/'studio',
                                      LOGS=tmp/'logs', APPDATA=tmp/'appdata', build=lambda progress: ('gui', 'console'),
                                      runtime_bundle=lambda *args: bundle), \
                     mock.patch.object(subprocess, 'run', run):

@@ -87,14 +87,6 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
         remove_copies()
 
 
-def run_grass_lab(progress=print):
-    """Open the standalone visual lab in the assembled studio, without mounting retail assets."""
-    gui, _ = openbfme.assemble(progress)
-    progress('Opening Grass Lab: density, texture transitions, height and wind...')
-    return subprocess.call([str(gui), '--path', str(openbfme.VIEWER),
-                            'res://labs/grass/scenes/grass_lab.tscn'], env=openbfme.environment([]))
-
-
 FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')    # the toolbar's (toolbar.gd)
 
 
@@ -102,7 +94,6 @@ def parse_args(argv=None):
     import argparse
     parser = argparse.ArgumentParser(prog='mw view', description='Open a map in the viewer (docs/viewer.md).')
     parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: open the map picker)')
-    parser.add_argument('--grass-lab', action='store_true', help='Open the grass density and transition test scene')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
     parser.add_argument('--size', default='1600x1000', help='The window size, WIDTHxHEIGHT (1600x1000)')
     parser.add_argument('--weather', default='map', help="Preview's weather: 'map' (the map's own) or clear, haze, "
@@ -122,10 +113,6 @@ def main(argv=None):
     """mw view [MAP] [--view WORDS] [--probe X,Y[,Z] ...] [--screenshot PATH] [--size WxH] [--weather W] [--sun S]
     [--fps F]."""
     args = parse_args(argv)
-    if args.grass_lab:
-        if args.map or args.map_option or args.view or args.screenshot or args.probe:
-            raise SystemExit('--grass-lab opens its own scene; do not combine it with a map, view, probe or screenshot')
-        return run_grass_lab()
     size = tuple(int(v) for v in args.size.lower().split('x'))
     probes = [tuple(float(v) for v in p.split(',')) for p in (args.probe or [])]
     if probes and not args.view:
@@ -138,8 +125,6 @@ def main(argv=None):
             name = choose_map()
             if name is None:
                 return 0
-            if name == "@grass-lab":
-                return run_grass_lab()
         if not (args.screenshot or probes):
             owner = project.for_map_file(project.map_path(name))
             if owner is not None:

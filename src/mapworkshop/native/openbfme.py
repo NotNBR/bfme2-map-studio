@@ -75,7 +75,6 @@ TOOLS, BUILD, PROJECT, VIEWER, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('
                                                                                 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
 TEST = HOME/'test'
-GRASS_LAB = ROOT/'maps'/'grass_lab'/'godot'                         # optional visual lab, bundled with the viewer
 STUDIO = Path(__file__).resolve().parents[1]/'viewer'/'godot'         # the studio's Godot project, assembled into VIEWER
 
 LLVM_MINGW = 'llvm-mingw-20261006-ucrt-x86_64'
@@ -364,8 +363,6 @@ def viewer_files(bundle=None):
     """Compose Studio's project with a validated runtime's viewer projection."""
     files = {p.relative_to(STUDIO).as_posix(): p for p in sorted(STUDIO.rglob('*'))
              if p.is_file() and not set(GENERATED) & set(p.relative_to(STUDIO).parts)}
-    files.update({f'labs/grass/{p.relative_to(GRASS_LAB).as_posix()}': p for p in sorted(GRASS_LAB.rglob('*'))
-                  if p.is_file() and not set(GENERATED) & set(p.relative_to(GRASS_LAB).parts)})
     bundle = bundle or runtime_bundle()
     library = bundle.files('viewer') | {'studio_runtime.json': bundle.root/engine_bundle.MANIFEST}
     if clash := sorted(files.keys() & library.keys()):
