@@ -4,7 +4,8 @@ This imports the validated compact map from the bundled references, so building
 and opening it needs no external share ZIP or machine-specific source path.
 Compared with Medium (9,900 x 8,100), X is reduced by 9% and Y by 26%.
 Terrain heights follow the Y scale; gameplay objects keep their normal size.
-All farm sites and objectives remain. All four inner outposts sit in locally
+All objectives remain; farm hints and ambience are cleaned up for usable space
+and density. All four inner outposts sit in locally
 carved recesses, using the two-thirds inset approved at viewer pin 2.
 All four sit another 25 units toward the cliff, with slight stony crests
 following freehand mark 1, adapted to each outpost's local orientation.
@@ -29,6 +30,8 @@ from mapworkshop.mapkit.lines import polyline_distance
 from mapworkshop.mapkit.pathing import footprint_cells, template_data, terrain_grid
 from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.variety import spot_random
+
+from .cleanup import repair
 
 
 # Viewer marks: pin 1 (3732.8, 1513.2) selects the outpost at
@@ -338,5 +341,6 @@ def build(b):
     assert len(sections.read(m, 'MPPositionList')) == b.project.players == 16
     b.report['inset_outposts'] = inset_outposts(m, b.assets)
     b.report['outpost_trees'] = outpost_trees(m, b.report['inset_outposts'], b.assets)
+    b.report['cleanup'] = repair(m, b.assets)
     with Image.open(source / 'minimap.tga') as minimap:
         b.save(m, ini=(source / 'map.ini').read_text(encoding='ascii'), minimap=minimap)
