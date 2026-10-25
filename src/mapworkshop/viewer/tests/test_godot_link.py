@@ -63,6 +63,22 @@ class CompanionTests(unittest.TestCase):
     def saved(self):
         return json.loads(marklib.marks_path(self.map_path).read_text(encoding='utf-8'))['marks']
 
+    def test_placement_export_keeps_the_requested_map_when_viewer_switches_maps(self):
+        from mapworkshop.render import placements
+        out=self.map_path.with_suffix('.png')
+        with mock.patch.object(godot_link.threading,'Thread') as thread, \
+                mock.patch.object(placements,'export',return_value=(out,out.with_suffix('.json'))) as export, \
+                mock.patch.object(godot_link.os,'startfile',create=True) as open_image:
+            self.send(dict(type='command',name='placement'))
+            self.send(dict(type='command',name='placement'))
+            thread.assert_called_once()
+            self.companion.map_path=self.map_path.with_name('another.map')
+            thread.call_args.kwargs['target']()
+            export.assert_called_once_with([str(self.map_path)])
+            open_image.assert_called_once_with(str(out))
+        self.assertFalse(self.companion.exporting_placement)
+        self.assertEqual(self.companion.toasts[-1]['kind'],'done')
+
     def test_a_circle_drawn_by_the_mouse_is_saved(self):
         self.send(dict(type='tool', tool='circle'))
         replies = self.send(event('press', 400, 400))

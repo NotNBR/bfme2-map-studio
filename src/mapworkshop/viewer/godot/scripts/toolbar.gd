@@ -136,6 +136,7 @@ func set_menu(menu: Dictionary) -> void:
 	popup.add_separator()
 	popup.add_item("Open project folder", -2)
 	popup.set_item_disabled(popup.item_count - 1, not menu.project)
+	popup.add_item("Export placement plan", -4)
 	popup.add_item("Browse...", -3)
 	for index in _test_game.item_count:
 		if _test_game.get_item_metadata(index) == menu.test_game:
@@ -172,6 +173,8 @@ func _on_map(id: int) -> void:
 		command.emit("open_folder")
 	elif id == -3:
 		command.emit("browse")
+	elif id == -4:
+		command.emit("placement")
 	elif id >= 0 and id < _maps.size():
 		map_chosen.emit(_maps[id])
 

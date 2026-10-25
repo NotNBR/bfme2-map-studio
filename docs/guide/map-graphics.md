@@ -7,6 +7,45 @@ already available in the project's Python environment.
 Implementation: `src/mapworkshop/mapkit/graphics.py`. It supports current and legacy terrain
 records through the shared native inspection reader.
 
+## Placement plans
+
+In the viewer, **Map → Export placement plan** saves and opens a plan for the
+map currently shown. It runs in the background. The PNG and its JSON inventory
+go into the active profile's `local/renders/placements/` directory.
+
+The same tool works from the command line, for one map or several:
+
+```powershell
+mw placements nanduhirion-compact-16p --out local/renders/compact-placement.png
+mw placements nanduhirion nanduhirion-compact-16p --out local/renders/placement-comparison.png
+mw placements "C:/Maps/My Map/My Map.map" --scenery --farms --no-details
+```
+
+`MAP` can be a built project, a stock map or a `.map` file. No map uses the
+last project. `--columns 1..4` sets the maps per row (default 2). One map gets
+its own full plan; a comparison is optional. The source maps and their INIs
+are read without changing them, and no game or Godot process is started.
+
+The plan shows playable terrain, impassable cells, water, numbered player
+starts, neutral buildings and lairs, plus authored player structures.
+`--scenery` also labels other structures, including decorative buildings;
+`--farms` adds the invisible AI farm hints. Every object's ID, template,
+coordinates and angle, and counts of **all** object templates, are in the
+JSON beside the PNG. The arrows show each object's local **+X axis**; a
+model's doorway may face a different direction.
+
+The default closeups show a representative capture flag for each building
+kind and map, preferring an overlap if one exists, at the same world scale.
+They use the active game profile's INI geometry and map-local overrides.
+Red means the flag's centre lies inside the building's footprint; **grid
+overlap** means their estimated 10-unit collision cells overlap. Neither
+alone proves that capturing is impossible. Flags are associated one-to-one
+by nearest proximity within 250 units, an estimate rather than an engine
+link; missing and unmatched flags and unknown geometry remain explicit in
+the JSON. `--no-details` leaves the closeups out. Without installed assets,
+known neutral sites and starts can still be drawn, with missing geometry
+reported in the inventory.
+
 ## Generate one map
 
 From the repository root:

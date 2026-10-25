@@ -33,6 +33,7 @@ USAGE = """
   mw patch [install|remove]  faster map loading in your normal game (status without an action)
   mw rivers [MAP] [--json]   which way each river strip flows
   mw sites [MAP] [--teams 1-4/5-8]   walking distances from the bases to the neutral sites and lairs
+  mw placements [MAP ...]    placement plans: starts, buildings, caves and flag footprints
   mw where MAP NAME...       where objects stand (--section Z, --footprint, --bones: their outlines there)
   mw find WORDS...           search the game's objects: "stone bridge", --type tree --region shire
                              (--textures, --roads, --sounds, --effects: those instead)
@@ -174,6 +175,7 @@ def parser():
     s.add_argument('--limit', type=int, default=12, help='Detail lines per part (12)')
     for name, text in (('view', 'Open the viewer'), ('marks', "Print the viewer's marks"),
                        ('render', 'Render map images headlessly'), ('graphics', 'Map plans and comparisons'),
+                       ('placements', 'Placement plans with starts, buildings, caves and flag footprints'),
                        ('workspace', 'Hand-edit workspaces for .map files'),
                        ('find', "Search the game's objects, terrain textures, roads, sounds and effects"),
                        ('item', 'Render one object on its own'), ('items', 'A labelled collage of objects')):
@@ -745,6 +747,7 @@ def cmd_test(args, extra):
 
 PASSTHROUGH = {'view': 'mapworkshop.viewer.godot_viewer', 'marks': 'mapworkshop.viewer.marks',
                'render': 'mapworkshop.render.cli', 'graphics': 'mapworkshop.mapkit.graphics',
+               'placements': 'mapworkshop.render.placements',
                'workspace': 'mapworkshop.mapkit.workspace',
                'find': 'mapworkshop.render.catalog',
                'item': 'mapworkshop.render.items:main_item', 'items': 'mapworkshop.render.items:main'}

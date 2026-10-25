@@ -208,7 +208,9 @@ reads the map shown again.
   the RotWK profile only). **Open project folder** opens the current project's
   source folder; **Browse...** picks a `.map` file and opens it (one that is
   neither a project's build nor a stock map as a copy in the user maps
-  folder).
+  folder). **Export placement plan** saves and opens a plan of the current
+  map, with starts, buildings, lairs and capture-flag footprint closeups
+  ([placement plans](guide/map-graphics.md#placement-plans)).
 - **Properties** opens a window with the map's map-wide settings, in tabs:
   the project's title, description and weather preset; the camera limits;
   WorldInfo flags; the environment (water alpha, macro and cloud textures);

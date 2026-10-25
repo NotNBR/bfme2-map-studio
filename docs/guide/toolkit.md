@@ -46,6 +46,7 @@ searches both ([finding assets](finding-assets.md)).
 | [checks.lighting_check](../../src/mapworkshop/mapkit/checks/lighting_check.py) | reads the lighting arrays from the running game's memory; written for bfme-workshop's host, nothing here calls it yet |
 | [mapdiff](../../src/mapworkshop/mapkit/mapdiff.py) | what changed between two maps (`mw diff`) |
 | [graphics](../../src/mapworkshop/mapkit/graphics.py) | terrain heightmaps, slopes, shaded plans with contours, scenery placement and map comparisons (`mw graphics`, [map graphics](map-graphics.md)) |
+| [render.placements](../../src/mapworkshop/render/placements.py) | placement plans for any map: starts, buildings, lairs, orientation arrows, flag footprint closeups and a JSON inventory (`mw placements`, [placement plans](map-graphics.md#placement-plans)) |
 | [workspace](../../src/mapworkshop/mapkit/workspace.py), [author](../../src/mapworkshop/mapkit/author.py) | hand edits of one `.map` file and their recipes (`mw workspace`, [hand-editing](hand-editing.md)) |
 
 ## The files themselves: `formats`

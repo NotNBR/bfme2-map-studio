@@ -328,6 +328,7 @@ class Companion:
         self.opening_properties = False       # its window is being opened (the game's files still loading)
         self.properties_saved = None          # the project its Save wrote, for the serving loop to build
         self.browsed = None                   # the .map file Browse... chose, opened from the serving loop
+        self.exporting_placement = False      # one placement export at a time, on a worker thread
         self.packed = None                    # the map packed for Test mode when the viewer started: (name, digest)
         self.restart = None                   # Test mode asked for on a map changed since: the viewer starts again
         self._show(*prepared)
@@ -425,6 +426,8 @@ class Companion:
             out += getattr(self, name)(message)
         elif name == 'properties':
             out += self.open_properties()
+        elif name == 'placement':
+            out += self.export_placement()
         elif name == 'test_mode':
             out += self.test_mode(message)
         elif name == 'browse':
@@ -481,6 +484,33 @@ class Companion:
         """Browse...: a .map file chosen in the system's file dialog (on this thread), opened by the serving loop."""
         from mapworkshop.viewer.properties import choose_map_file
         self.browsed = choose_map_file(folder)
+
+    def export_placement(self):
+        """Export the currently shown map in the background, even if another map is opened meanwhile."""
+        if self.exporting_placement:
+            return [dict(type='status', text='A placement plan is already being exported', seconds=4)]
+        self.exporting_placement = True
+        path, title = self.map_path, self.data['title']
+
+        def work():
+            try:
+                from mapworkshop.render import placements
+                out, metadata = placements.export([str(path)])
+                self.progress(f'Placement plan: {out}\nInventory: {metadata}')
+                self.toasts.append(dict(type='toast', kind='done', title=f'{title}: placement plan saved',
+                                        detail=str(out), seconds=10))
+                if opener := getattr(os, 'startfile', None):
+                    try:
+                        opener(str(out))
+                    except OSError:
+                        pass                          # the files are saved even without an image viewer
+            except Exception as error:
+                self.toasts.append(dict(type='toast', kind='failed', title='Placement export failed',
+                                        detail=str(error), seconds=10))
+            finally:
+                self.exporting_placement = False
+        threading.Thread(target=work, daemon=True).start()
+        return [dict(type='status', text=f'Exporting placement plan for {title}...', seconds=60)]
 
     def open_properties(self):
         """The Properties window for the map shown: editable for a project, read-only
