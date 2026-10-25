@@ -10,7 +10,7 @@ Godot rebuild of ROTWK, instead ([below](#openbfme-mw-play---godot)), and
 `mw battle` plays a map headless to trace how its units move
 ([below](#headless-battles-mw-battle)).
 
-With the **ROTWK profile**, `mw play` and the viewer's **Test In-Game** start
+With the **ROTWK profile**, `mw play` and the viewer's **Play in game** start
 directly in a player-versus-easy-AI skirmish, or the project's
 [line-up](#line-ups). The isolated runtime uses BFME2
 assets plus retail ROTWK and official 2.01 patches, excluding community mods.
@@ -35,7 +35,7 @@ are untouched. The remaining sections describe BFME2's additional features.
 
 ## `mw play`
 
-`mw play <map>` (the viewer's **Test In-Game**) starts BFME2 straight in a
+`mw play <map>` (the viewer's **Play in game**) starts BFME2 straight in a
 skirmish on the current build, without going through the menus: the game opens
 in a 1600 x 1200 window, you against an easy AI (or the project's
 [line-up](#line-ups)), at Medium detail
@@ -89,7 +89,7 @@ its `players`, and at most 8; an observer would take a slot too.
 ### Camera
 
 BFME2 and ROTWK test games have a free camera, to look at the map from any
-distance and angle. It is enabled by `mw play` and **Test In-Game**; the
+distance and angle. It is enabled by `mw play` and **Play in game**; the
 normal-game menu and the installed loading patch keep the game's own camera.
 `mw play --godot` starts OpenBFME with its own free camera on
 (`--free-camera`; Ctrl+Z turns it off and on). It steers as OpenBFME's does:
@@ -128,7 +128,7 @@ a third of the simulation's time.
 A map's [cinematics](../game/scripts.md#cinematics) play only in the
 original game for now: the fork's commit that plays them in a skirmish is
 not in the [pinned commit](#the-pin-and-a-clean-submodule). In the viewer, choose **OpenBFME (Godot)** in the
-dropdown beside **Test In-Game**. `--godot --check` runs a headless scripted
+dropdown beside **Play in game**. `--godot --check` runs a headless scripted
 skirmish instead: OpenBFME clicks through its menus, starts the map against an
 AI, plays five seconds of game time and closes. The report goes to
 `local/openbfme/logs/check-<map>.json`, with the load time, the logic frame
@@ -287,7 +287,7 @@ do not reach Studio until its recorded pin changes.
 Read the actual pin with `git ls-files --stage src/mapworkshop/native/openbfme-godot`;
 the gitlink takes precedence over historical tag names. The selected engine
 includes map-gated sixteen-player support and subsequent grass rendering changes.
-A sixteen-start map can open through **Test In-Game → OpenBFME**; eight-start maps
+A sixteen-start map can open through **Play in game → OpenBFME**; eight-start maps
 retain the eight-slot setup. [Engine runtime](engine-runtime.md) describes the
 current consumer contract and verification when updating the pin. The integration
 features and their consumers are:

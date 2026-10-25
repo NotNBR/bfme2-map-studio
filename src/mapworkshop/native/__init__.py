@@ -7,7 +7,7 @@ from openbfme2): the game starts straight in a skirmish on the map, gets its
 own profile, so your normal game and its options are untouched, and needs
 no administrator rights.
 
-- play(): a test game (mw play, the viewer's Test In-Game). The launcher,
+- play(): a test game (mw play, the viewer's Play in game). The launcher,
   play_game.py, runs as its own process and stays as the game's debugger
   until the game closes.
 - pathfind(): the pathfinding grid (mw walkable --native), kept next to the

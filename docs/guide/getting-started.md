@@ -59,7 +59,7 @@ projects are shared, so build a project in the selected profile before viewing
 or playing it. Both profiles' stock maps appear in the viewer's Open Map modal; the
 viewer opens them under the RotWK profile, from RotWK's archives.
 
-`mw play` and **Test In-Game** start a ROTWK skirmish directly on the build,
+`mw play` and **Play in game** start a ROTWK skirmish directly on the build,
 you against an easy AI, in an isolated runtime with clean 2.01 assets. This
 requires the verified executable described in [the runtime](../game/runtime.md#rotwk-201).
 The shared quickload DLL accelerates its terrain textures automatically.

@@ -11,15 +11,15 @@ per line, and does in Python what the analysis and the studio's files need:
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
   user maps folder, and the viewer builds the map again in place;
 - the toolbar's jobs (viewer.jobs): another map from the Open Map modal
-  (Browse... for a project's build or a stock map), Build, Test In-Game, the
-  project folder; Properties opens its window (viewer.properties), whose Save
-  builds the project;
+  (Browse... for a project's build or a stock map), Build, Play in game, and
+  the Map menu: the project folder, the placement plan, and Properties, which
+  opens its window (viewer.properties), whose Save builds the project;
 - the saved views and Copy view, in their files and command (viewer.views):
   local/views/<map>.json with the thumbnails beside it, and a view as the
   mw render command that draws it;
-- Preview: the map again as a copy with a weather preset or a sun
+- Preview (the Atmosphere menu): the map again as a copy with a weather preset or a sun
   (render.godot.preview_map), which the viewer opens in its place;
-- the View menu's overlays that need the map's analysis: the walkability
+- the Overlays menu's switches that need the map's analysis: the walkability
   estimate (render.godot.walkability, worked out once per build in the background) and
   the river strips for the flow arrows (render.rivers).
 
@@ -52,7 +52,7 @@ To the viewer:
                                     or Copy view's command with `what` was copied, for the status line
     reload {scene, new_map, what}   the build changed, another map or a preview (`what`, for the toast): read the scene
                                     and build the map
-    menu {...}                      the toolbar's lists: map projects, the game's maps, Test In-Game's choice, Preview's
+    menu {...}                      the toolbar's lists: map projects, the game's maps, Play in game's choice, Preview's
                                     choices, the current one and its label
     build {running, line, outcome}  the build chip
     walkable {image, size, cut_off} the walkability estimate: an RGBA image, one pixel per cell from the playable
@@ -459,7 +459,7 @@ class Companion:
         elif name == 'test_settings':
             from mapworkshop.native.openbfme import test_settings
             save_setting('test_settings', test_settings(message.get('settings')))
-            out.append(dict(type='status', text='Test In-Game settings saved — applies next launch', seconds=4))
+            out.append(dict(type='status', text='Play in game settings saved — applies next launch', seconds=4))
             out.append(self.menu())
         elif name == 'test_game':
             if message.get('choice') in jobs.TEST_GAMES:
@@ -468,7 +468,7 @@ class Companion:
         return out
 
     def overlay(self, key):
-        """An overlay of the View menu switched on that Python works out: 'flow', each river strip's mesh at once;
+        """An overlay of the Overlays menu switched on that Python works out: 'flow', each river strip's mesh at once;
         'walkable', the walkability estimate, worked out once per build in the background and sent when it is
         ready (the viewer drops it if the overlay was switched off meanwhile)."""
         if key == 'flow':
@@ -560,7 +560,7 @@ class Companion:
         return [dict(type='status', text='opening the map properties...', seconds=3)]
 
     def _played(self, event):
-        """Test In-Game's events: the viewer minimises while the game is up and comes back when it closes."""
+        """Play in game's events: the viewer minimises while the game is up and comes back when it closes."""
         self.toasts.append(dict(type='window', minimized=event == 'started'))
 
     def open_map(self, name):
@@ -582,7 +582,7 @@ class Companion:
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
     def set_preview(self, choice, what=None):
-        """Preview's weather or sun, or the View menu's units and tree limits (OWN's keys): the map prepared again
+        """Preview's weather or sun, or the Layers menu's units and tree limits (OWN's keys): the map prepared again
         as that preview (the same map: the marks, the analysis and the camera stay), and the viewer told to build it;
         with no choice, the map read again (F5), `what` for the toast."""
         if self.prepare is None:
@@ -772,7 +772,7 @@ class Companion:
         return lines
 
     def job_messages(self):
-        """The toasts, and the jobs' status line and build chip when they changed (Build, Test In-Game)."""
+        """The toasts, and the jobs' status line and build chip when they changed (Build, Play in game)."""
         out, self.toasts = self.toasts, []
         if self.browsed:
             path, self.browsed = self.browsed, None

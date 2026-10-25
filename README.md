@@ -22,7 +22,7 @@ Explore a map, mark areas for an agent, and see edits reload in the viewer.
 - **Marks for agents.** Pin, circle, frame or draw around a place, press **Copy
   for agent** and ask for "a forest in mark 2". The marks come with their map
   coordinates and the objects inside them.
-- **Into the game.** `mw play` (**Test In-Game** in the viewer) starts BFME2
+- **Into the game.** `mw play` (**Play in game** in the viewer) starts BFME2
   straight in a skirmish on your map, with a free camera that zooms out to the
   whole map and tilts to any angle.
 - **Check your map.** Estimate walkability, inspect changes between builds, and

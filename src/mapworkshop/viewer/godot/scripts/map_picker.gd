@@ -9,8 +9,6 @@ var _catalog := {}
 var _columns: HBoxContainer
 var _search: LineEdit
 var _status: Label
-var _folder: Button
-var _export: Button
 var _busy := false
 var _selected := {}
 
@@ -59,26 +57,18 @@ func _ready() -> void:
 	_status.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var actions := HBoxContainer.new()
 	box.add_child(actions)
-	_button(actions, "Browse .map…", func() -> void: command.emit("browse"))
-	_folder = _button(actions, "Open project folder", func() -> void: command.emit("open_folder"))
-	_export = _button(actions, "Export placement plan", func() -> void: command.emit("placement"))
+	var browse := Button.new()
+	browse.text = "Browse .map…"
+	browse.tooltip_text = "Open a .map file: a downloaded or separately generated map"
+	browse.pressed.connect(func() -> void: command.emit("browse"))
+	actions.add_child(browse)
 	set_catalog(_catalog)
-
-
-func _button(row: HBoxContainer, text: String, callback: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.pressed.connect(callback)
-	row.add_child(button)
-	return button
 
 
 func set_catalog(catalog: Dictionary) -> void:
 	_catalog = catalog
 	if _columns == null:
 		return
-	_folder.disabled = not catalog.get("project", false)
-	_export.disabled = not catalog.get("loaded", false)
 	_fill_columns()
 
 

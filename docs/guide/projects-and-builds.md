@@ -262,7 +262,7 @@ local/cache/           caches (the asset catalogue among them)
 `mw config` prints the settings; `mw config KEY` one of them and
 `mw config KEY VALUE` changes it (`game`, the BFME2 folder, which also runs the
 setup; `last_map`, the map commands use when none is given; `test_game`, what
-the viewer's **Test In-Game** starts: `original` or `openbfme`).
+the viewer's **Play in game** starts: `original` or `openbfme`).
 
 `profile` selects `bfme2` or `rotwk`; `rotwk` is the expansion folder. The ROTWK
 profile puts the output folders above under `local/profiles/rotwk/`, while

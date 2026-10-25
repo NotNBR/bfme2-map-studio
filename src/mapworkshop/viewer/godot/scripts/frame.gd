@@ -16,7 +16,7 @@ Marks (the rail at the left)
   Click a mark to select it, drag it to move it, drag its handles to resize or rotate it (Shift snaps to 15 degrees)
   Del  delete the selected mark     Ctrl+Z  undo     Esc  step back: drawing, selection, tool
 
-View
+Layers, overlays and atmosphere (the toolbar's menus)
   1  objects     2  water     6  fog     7  walkable     8  river flow arrows     G  grid     B  map border     M  marks
 
   V  Photo mode     P  screenshot     F5  read the map again     Ctrl+B  build     F1  these controls
@@ -78,6 +78,7 @@ func _ready() -> void:
 	var text := Label.new()
 	text.text = HELP
 	_help.add_child(text)
+	_help.mouse_filter = Control.MOUSE_FILTER_IGNORE    # the map under it still takes the mouse
 	_help.visible = false
 	_help.set_anchors_preset(Control.PRESET_CENTER)
 	_root.add_child(_help)
@@ -130,6 +131,10 @@ func toggle_help() -> void:
 	_help.visible = not _help.visible
 
 
+func help_shown() -> bool:
+	return _help.visible
+
+
 ## The frame shown or hidden: hidden for a picture and in Photo mode.
 var chrome := true:
 	set(on):
@@ -138,8 +143,8 @@ var chrome := true:
 			_root.visible = on
 
 
-## No map yet: retain the toolbar, without marking or camera controls.
+## No map yet: retain the toolbar and the status line, without marking or camera controls.
 func set_map_loaded(loaded: bool) -> void:
 	marks.visible = loaded
-	bar.visible = loaded
+	bar.set_map_loaded(loaded)
 	toolbar.set_map_loaded(loaded)

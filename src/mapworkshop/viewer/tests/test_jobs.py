@@ -1,4 +1,4 @@
-"""Test In-Game's choice of game (viewer.jobs.play), without starting one."""
+"""Play in game's choice of game (viewer.jobs.play), without starting one."""
 import unittest
 from types import SimpleNamespace
 from unittest import mock

@@ -31,7 +31,7 @@ units in their idle animations, in about two seconds. It needs OpenBFME
 built (the first start builds it, which takes minutes), the game files it
 plays from, English RotWK 2.01 and BFME2 1.06, and a graphics card with
 Vulkan. `--weather` and `--sun` start
-with a [Preview](#the-toolbar), `--fps` caps the frame rate (30, 60, 90, 120,
+with a preview (the toolbar's [Atmosphere](#the-toolbar)), `--fps` caps the frame rate (30, 60, 90, 120,
 144, `vsync` or `unlimited`) and `--size` sets the window. F1 shows the
 controls.
 
@@ -56,7 +56,7 @@ has `mw render`'s depth of field and exposure.
 
 ## Grass and ground detail
 
-In **View**, enable **Grass** to add the camera-local blade field to the map
+In **Layers**, enable **Grass** to add the camera-local blade field to the map
 being edited. Switch it off to hide the blades immediately. **Ground detail**
 independently toggles the enhanced turf texture. Both start off; the choices
 survive map reloads and weather previews in the open viewer. These are visual
@@ -109,7 +109,8 @@ have the game's own, freed to zoom out and tilt.
 | Ctrl+C | Copy the view as a `mw render` command |
 | 1 2 3 6 7 8 | Objects, water, starting positions, fog, walkable, river flow arrows |
 | M | Show or hide the marks |
-| G, B, P, F5, Ctrl+B, F1 | Grid, border, screenshot, read the map again, build, controls |
+| G, B, P, F5, Ctrl+B | Grid, border, screenshot, read the map again, build |
+| F1 | Show or hide the controls, also before a map is open; Esc closes them too |
 | Del, Ctrl+Z | Delete the selected mark, undo a mark change (Edit) |
 | Esc | Step back one level (see [marking](#marking-the-map-for-an-agent)); in Photo free the mouse, then go back to Edit; never closes the viewer |
 
@@ -145,8 +146,8 @@ The **camera bar** along the bottom holds, from the left:
   with the thumbnails in a folder beside it.
 - **Copy view**: the view as a `mw render --map ... --view view ...` command on
   the clipboard, to render it at full quality or hand it to an agent. Besides
-  the camera it carries the size (Photo: the frame's), Preview's weather and
-  sun and the View switches `mw render` has (objects, fog, grid, border,
+  the camera it carries the size (Photo: the frame's), Atmosphere's weather and
+  sun and the view switches `mw render` has (objects, fog, grid, border,
   walkable, flow). Hidden water is the one setting it cannot carry. Saved
   views keep the camera only.
 - In Photo mode, the lens ([render/photo.py](../src/mapworkshop/render/photo.py)):
@@ -168,7 +169,7 @@ The **camera bar** along the bottom holds, from the left:
   Photo mode (P) include the lens and exposure, are cropped to the frame and
   saved as `<map> photo <time>.png`.
 - The status line: the latest message for a few seconds, else what the mouse
-  does now.
+  does now. Before a map is open the bar shows only the status line.
 - The **readout**, at the right: in Edit the target, distance, heading and
   tilt; in Photo the camera's position, heading, tilt, roll, the frame's field
   of view and, with an aperture, the distances that stay sharp (blur under
@@ -209,10 +210,10 @@ starts ([native/openbfme.py](../src/mapworkshop/native/openbfme.py),
 `pack_for_test`): OpenBFME runs a game only on a map in its archives (a game
 on a user map is part 2 of the user-maps change, not written yet), and the
 archive stays open while the viewer runs. So after a new build, another map
-or another Preview, **Test** starts the viewer again on the map as it is,
+or another weather or sun, **Test** starts the viewer again on the map as it is,
 at the same camera, in Test mode. [Test Mode Lab](../maps/test_mode_lab/map.py)
 (`mw view test-mode-lab`) has two small armies for it. The game's HUD (the
-command bar, powers, building) is not there; **Test In-Game** with OpenBFME
+command bar, powers, building) is not there; **Play in game** with OpenBFME
 has it.
 
 ## Live reload
@@ -232,28 +233,31 @@ reads the map shown again.
 ## The toolbar
 
 - **Open Map** opens the modal with Custom and Original map columns (original maps open under
-  the RotWK profile only). **Open project folder** opens the current project's
-  source folder; **Browse .map…** picks a `.map` file and opens it (one that is
+  the RotWK profile only). **Browse .map…** picks a `.map` file and opens it (one that is
   neither a project's build nor a stock map as a copy in the user maps
-  folder). **Export placement plan** saves and opens a plan of the current
-  map, with starts, buildings, lairs and capture-flag footprint closeups
-  ([placement plans](guide/map-graphics.md#placement-plans)).
-- **Properties** opens a window with the map's map-wide settings, in tabs:
-  the project's title, description and weather preset; the camera limits;
-  WorldInfo flags; the environment (water alpha, macro and cloud textures);
-  water reflections; fog, clouds, snow and lightning. Each field shows the
-  map's value, or in grey the game's default where `map.ini` leaves it out.
-  For a project, **Save and build** writes the changed fields into `map.toml`
-  as [properties](guide/projects-and-builds.md#map-properties) and builds it;
-  the new build reloads. A field set there is marked `map.toml` and has a
-  **Reset** button that hands it back to `map.py`. One of the game's maps is
-  shown read-only.
+  folder).
+- **Map** acts on the map shown:
+  - **Properties…** opens a window with the map's map-wide settings, in tabs:
+    the project's title, description and weather preset; the camera limits;
+    WorldInfo flags; the environment (water alpha, macro and cloud textures);
+    water reflections; fog, clouds, snow and lightning. Each field shows the
+    map's value, or in grey the game's default where `map.ini` leaves it out.
+    For a project, **Save and build** writes the changed fields into `map.toml`
+    as [properties](guide/projects-and-builds.md#map-properties) and builds it;
+    the new build reloads. A field set there is marked `map.toml` and has a
+    **Reset** button that hands it back to `map.py`. One of the game's maps is
+    shown read-only.
+  - **Open project folder** opens the project's source folder (a project's
+    map only).
+  - **Export placement plan** saves and opens a plan of the map, with starts,
+    buildings, lairs and capture-flag footprint closeups
+    ([placement plans](guide/map-graphics.md#placement-plans)).
 - **Build** rebuilds the current project in the background; the map reloads
   when the build is done. A failed build shows the start of its error in the
   status line (the full output goes to the terminal) and leaves the previous
   build in place. A chip beside the button shows a running build, then when
   the last one ended and how long it took, or that it failed.
-- **Test In-Game** starts BFME2 straight in a skirmish on the current project,
+- **Play in game** starts BFME2 straight in a skirmish on the current project,
   you against an easy AI, as `mw play` does
   ([testing in the game](guide/testing-in-game.md)). The status line says
   when the skirmish is playable and when the game has closed. When the game is
@@ -271,34 +275,44 @@ reads the map shown again.
   game launches keep their existing settings. The viewer minimises once the
   game is up and comes back when a skirmish or OpenBFME it started closes; a
   start that fails leaves it open, with the error in the status line.
-- **Preview** shows the map another way without changing it. Its button shows
-  the current choice, for example `Rain · Mordor: Ember`, and the menu stays
-  open while you switch:
-  - **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**,
-    **Haze**, **Rain**, **Snow** and **Dusk** apply the
-    [weather presets](../src/mapworkshop/mapkit/weather.py): fog, lighting
-    and the preset's sky dome. The map's own weather is set in
-    **Properties**.
-  - **Sun**: **Weather's own**, or a light rig over the weather. The Mordor
-    suns (Ember, Copper, Blood red, Sulphur glow, High sun through ash, Dusk
-    violet) bring the Minas Morgul sky and a matching fog tint.
+  **Test** on the camera bar is the other way to try a map: it runs it inside
+  the viewer ([Test mode](#test-mode-the-map-as-a-game)).
+- Three menus switch what the view shows; each stays open while you switch
+  its entries, and the key in brackets switches an entry too:
+  - **Layers**, the map's own content: **Objects**, **Animate** (the units'
+    idle animations, the falling rain or snow and the flow arrows),
+    **Water**, **Roads**, [**Grass** and **Ground detail**](#grass-and-ground-detail),
+    and under **Opens a copy of the map**, **Units** and **The game's tree and
+    shrub limits** (only the first 1,200 trees, 2,000 shrubs and 64 kinds of
+    tree the game keeps). Those last two open a copy of the map without what
+    they leave out, as a preview does.
+  - **Overlays**, helpers drawn over the map that the game never shows:
+    **Marks**, **Starting positions**, **Grid**, **Map border**, and under
+    **Analysis**, **Walkable** and **River flow arrows** ([overlays](#overlays)).
+  - **Atmosphere** shows the map another way without changing it. Its button
+    names the choice when it is not the map's own, for example
+    `Atmosphere: Rain · Mordor: Ember`.
+    - **Weather**: **Map's own** uses the map's `map.ini` weather. **Clear**,
+      **Haze**, **Rain**, **Snow** and **Dusk** apply the
+      [weather presets](../src/mapworkshop/mapkit/weather.py): fog, lighting
+      and the preset's sky dome. The map's own weather is set in
+      **Map → Properties…**.
+    - **Sun**: **Weather's own**, or a light rig over the weather. The Mordor
+      suns (Ember, Copper, Blood red, Sulphur glow, High sun through ash, Dusk
+      violet) bring the Minas Morgul sky and a matching fog tint.
+    - **Effects**: **Fog, rain and snow** (the map's own; switching it builds
+      the terrain again) and **Cloud shadows**.
 
-  OpenBFME draws a map as its file and `map.ini` say, so a preview is a copy
-  of the map with the preset's world weather, lighting, fog and sky, which
-  the viewer opens in the map's place (`<map> studio preview` in the user
-  maps folder, removed when the viewer closes; while it is open, OpenBFME's
-  Skirmish list shows it too). Rain and snow bring their fog, light and sky
-  and the rain or snow falling, as the game lays it out; the sky changes only
-  on the map's `WaterReflectionSkydome` objects.
-- **View**: check marks that stay open while you switch them: objects, water,
-  roads, fog, rain and snow (the map's own; switching it builds the terrain
-  again), cloud shadows, **Animate** (the units' idle animations, the falling
-  rain or snow and the flow arrows), grid, map border, walkable, river flow
-  arrows, marks, **Units** and **The game's tree and shrub limits** (only the
-  first 1,200 trees, 2,000 shrubs and 64 kinds of tree the game keeps). The
-  last two open a copy of the map without what they leave out, as a preview
-  does.
-- **Top view**, **Reset view** and **Screenshot** (saved without the controls
+    OpenBFME draws a map as its file and `map.ini` say, so a weather or sun
+    preview is a copy of the map with the preset's world weather, lighting,
+    fog and sky, which the viewer opens in the map's place (`<map> studio
+    preview` in the user maps folder, removed when the viewer closes; while it
+    is open, OpenBFME's Skirmish list shows it too). Rain and snow bring their
+    fog, light and sky and the rain or snow falling, as the game lays it out;
+    the sky changes only on the map's `WaterReflectionSkydome` objects.
+- **Top view**, **Reset view** and **Screenshot**, like T, Space and P; Top
+  view and Reset view leave Photo mode but keep a Test game running. Screenshots
+  are saved without the controls (Test mode's panel too)
   into `godot/` in the profile's renders folder,
   `local/profiles/<profile>/renders/godot/`).
 - **Frame rate**, at the right edge: the measured rate and the cap, for
@@ -336,7 +350,7 @@ Clear all.
 
 Marks are red, numbered and draped on the terrain. They are kept per map in
 `local/marks/<map>.json`, rewritten on every change. A panel at the right lists
-each mark with the objects inside it. **View → Marks** (key M) hides the marks
+each mark with the objects inside it. **Overlays → Marks** (key M) hides the marks
 and the panel; picking a tool shows them again. Esc steps back one level: it
 cancels a drawing, drops the selection and puts the tool away. It never closes
 the viewer.
@@ -357,11 +371,11 @@ itself ([AGENTS.md](../AGENTS.md)); `--json` gives the exact outlines, and
 
 ## Overlays
 
-**View → Starting positions** (key 3) shows numbered gold rings on the ground
+**Overlays → Starting positions** (key 3) shows numbered gold rings on the ground
 at the map's `Player_N_Start` waypoints. They are on by default while exploring
 a map and hidden during Test mode. Automated renders leave them out by default.
 
-**View → Walkable** (key 7) draws the local walkability estimate: open ground
+**Overlays → Walkable** (key 7) draws the local walkability estimate: open ground
 green, shallow water blue, bridge decks cyan, blocked cells red and striped
 (cliffs, deep water, buildings), and in orange the walkable areas no player
 start can reach. The companion works it out once per build, in the
@@ -369,13 +383,13 @@ background, while the status line says **Computing walkability**. It is the
 same estimate as `mw walkable`;
 [walkability](guide/projects-and-builds.md#walkability) says what it leaves out.
 
-**View → River flow arrows** (key 8) draws yellow chevrons along each river
+**Overlays → River flow arrows** (key 8) draws yellow chevrons along each river
 strip, pointing and drifting downstream, with the strip's banks in blue, its
 first cross-section green and its last red, so joins and overlaps between
 strips show. It covers every river, as OpenBFME draws them all. `mw render ...
 --flow` draws the same into still renders, and `mw rivers <map>` prints each
 strip's course as compass runs.
 
-**View → Grid** (G) draws a 100-unit grid on the ground. Without **Map border**
+**Overlays → Grid** (G) draws a 100-unit grid on the ground. Without **Map border**
 (B) the ground outside the playable area fades to black, in the top view too,
 and the water and roads there stay; with it, the whole border shows.

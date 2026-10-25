@@ -1,39 +1,49 @@
-## The toolbar across the top (docs/viewer.md, "The toolbar"): Open Map (MapPicker), Properties, Build with its chip, Test In-Game and what it starts,
-## Preview (the weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay
-## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate with
-## its cap (a menu). The lists come from the companion's menu message.
+## The toolbar across the top (docs/viewer.md, "The toolbar"): Open Map (MapPicker), Map (Properties, the project
+## folder, the placement plan), Build with its chip, Play in game and what it starts, then the view switches in three
+## menus that stay open while their entries are switched: Layers (the map's own content), Overlays (helpers drawn over
+## it) and Atmosphere (Preview's weather and sun, its button showing the choice, and the effects); at the right Top
+## view, Reset view, Screenshot and the frame rate with its cap (a menu). The lists come from the companion's menu
+## message.
 class_name Toolbar
 extends PanelContainer
 
 ## Another map: its .map file, as the menu lists it.
 signal map_chosen(path: String)
-## A command for the companion: "open_folder", "build", "test".
+## A command for the companion: "properties", "open_folder", "placement", "build", "test".
 signal command(name: String)
-## Test In-Game's choice changed.
+## Play in game's choice changed.
 signal test_game_chosen(choice: String)
 signal test_settings_chosen(settings: Dictionary)
-## A View entry switched.
+## A Layers, Overlays or Atmosphere switch.
 signal view_switched(key: String, on: bool)
-## A Preview entry chosen: "weather" or "sun" and its value.
+## A Preview entry (Atmosphere) chosen: "weather" or "sun" and its value.
 signal preview_chosen(option: String, value: String)
 ## Top view, Reset view or Screenshot.
 signal action(name: String)
 
 const TEST_GAMES := {"original": "Original game", "openbfme": "OpenBFME (Godot)"}
 const FPS_LIMITS := ["30", "60", "90", "120", "144", "vsync", "unlimited"]    # godot_viewer.FPS_LIMITS; 60 at the start
+## The view menus: [group, title, tooltip]; each switch names its group (viewer.gd VIEWS).
+const MENUS := [["layers", "Layers", "The map's own content: objects, water, roads, ground"],
+	["overlays", "Overlays", "Helpers drawn over the map; never in the game"],
+	["atmosphere", "Atmosphere", "Weather, sun and effects, to look at the map another way without changing it"]]
+const MAP_ITEMS := [["properties", "Properties…"], ["open_folder", "Open project folder"],
+	["placement", "Export placement plan"]]
+const PREVIEW_ID := 1000      # Atmosphere's Preview entries: PREVIEW_ID + their index in _previews
 
 var _map: Button
 var picker: MapPicker
+var _map_menu: MenuButton
 var _map_controls: Array[BaseButton] = []
 var _build_chip: Label
 var _test_game: OptionButton
 var _test_settings := {}
 var _test_dialog: ConfirmationDialog
 var _test_controls := {}
-var _view: MenuButton
-var _views := []              # [key, title] of the View menu's entries, by item id
-var _preview: MenuButton
-var _previews := []           # [option, value] of the Preview menu's entries, by item id
+var _menus := {}              # group -> its MenuButton
+var _views := []              # [key, title, on, group, section] of the switches, by item id
+var _preview := {}            # the companion's Preview choices and the current one
+var _previews := []           # [option, value, title] of Atmosphere's Preview entries
 var _fps: MenuButton
 var _fps_limit := "60"
 var _build := {}              # the build chip's last message
@@ -49,35 +59,42 @@ func _ready() -> void:
 	add_child(picker)
 	picker.map_chosen.connect(func(path: String) -> void: map_chosen.emit(path))
 	picker.command.connect(func(name: String) -> void: command.emit(name))
-	_add(row, "Properties", "The map's map-wide settings: a project's to edit (Save builds it), a game map's to read",
-		func() -> void: command.emit("properties"))
+	_map_menu = MenuButton.new()
+	_map_menu.text = "Map  ▾"
+	_map_menu.flat = false
+	_map_menu.tooltip_text = "The map shown: its map-wide settings, its project folder, its placement plan"
+	var map_items := _map_menu.get_popup()
+	for i in MAP_ITEMS.size():
+		map_items.add_item(MAP_ITEMS[i][1], i)
+	map_items.set_item_tooltip(0, "The map's map-wide settings: a project's to edit (Save builds it), a game map's to read")
+	map_items.set_item_tooltip(2, "Starts, buildings, lairs and capture-flag footprints of the map shown")
+	map_items.id_pressed.connect(func(id: int) -> void: command.emit(MAP_ITEMS[id][0]))
+	row.add_child(_map_menu)
 	_add(row, "Build", "Build the project again (it reloads when it is done)", func() -> void: command.emit("build"))
 	_build_chip = Label.new()
 	_build_chip.add_theme_color_override("font_color", UITheme.MUTED)
 	row.add_child(_build_chip)
 	row.add_child(VSeparator.new())
-	_add(row, "Test In-Game", "Start a skirmish on the map, as mw play does", func() -> void: command.emit("test"))
+	_add(row, "Play in game", "Start a skirmish on the map in the game, as mw play does", func() -> void: command.emit("test"))
 	_test_game = OptionButton.new()
-	_test_game.tooltip_text = "What Test In-Game starts"
+	_test_game.tooltip_text = "What Play in game starts"
 	_test_game.focus_mode = Control.FOCUS_NONE
 	for key in TEST_GAMES:
 		_test_game.add_item(TEST_GAMES[key])
 		_test_game.set_item_metadata(_test_game.item_count - 1, key)
 	_test_game.item_selected.connect(func(index: int) -> void: test_game_chosen.emit(_test_game.get_item_metadata(index)))
 	row.add_child(_test_game)
-	_add(row, "⚙", "Quick settings for Test In-Game", _show_test_settings)
+	_add(row, "⚙", "Quick settings for Play in game", _show_test_settings)
 	row.add_child(VSeparator.new())
-	_preview = MenuButton.new()
-	_preview.text = "Preview"
-	_preview.tooltip_text = "Show the map with another weather or sun, without changing it"
-	_preview.get_popup().hide_on_checkable_item_selection = false
-	_preview.get_popup().id_pressed.connect(_on_preview)
-	row.add_child(_preview)
-	_view = MenuButton.new()
-	_view.text = "View"
-	_view.get_popup().hide_on_checkable_item_selection = false
-	_view.get_popup().id_pressed.connect(_on_view)
-	row.add_child(_view)
+	for spec in MENUS:
+		var menu := MenuButton.new()
+		menu.text = "%s  ▾" % spec[1]
+		menu.flat = false
+		menu.tooltip_text = spec[2]
+		menu.get_popup().hide_on_checkable_item_selection = false
+		menu.get_popup().id_pressed.connect(_on_menu.bind(String(spec[0])))
+		row.add_child(menu)
+		_menus[spec[0]] = menu
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
@@ -122,7 +139,7 @@ func _show_test_settings() -> void:
 		_test_dialog.queue_free()
 	_test_controls.clear()
 	_test_dialog = ConfirmationDialog.new()
-	_test_dialog.title = "Test In-Game settings"
+	_test_dialog.title = "Play in game settings"
 	_test_dialog.ok_button_text = "Save"
 	add_child(_test_dialog)
 	var box := VBoxContainer.new()
@@ -185,61 +202,89 @@ func set_fps_limit(limit: String) -> void:
 		_fps.get_popup().set_item_checked(_fps.get_popup().get_item_index(i), FPS_LIMITS[i] == limit)
 
 
-## The companion's catalog for Open Map and Test In-Game's choice.
+## The companion's catalog for Open Map, the Map menu and Play in game's choice.
 func set_menu(menu: Dictionary) -> void:
 	_test_settings = menu.get("test_settings",{})
 	_map.tooltip_text = "Choose a map (current: %s)" % menu.title
 	picker.set_catalog(menu)
+	var map_items := _map_menu.get_popup()
+	map_items.set_item_disabled(map_items.get_item_index(1), not menu.get("project", false))
+	map_items.set_item_disabled(map_items.get_item_index(2), not menu.get("loaded", false))
 	for index in _test_game.item_count:
 		if _test_game.get_item_metadata(index) == menu.test_game:
 			_test_game.select(index)
 	_set_preview(menu.preview)
 
 
-## Preview's entries ({weather: [[value, title]], sun: [...], current: {weather, sun}, label}) and the button's text.
+## Preview's entries ({weather: [[value, title]], sun: [...], current: {weather, sun}, label}), at the top of
+## Atmosphere; its button names the choice when it is not the map's own.
 func _set_preview(preview: Dictionary) -> void:
-	var popup := _preview.get_popup()
-	popup.clear()
+	_preview = preview
 	_previews.clear()
-	popup.add_separator("Preview only: these do not change the map")
-	for option in [["weather", "Weather"], ["sun", "Sun"]]:
-		popup.add_separator(option[1])
-		for entry in preview[option[0]]:
-			popup.add_radio_check_item(entry[1], _previews.size())
-			popup.set_item_checked(popup.item_count - 1, preview.current[option[0]] == entry[0])
-			_previews.append([option[0], entry[0]])
-	_preview.text = "%s  ▾" % preview.label
+	for option in ["weather", "sun"]:
+		for entry in preview[option]:
+			_previews.append([option, entry[0], entry[1]])
+	var own: bool = preview.current.weather == "map" and preview.current.sun == "own"
+	_menus.atmosphere.text = "Atmosphere  ▾" if own else "Atmosphere: %s  ▾" % preview.label
+	_fill_menu("atmosphere")
 
 
-func _on_preview(id: int) -> void:
-	var popup := _preview.get_popup()
-	for i in popup.item_count:                     # the chosen one checked at once among its option's entries
-		var other := popup.get_item_id(i)
-		if popup.is_item_radio_checkable(i) and _previews[other][0] == _previews[id][0]:
-			popup.set_item_checked(i, other == id)
-	preview_chosen.emit(_previews[id][0], _previews[id][1])
-
-
-## The View menu: [key, title, on] entries.
+## The switches: [key, title, on, group (MENUS), section (a titled separator above it; "" for none)] entries.
 func set_views(entries: Array) -> void:
-	var popup := _view.get_popup()
-	popup.clear()
 	_views = entries.duplicate(true)
-	for i in entries.size():
-		popup.add_check_item(entries[i][1], i)
-		popup.set_item_checked(i, entries[i][2])
+	for group in _menus:
+		_fill_menu(group)
+
+
+## A view menu's entries: Atmosphere's Preview entries first, then the group's switches under their sections.
+func _fill_menu(group: String) -> void:
+	var popup := (_menus[group] as MenuButton).get_popup()
+	popup.clear()
+	if group == "atmosphere" and not _previews.is_empty():
+		popup.add_separator("Preview only: the map does not change")
+		var option := ""
+		for i in _previews.size():
+			var p: Array = _previews[i]
+			if p[0] != option:
+				option = p[0]
+				popup.add_separator({"weather": "Weather", "sun": "Sun"}[option])
+			popup.add_radio_check_item(p[2], PREVIEW_ID + i)
+			popup.set_item_checked(popup.item_count - 1, _preview.current[p[0]] == p[1])
+	var section := ""
+	for i in _views.size():
+		var v: Array = _views[i]
+		if v[3] != group:
+			continue
+		if v[4] != section:
+			section = v[4]
+			popup.add_separator(section)
+		popup.add_check_item(v[1], i)
+		popup.set_item_checked(popup.item_count - 1, v[2])
 
 
 func set_view(key: String, on: bool) -> void:
 	for i in _views.size():
 		if _views[i][0] == key:
 			_views[i][2] = on
-			_view.get_popup().set_item_checked(i, on)
+			var popup := (_menus[_views[i][3]] as MenuButton).get_popup()
+			var index := popup.get_item_index(i)
+			if index >= 0:
+				popup.set_item_checked(index, on)
 
 
-func _on_view(id: int) -> void:
-	var on := not _view.get_popup().is_item_checked(id)
-	_view.get_popup().set_item_checked(id, on)
+func _on_menu(id: int, group: String) -> void:
+	var popup := (_menus[group] as MenuButton).get_popup()
+	if id >= PREVIEW_ID:
+		var chosen: Array = _previews[id - PREVIEW_ID]
+		for i in popup.item_count:                 # the chosen one checked at once among its option's entries
+			var other := popup.get_item_id(i)
+			if not popup.is_item_separator(i) and other >= PREVIEW_ID and _previews[other - PREVIEW_ID][0] == chosen[0]:
+				popup.set_item_checked(i, other == id)
+		preview_chosen.emit(chosen[0], chosen[1])
+		return
+	var index := popup.get_item_index(id)
+	var on := not popup.is_item_checked(index)
+	popup.set_item_checked(index, on)
 	_views[id][2] = on
 	view_switched.emit(_views[id][0], on)
 

@@ -41,7 +41,8 @@ func _run() -> void:
 	var picker: MapPicker = viewer._frame.toolbar.picker
 	check(await until(func() -> bool: return not picker._catalog.is_empty()), "catalog received")
 	check(viewer._orbit == null and viewer._root == null, "startup has no map or camera controller")
-	check(not viewer._frame.bar.visible and not viewer._frame.marks.visible, "map controls hidden")
+	check(not viewer._frame.bar._edit.visible and not viewer._frame.marks.visible, "map controls hidden")
+	check(viewer._frame.bar.visible and viewer._frame.bar._status.visible, "status line shown without a map")
 	check(picker.visible, "modal opens at startup")
 	check(picker._columns.get_child_count() == 2, "two map columns")
 	await shot("empty-modal")
@@ -87,7 +88,7 @@ func _run() -> void:
 	picker.get_ok_button().pressed.emit()
 	check(await until(func() -> bool: return viewer._orbit != null), "first map loads")
 	check(not picker.visible, "successful load closes modal")
-	check(viewer._frame.bar.visible and viewer._frame.marks.visible, "map controls enabled")
+	check(viewer._frame.bar._edit.visible and viewer._frame.marks.visible, "map controls enabled")
 	check(viewer._scene.map == "map mp blend lab", "chosen map is shown")
 	await shot("loaded-map")
 	viewer._frame.toolbar._map.pressed.emit()

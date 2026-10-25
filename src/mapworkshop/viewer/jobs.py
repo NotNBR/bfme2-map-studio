@@ -1,5 +1,5 @@
 """The viewer's background work, run by its companion (viewer.godot_link):
-building the project, Test In-Game and the marks panel's summary. Each runs
+building the project, Play in game and the marks panel's summary. Each runs
 on its own thread and reports to the status line (Status).
 """
 
@@ -81,11 +81,11 @@ class Build:
         threading.Thread(target=work, daemon=True).start()
 
 
-TEST_GAMES = ('original', 'openbfme')     # the toolbar's choice for Test In-Game (setting test_game)
+TEST_GAMES = ('original', 'openbfme')     # the toolbar's choice for Play in game (setting test_game)
 
 
 def play(owner, status, test_game='original', events=lambda event: None, settings=None):
-    """Test In-Game: BFME2 straight in a skirmish on the project (native.play),
+    """Play in game: BFME2 straight in a skirmish on the project (native.play),
     or, when that cannot run (no BFME2 1.06) or for a game map (owner None),
     the normal game at its menu. With test_game 'openbfme', OpenBFME starts
     a skirmish on the project's map (native.openbfme).

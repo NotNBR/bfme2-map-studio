@@ -44,6 +44,7 @@ var _view_names := []          # the saved views' names, by item id (from 1; 0 s
 var _rename: ConfirmationDialog
 var _rename_edit: LineEdit
 var _renaming := ""
+var _camera_controls: Array[Control] = []
 
 
 func _ready() -> void:
@@ -113,6 +114,8 @@ func _ready() -> void:
 	frames.id_pressed.connect(func(id: int) -> void: lens_pick.emit("frame", Lens.FRAMES[id][0]))
 	_lens_row.add_child(_frame)
 	row.add_child(VSeparator.new())
+	for control in row.get_children():             # all but the status line and the readout: they need a map
+		_camera_controls.append(control)
 	_status = Label.new()
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status.clip_text = true
@@ -206,6 +209,14 @@ func _ask_rename(id: int) -> void:
 	_rename.popup_centered(Vector2i(320, 0))
 	_rename_edit.select_all()
 	_rename_edit.grab_focus()
+
+
+## No map yet: only the status line, without the camera's controls.
+func set_map_loaded(loaded: bool) -> void:
+	for control in _camera_controls:
+		control.visible = loaded and (control != _lens_row or _photo.button_pressed)
+	if not loaded:
+		_readout.text = ""
 
 
 func set_mode(mode: String) -> void:

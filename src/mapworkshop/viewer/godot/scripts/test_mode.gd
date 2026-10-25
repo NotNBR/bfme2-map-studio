@@ -35,6 +35,7 @@ var _box_to := Vector2.INF
 var _layer: CanvasLayer
 var _draw: Control
 var _info: Label
+var _panel: PanelContainer
 var _pause_button: Button
 var _speed_button: OptionButton
 var paths := "Selected"       # PATHS
@@ -118,6 +119,13 @@ func _build_ui() -> void:
 	column.add_child(keys)
 	panel.add_child(column)
 	_layer.add_child(panel)
+	_panel = panel
+
+
+## The panel shown or hidden (hidden for a picture: a screenshot, a view's thumbnail).
+func show_panel(on: bool) -> void:
+	if _panel != null:
+		_panel.visible = on
 
 
 func set_paused(on: bool) -> void:

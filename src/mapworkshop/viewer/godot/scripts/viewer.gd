@@ -27,13 +27,20 @@ extends Node3D
 const WARMUP_FRAMES := 24     # frames before the first shot: the objects' first poses and the streamed textures
 const SHOT_FRAMES := 12       # and before each further shot: the new view's textures and the window's new size
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
-## The View menu: [key, title, on at the start] (docs/viewer.md, "The toolbar"; each title's key in brackets)
-const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], ["roads", "Roads", true],
-	["fog", "Fog, rain and snow (6)", true], ["clouds", "Cloud shadows", true], ["animate", "Animate", true],
-	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["starts", "Starting positions (3)", false],
-	["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
-	["grass", "Grass", false], ["ground_detail", "Ground detail", false],
-	["units", "Units", true], ["limits", "The game's tree and shrub limits", false]]
+## The view switches: [key, title, on at the start, toolbar menu, section in it] (docs/viewer.md, "The toolbar"; each
+## title's key in brackets)
+const VIEWS := [
+	["objects", "Objects (1)", true, "layers", ""], ["animate", "Animate", true, "layers", ""],
+	["water", "Water (2)", true, "layers", ""], ["roads", "Roads", true, "layers", ""],
+	["grass", "Grass", false, "layers", ""], ["ground_detail", "Ground detail", false, "layers", ""],
+	["units", "Units", true, "layers", "Opens a copy of the map"],
+	["limits", "The game's tree and shrub limits", false, "layers", "Opens a copy of the map"],
+	["marks", "Marks (M)", true, "overlays", ""], ["starts", "Starting positions (3)", false, "overlays", ""],
+	["grid", "Grid (G)", false, "overlays", ""], ["border", "Map border (B)", false, "overlays", ""],
+	["walkable", "Walkable (7)", false, "overlays", "Analysis"],
+	["flow", "River flow arrows (8)", false, "overlays", "Analysis"],
+	["fog", "Fog, rain and snow (6)", true, "atmosphere", "Effects"],
+	["clouds", "Cloud shadows", true, "atmosphere", "Effects"]]
 const COPY_VIEWS := ["units", "limits"]       # the switches the map's copy carries (render.godot.preview_map)
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
@@ -131,9 +138,12 @@ func _headless() -> bool:
 func _fail(message: String) -> void:
 	push_error(message)
 	print("VIEWER failed: ", message)
-	if _frame != null:
+	if _frame != null and (_orbit == null or _frame.toolbar.picker.visible):
 		_frame.toast("failed", "The map could not be shown", message, 30)
 		_frame.toolbar.picker.failed(message)
+	elif _frame != null:                               # a reload: the map shown stays, the status line says why
+		_frame.toast("failed", "The map could not be reloaded", "the last good one stays", 6)
+		_status("The map could not be reloaded: %s" % message, 15)
 	if _headless() or not (_scene.get("shots", []) as Array).is_empty() or _scene.get("check", false):
 		get_tree().quit(1)
 
@@ -216,7 +226,7 @@ func _build_stage() -> void:
 		_frame.bar.view_copy.connect(_copy_view)
 		var entries := []
 		for view in VIEWS:
-			entries.append([view[0], view[1], _views[view[0]]])
+			entries.append([view[0], view[1], _views[view[0]], view[3], view[4]])
 		_frame.toolbar.set_views(entries)
 		_frame.toolbar.set_fps_limit(String(_scene.get("fps", "60")))    # mw view --fps
 		_link = Link.new()
@@ -864,7 +874,7 @@ func _play_drive() -> void:
 				if step.has(field):
 					_lens_pick(field, step[field])
 		"view":
-			_switch_view(String(step.key), bool(step.on))      # as the View menu
+			_switch_view(String(step.key), bool(step.on))      # as the toolbar's view menus
 		"mode":
 			_set_mode(String(step.mode))                     # as the camera bar
 		"paths":
@@ -993,9 +1003,18 @@ static func _list(v: Vector3) -> Array:
 
 
 func _axis(a: Key, b: Key = KEY_NONE) -> float:
-	if _frame != null and _frame.toolbar.picker.visible:
+	if _typing():
 		return 0.0
 	return 1.0 if Input.is_key_pressed(a) or (b != KEY_NONE and Input.is_key_pressed(b)) else 0.0
+
+
+## Whether the keys belong to a dialog (Open Map, Rename view, Play in game's settings) or a text field, not the camera.
+func _typing() -> bool:
+	for window in get_viewport().get_embedded_subwindows():
+		if window.visible and not (window is PopupMenu):
+			return true
+	var focus := get_viewport().gui_get_focus_owner()
+	return focus is LineEdit or focus is TextEdit
 
 
 ## The window's picture as a PNG, or only `crop` of it.
@@ -1009,10 +1028,17 @@ func _save(path: String, crop := Rect2i()) -> Error:
 	return code
 
 
+## The controls shown or hidden for a picture: the frame's and Test mode's panel.
+func _chrome(on: bool) -> void:
+	if _frame != null:
+		_frame.chrome = on
+	if _test != null:
+		_test.show_panel(on)
+
+
 ## P: the view without the controls, into the renders folder.
 func _screenshot() -> void:
-	if _frame != null:
-		_frame.chrome = false
+	_chrome(false)
 	_photo.taps = 256                              # the blur's samples as mw render's
 	await RenderingServer.frame_post_draw
 	_photo.taps = 128
@@ -1021,12 +1047,17 @@ func _screenshot() -> void:
 	var path := String(_scene.screenshots).path_join("%s%s %s.png" % [_scene.map, " photo" if photo else "", stamp])
 	var crop := Lens.frame_rect(Vector2i(get_viewport().get_visible_rect().size), _fly.frame) if photo else Rect2i()
 	var code := _save(path, crop)                  # Photo mode: the frame, with the lens
+	_chrome(true)
 	if _frame != null:
-		_frame.chrome = true
 		_status("Screenshot saved: %s" % path if code == OK else "The screenshot was not saved: %s" % error_string(code), 4)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _frame != null and event is InputEventKey and event.pressed and not event.echo:
+		var help_key := (event as InputEventKey).keycode
+		if help_key == KEY_F1 or (help_key == KEY_ESCAPE and _frame.help_shown()):
+			_frame.toggle_help()                         # also before a map is open; Esc closes it first
+			return
 	if _orbit == null:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and _view_key(event as InputEventKey):
@@ -1128,9 +1159,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_DELETE, KEY_BACKSPACE: _send({"type": "command", "name": "delete"})
 			KEY_ESCAPE: _send({"type": "command", "name": "escape"})
 			KEY_P: _screenshot()
-			KEY_F1:
-				if _frame != null:
-					_frame.toggle_help()
 
 
 ## A Preview entry: the companion writes the map's preview copy and has the viewer build it in place.
@@ -1181,12 +1209,12 @@ func _save_view(slot := 0) -> void:
 	var camera := _camera_state()
 	var photo := _mode == "photo"
 	var frame := _fly.frame
-	_frame.chrome = false
+	_chrome(false)
 	await RenderingServer.frame_post_draw
 	var path := _scene_path.get_base_dir().path_join("view %d.png" % Time.get_ticks_msec())   # the companion takes it
 	var size := Vector2i(get_viewport().get_visible_rect().size)
 	var code := _save(path, Lens.frame_rect(size, frame) if photo else Rect2i())
-	_frame.chrome = true
+	_chrome(true)
 	_send({"type": "command", "name": "save_view", "camera": camera, "slot": slot if slot > 0 else null,
 		"thumbnail": path if code == OK else ""})
 
@@ -1348,8 +1376,10 @@ func _show(names: Array, on: bool) -> void:
 
 
 func _toolbar_action(name: String) -> void:
-	if name != "screenshot":
-		_set_mode("edit")
+	if _orbit == null:
+		return
+	if name != "screenshot" and _mode == "photo":
+		_set_mode("edit")                              # Top view and Reset view move the Edit camera; Test keeps running
 	match name:
 		"top":
 			_free()
