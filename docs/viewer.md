@@ -16,6 +16,9 @@ or separately generated maps). An unbuilt project asks for confirmation before
 building; Cancel leaves it unbuilt, and a failed build keeps the picker open.
 The last project is preselected; Cancel or closing the picker exits cleanly.
 Commands with an explicit `MAP` open it directly.
+The command window shows opening and build progress. Godot's detailed output is
+saved to `local/openbfme/logs/viewer-*.log`; if the viewer exits with an error,
+the command prints the exact log path.
 `MAP` is a project id or any unique start of it
 (`grey`), a stock map ("fords of isen") or a `.map` file of either. The
 viewer is a Godot project of the studio's own on

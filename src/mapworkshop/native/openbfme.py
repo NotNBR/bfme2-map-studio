@@ -503,7 +503,7 @@ def install(project, progress=print):
     if not (archive.exists() and entry.exists()) or archive.stat().st_mtime_ns < max(p.stat().st_mtime_ns for p in files):
         progress(f'Packing {project.title} for OpenBFME...')
         entry.write_text(cache_entry(project.map_file, Map(project.map_file.read_bytes()), name, project.title,
-                                     project.description or project.title), encoding='cp1252')
+                                     project.description or project.title, max_players=16), encoding='cp1252')
         write_big(archive, [(f'maps/{name}/{p.name}', p) for p in files])
     return archives()
 
@@ -567,7 +567,7 @@ def pack_for_test(map_file, name, title):
              if p == map_file or p.suffix.lower() in ('.tga', '.str') or p.name.lower() == 'map.ini']
     archive = folder/f'{name}.big'
     write_big(archive, [(f'maps/{name}/{name}.map' if p == map_file else f'maps/{name}/{p.name}', p) for p in files])
-    entry = cache_entry(map_file, Map(map_file.read_bytes()), name, title, title)
+    entry = cache_entry(map_file, Map(map_file.read_bytes()), name, title, title, max_players=16)
     cache = merged_cache(BigArchive(ASSETS/'rotwk'/'_patch201maps.big').read('maps/mapcache.ini'), [entry])
     write_big(folder/'mapcache.big', [('maps/mapcache.ini', cache.replace('\n', '\r\n').encode('cp1252'))])
     return [archive, folder/'mapcache.big']

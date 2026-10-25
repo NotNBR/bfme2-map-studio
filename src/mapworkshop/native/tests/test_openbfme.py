@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from mapworkshop.formats.big import BigArchive
+from mapworkshop.config import ROOT
 from mapworkshop.native import openbfme
 
 
@@ -36,6 +37,26 @@ class BigTests(unittest.TestCase):
 
 
 class TestModeTests(unittest.TestCase):
+    def test_compact_sixteen_player_map_packs_with_all_starts(self):
+        from mapworkshop.formats.map import Map
+        from mapworkshop.mapkit.cache import cache_entry
+        map_file = ROOT/'maps'/'nanduhirion_compact_16p'/'references'/'compact.map'
+        name = 'nanduhirion compact 16p'
+        with self.assertRaisesRegex(ValueError, r'2\.\.8'):
+            cache_entry(map_file, Map(map_file.read_bytes()), name, 'Compact', 'Compact')
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            assets = tmp/'assets'
+            (assets/'rotwk').mkdir(parents=True)
+            openbfme.write_big(assets/'rotwk'/'_patch201maps.big', [('maps/mapcache.ini', b'; retail\r\n')])
+            with mock.patch.multiple(openbfme, TEST=tmp/'test', ASSETS=assets):
+                archive, cache = openbfme.pack_for_test(map_file, name, 'Compact')
+            self.assertIn(f'maps/{name}/{name}.map', BigArchive(archive).entries)
+            text = BigArchive(cache).read_bytes('maps/mapcache.ini').decode('cp1252')
+            self.assertIn('  numPlayers = 16\r\n', text)
+            for number in range(1, 17):
+                self.assertIn(f'  Player_{number}_Start = ', text)
+
     def test_the_map_is_packed_with_its_cache_in_a_folder_of_its_own(self):
         from mapworkshop.mapkit.blank import create, starts
         with tempfile.TemporaryDirectory() as tmp:

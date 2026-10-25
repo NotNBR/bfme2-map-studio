@@ -2,14 +2,14 @@
 
 BFME2 writes the cache for maps in its user maps folder itself, so nothing is
 written here: a build calls cache_entry to check that the map has 2 to 8
-consecutive player starts (exactly `players` of them when given, as in
-map.toml), and may keep the returned entry for reference.
+consecutive player starts by default (exactly `players` of them when given,
+as in map.toml). OpenBFME callers may allow up to 16.
 """
 import re
 import zlib
 
 
-def cache_entry(path, m, name, title, description, root=None, players=None):
+def cache_entry(path, m, name, title, description, root=None, players=None, max_players=8):
     def escaped(raw):
         return ''.join(chr(c) if (48<=c<=57 or 65<=c<=90 or 97<=c<=122) else f'_{c:02X}' for c in raw)
     key=escaped(('maps\\'+name+'\\'+name+'.map').encode('ascii'))
@@ -22,8 +22,8 @@ def cache_entry(path, m, name, title, description, root=None, players=None):
             if k=='waypointName' and re.fullmatch(r'Player_\d+_Start',v):
                 start_objects.append((v,o))
     expected={f'Player_{i}_Start' for i in range(1,len(start_objects)+1)}
-    if not 2<=len(start_objects)<=8 or {v for v,_ in start_objects}!=expected:
-        raise ValueError('Map cache requires 2..8 unique consecutive player starts')
+    if not 2<=len(start_objects)<=max_players or {v for v,_ in start_objects}!=expected:
+        raise ValueError(f'Map cache requires 2..{max_players} unique consecutive player starts')
     if players is not None and len(start_objects)!=players:
         raise ValueError(f'The map has {len(start_objects)} player starts, but map.toml says {players} players')
     lines=[f'MapCache {key}',f'  fileSize = {path.stat().st_size}',

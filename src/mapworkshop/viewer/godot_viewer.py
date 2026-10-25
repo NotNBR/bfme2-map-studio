@@ -59,25 +59,29 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
             return unseen(args, path.parent, headless, timeout)
         finally:
             remove_copies()
-    # driven (tests): the viewer's output kept out of the caller's, and a hung viewer stopped after `timeout`
-    quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) if drive else {}
+    # Keep Godot's detailed warnings out of the command window, but retain them for troubleshooting.
+    openbfme.LOGS.mkdir(parents=True, exist_ok=True)
+    log = openbfme.LOGS/f'viewer-{time.time_ns()}.log'
     companion = godot_link.Companion(
         prepared, lambda other, preview=None, **more: prepare(other, size=size, port=port, preview=preview, **more),
         progress)
     try:
-        while True:
-            # the map shown packed for Test mode, mounted as the viewer starts (openbfme.pack_for_test)
-            env = openbfme.environment(companion.pack_for_test())
-            process = subprocess.Popen(args, env=env, cwd=openbfme.HOME, **quiet)
-            companion.serve(link, process)
-            code = process.wait(timeout=(timeout or 600) if drive else None)
-            if companion.restart is None:
-                return code
-            args[-1] = f'--scene={companion.relaunch()}'      # Test mode on a map changed since: start again
-            progress('Starting the Godot viewer again for Test mode...')
+        with log.open('wb') as output:
+            while True:
+                # the map shown packed for Test mode, mounted as the viewer starts (openbfme.pack_for_test)
+                env = openbfme.environment(companion.pack_for_test())
+                process = subprocess.Popen(args, env=env, cwd=openbfme.HOME, stdout=output, stderr=subprocess.STDOUT)
+                companion.serve(link, process)
+                code = process.wait(timeout=(timeout or 600) if drive else None)
+                if companion.restart is None:
+                    if code:
+                        progress(f'The Godot viewer exited with code {code}; see {log}')
+                    return code
+                args[-1] = f'--scene={companion.relaunch()}'      # Test mode on a map changed since: start again
+                progress('Starting the Godot viewer again for Test mode...')
     except subprocess.TimeoutExpired:
         process.kill()
-        raise RuntimeError(f'the Godot viewer did not finish its scripted input within {timeout or 600} s')
+        raise RuntimeError(f'the Godot viewer did not finish its scripted input within {timeout or 600} s; see {log}')
     finally:
         link.close()
         remove_copies()

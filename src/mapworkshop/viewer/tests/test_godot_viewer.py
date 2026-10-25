@@ -143,6 +143,34 @@ class ShotTests(unittest.TestCase):
 
 
 class MainTests(unittest.TestCase):
+    def test_interactive_viewer_writes_engine_output_to_log(self):
+        with tempfile.TemporaryDirectory() as folder:
+            lines = []
+            companion = mock.MagicMock()
+            companion.restart = None
+            companion.pack_for_test.return_value = []
+            process = mock.MagicMock()
+            process.wait.return_value = 0
+
+            def start(*args, **kwargs):
+                kwargs['stdout'].write(b'Godot warning\n')
+                self.assertEqual(kwargs['stderr'], godot_viewer.subprocess.STDOUT)
+                return process
+
+            with mock.patch.object(openbfme, 'LOGS', Path(folder)), \
+                    mock.patch.object(openbfme, 'assets'), \
+                    mock.patch.object(openbfme, 'assemble', return_value=(Path('godot.exe'), Path('godot.console.exe'))), \
+                    mock.patch.object(openbfme, 'environment', return_value={}), \
+                    mock.patch.object(godot_viewer, 'remove_copies'), \
+                    mock.patch.object(godot_viewer, 'prepare', return_value=(Path('scene.tscn'), {'title': 'Test'})), \
+                    mock.patch.object(godot_viewer.godot_link, 'Companion', return_value=companion), \
+                    mock.patch.object(godot_viewer.godot_link, 'Link'), \
+                    mock.patch.object(godot_viewer.subprocess, 'Popen', side_effect=start):
+                self.assertEqual(godot_viewer.run('test', progress=lines.append), 0)
+
+            self.assertEqual(list(Path(folder).glob('viewer-*.log'))[0].read_bytes(), b'Godot warning\n')
+            self.assertFalse(any('Godot warning' in line for line in lines))
+
     def test_run_prepares_assets_before_cleaning_old_map_copies(self):
         # The cleanup reads RotWK's gi.dat to locate the user maps folder.
         calls = []
