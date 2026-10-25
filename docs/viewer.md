@@ -10,11 +10,12 @@ mw view MAP --view "target=X,Y distance=D ..." [--screenshot PICTURE.png] [--pro
 ```
 
 `mw` alone, `mw view` without a map, and double-clicking `Map Workshop.cmd`
-open a map picker without loading a map. Select a built project and click
+open a map picker without loading a map. Select a project and click
 **Open**, or use **Browse for map...** for any `.map` file (including downloaded
-or separately generated maps). The last project is preselected; Cancel or
-closing the picker exits cleanly. Unbuilt projects show the command needed
-to build them. Commands with an explicit `MAP` open it directly.
+or separately generated maps). An unbuilt project asks for confirmation before
+building; Cancel leaves it unbuilt, and a failed build keeps the picker open.
+The last project is preselected; Cancel or closing the picker exits cleanly.
+Commands with an explicit `MAP` open it directly.
 `MAP` is a project id or any unique start of it
 (`grey`), a stock map ("fords of isen") or a `.map` file of either. The
 viewer is a Godot project of the studio's own on

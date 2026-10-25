@@ -143,6 +143,18 @@ class ShotTests(unittest.TestCase):
 
 
 class MainTests(unittest.TestCase):
+    def test_run_prepares_assets_before_cleaning_old_map_copies(self):
+        # The cleanup reads RotWK's gi.dat to locate the user maps folder.
+        calls = []
+        class StopBeforeOpening(Exception):
+            pass
+        with mock.patch.object(openbfme, 'assets', side_effect=lambda progress: calls.append('assets')), \
+                mock.patch.object(godot_viewer, 'remove_copies', side_effect=lambda: calls.append('cleanup')), \
+                mock.patch.object(openbfme, 'assemble', side_effect=StopBeforeOpening):
+            with self.assertRaises(StopBeforeOpening):
+                godot_viewer.run('draft')
+        self.assertEqual(calls, ['assets', 'cleanup'])
+
     def test_mw_view_opens_the_map_and_makes_it_the_last_one(self):
         owner = mock.MagicMock()
         with mock.patch.object(godot_viewer, 'run', return_value=0) as run,                 mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')),                 mock.patch.object(godot_viewer.project, 'for_map_file', return_value=owner),                 mock.patch.object(godot_viewer.project, 'remember') as remember:

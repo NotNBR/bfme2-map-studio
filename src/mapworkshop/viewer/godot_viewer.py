@@ -40,8 +40,8 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     View switches to start with ({'grid': True, ...}); `preview` the weather and sun ({weather, sun}, OWN's keys);
     `fps` the frame rate cap ('60', 'vsync', 'unlimited', ...)."""
     started = time.perf_counter()
-    remove_copies()                     # any a viewer stopped before it could
     openbfme.assets(progress)
+    remove_copies()                     # any a viewer stopped before it could
     gui, console = openbfme.assemble(progress)
     interactive = not (screenshot or check)
     link = godot_link.Link() if interactive else None
