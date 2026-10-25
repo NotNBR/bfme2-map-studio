@@ -57,12 +57,18 @@ In **View**, enable **Grass** to add the camera-local blade field to the map
 being edited. Switch it off to hide the blades immediately. **Ground detail**
 independently toggles the enhanced turf texture. Both start off; the choices
 survive map reloads and weather previews in the open viewer. These are visual
-preview options and do not alter the saved map. Grass uses a dense near field and a sparse outer field fading out at 880
-world units (previously 245), with per-blade fading. Its colour follows the
-terrain, with irregular root clusters, independently varied stem heights and restrained dry variation.
-Grass enables MSAA 4x when antialiasing was off, and restores the previous
-setting when switched off. Coverage fading keeps distant stems from shrinking
-into stubble. It avoids roads,
+preview options and do not alter the saved map. Grass transitions by projected
+blade size: dense nearby blades, sparser wider blades at medium range, then
+matching terrain canopy shading at overview scale. Distant coverage has no
+render-distance cutoff and follows the same Grass toggle. Blade tiles cover
+the visible camera frustum, including shallow angles, rather than a fixed
+area around the ground focus. Its colour and
+irregular density stay anchored to the terrain while zooming and panning.
+Grass selects MSAA 8x and restores the previous setting when switched off.
+Sample coverage replaces the noisy pixel fade; slightly wider distant blades
+and reduced distant wind also limit shimmer. Blade distance is twice the
+previous screen-size cutoff. Grass keeps 65% of the ground colour and 35% of
+the meadow tint, with restrained brightness variation. It avoids roads,
 water and steep slopes; interactive trampling and building-footprint clearance are not
 implemented.
 

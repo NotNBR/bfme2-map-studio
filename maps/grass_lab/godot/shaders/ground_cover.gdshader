@@ -1,7 +1,7 @@
-// Camera-local opaque blades: three triangles, stable world-space scatter, no alpha overdraw.
+// Frustum-covered grass: three triangles, stable world-space scatter, MSAA sample coverage.
 shader_type spatial;
-render_mode unshaded, cull_disabled;
-uniform sampler2D terrain_guide : filter_linear, repeat_disable;
+render_mode unshaded, cull_disabled, alpha_to_coverage_and_one, depth_draw_always;
+uniform sampler2D terrain_guide : filter_linear_mipmap, repeat_disable;
 uniform sampler2D height_map : filter_nearest, repeat_disable;
 uniform sampler2D flip_map : filter_nearest, repeat_disable;
 uniform vec2 world_origin;
@@ -21,9 +21,7 @@ uniform vec3 shroud_color = vec3(1);
 uniform bool shroud_enabled = false;
 instance uniform float patch_density = 1.0;
 instance uniform float patch_span = 32.0;
-uniform bool field_fade_enabled = false;
-uniform vec2 field_center = vec2(0);
-uniform float field_zoom = 1.0;
+uniform float output_gamma = 2.2;
 uniform float wind_strength = 0.20;
 uniform float blade_height_scale : hint_range(0.2, 3.0) = 1.0;
 uniform vec3 ambient_color = vec3(0.5);
@@ -32,18 +30,7 @@ varying vec2 ground_xy;
 varying vec3 leaf_color;
 varying float plant_fog;
 varying float plant_alive;
-float hash21(vec2 p) {
- uvec2 q=uvec2(ivec2(round(p*64.0)));
- uint h=q.x*1597334677u ^ q.y*3812015801u;
- h=(h ^ (h >> 16u))*2246822519u;
- h=(h ^ (h >> 13u))*3266489917u;
- h=h ^ (h >> 16u);
- return float(h >> 8u)*(1.0/16777216.0);
-}
-float noise(vec2 p) {
- vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
- return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x),mix(hash21(i+vec2(0,1)),hash21(i+vec2(1)),f.x),f.y);
-}
+#include "res://labs/grass/shaders/grass_field.gdshaderinc"
 float height_at(vec2 cell) {
  ivec2 i=clamp(ivec2(floor(cell)),ivec2(0),ivec2(grid_size)-ivec2(2)); vec2 f=fract(cell);
  float a=texelFetch(height_map,i,0).r, b=texelFetch(height_map,i+ivec2(1,0),0).r;
@@ -75,18 +62,19 @@ void vertex() {
  vec4 guide=textureLod(terrain_guide,guv,0.0);
  float r=hash21(seed+42.7), r2=hash21(seed+91.1);
  float meadow=noise(ground_xy*0.025);
- float colony=noise(ground_xy*0.019+vec2(18.7,4.2))*0.55+noise(ground_xy*0.13+vec2(9.1,7.6))*0.45;
- float dry=noise(ground_xy*0.012+vec2(3.4,81.2));
- float density=smoothstep(0.25,0.90,guide.a)*mix(0.08,0.92,smoothstep(0.38,0.66,colony));
+ float density=grass_density(ground_xy,guide.a);
  float alive=step(0.001,density)*step(r,density)*step(0.0,guv.x)*step(0.0,guv.y)*step(guv.x,1.0)*step(guv.y,1.0);
+ float ground_height=height_at(cell)-0.08;
+ vec3 root_world=vec3(world.x,ground_height,world.y);
+ float depth=-(VIEW_MATRIX*vec4(root_world,1)).z;
  float rank=float(INSTANCE_ID)/4096.0;
  float fade=1.0;
+ float population=patch_density;
  if(field_fade_enabled) {
-  float distance_to_focus=length(world-field_center);
-  float outer_weight=smoothstep(140.0,220.0,distance_to_focus);
-  fade=(patch_span>64.0 ? outer_weight*(1.0-smoothstep(640.0,880.0,distance_to_focus)) : 1.0-outer_weight)*field_zoom;
+  fade=(patch_span>64.0 ? grass_far(world,depth) : grass_near(world,depth))*field_zoom;
+  population*=mix(0.35,1.0,smoothstep(3.0,9.0,grass_pixels(depth)));
  }
- float visibility=smoothstep(rank,rank+0.045,patch_density)*alive*fade;
+ float visibility=smoothstep(rank,rank+0.045,population)*alive*fade;
  float tip=UV.y;
  // Independent per-stem heights: short ground cover plus scattered taller growth,
  // rather than letting the density noise sculpt identical rounded bushes.
@@ -95,41 +83,41 @@ void vertex() {
  float height=mix(mix(0.9,2.2,r2),mix(2.3,4.3,r2),tall);
  height*=mix(0.85,1.15,noise(ground_xy*0.031+vec2(53.0)))*blade_height_scale;
  float width=mix(0.18,0.32,hash21(seed+8.6))*mix(1.0,0.65,tall);
+ if(field_fade_enabled) width*=mix(1.65,1.0,smoothstep(3.0,9.0,grass_pixels(depth)));
  float angle=hash21(seed+3.4)*6.283185;
  vec2 across=vec2(cos(angle),sin(angle)), bend=vec2(-across.y,across.x);
+ if(field_fade_enabled) {
+  float projected_width=length((VIEW_MATRIX*vec4(across.x,0.0,across.y,0.0)).xy)*width*grass_pixels(depth)/1.8;
+  // Avoid needle-thin rasterization at medium range; retain the actual blade height.
+  width*=clamp(0.70/max(projected_width,0.001),1.0,3.0);
+ }
  float lean=mix(0.25,1.9,hash21(seed+vec2(31.3,7.8)));
  vec2 shape=across*VERTEX.x*width+bend*VERTEX.z*height*lean;
  // A little sideways twist keeps all blades from sharing one straight silhouette.
  shape+=across*sin(tip*2.1)*height*0.12*(hash21(seed+6.1)-0.5);
  float phase=dot(ground_xy,vec2(0.035,0.021))-TIME*1.35;
  float gust=sin(phase)+sin(phase*0.47+meadow*3.0)*0.45;
- shape+=vec2(1.0,0.45)*gust*wind_strength*height*tip*tip;
- VERTEX=vec3(local.x,height_at(cell)-0.08,local.y)+vec3(shape.x,tip*height,shape.y)*alive;
+ float wind_lod=field_fade_enabled ? mix(0.15,1.0,smoothstep(1.5,6.0,grass_pixels(depth))) : 1.0;
+ shape+=vec2(1.0,0.45)*gust*wind_strength*height*tip*tip*wind_lod;
+ VERTEX=vec3(local.x,ground_height,local.y)+vec3(shape.x,tip*height,shape.y)*alive;
  // Keep local brightness, but avoid printing orange soil texels onto green leaves.
- vec3 regional=guide.rgb;
- vec2 offset_uv=vec2(1.0)/grid_size;
- regional+=textureLod(terrain_guide,guv+vec2(offset_uv.x,0),0.0).rgb;
- regional+=textureLod(terrain_guide,guv-vec2(offset_uv.x,0),0.0).rgb;
- regional+=textureLod(terrain_guide,guv+vec2(0,offset_uv.y),0.0).rgb;
- regional+=textureLod(terrain_guide,guv-vec2(0,offset_uv.y),0.0).rgb;
- regional*=0.2;
- float luminance=dot(regional,vec3(0.299,0.587,0.114));
- vec3 sage=vec3(0.80,1.04,0.62)*luminance;
- vec3 straw=vec3(1.12,1.00,0.71)*luminance;
- vec3 base=mix(regional,mix(sage,straw,dry*0.35),0.85);
+ vec3 regional=textureLod(terrain_guide,guv,1.0).rgb;
+ vec3 base=grass_palette(regional,ground_xy);
  vec3 sun=overbright ? sun_color*0.5 : sun_color;
  vec3 blade_normal=normalize(vec3(bend.x*0.55,bend.y*0.55,0.85));
- float diffuse=0.35*max(normalize(sun_dir_sage).z,0.15)+0.65*abs(dot(normalize(sun_dir_sage),blade_normal));
+ float diffuse=0.70*max(normalize(sun_dir_sage).z,0.15)+0.30*abs(dot(normalize(sun_dir_sage),blade_normal));
  vec3 lighting=(ambient_color+sun*diffuse)*(overbright ? 2.0 : 1.0);
- leaf_color=base*lighting*mix(0.70,1.05,smoothstep(0.0,0.85,tip))*mix(0.87,1.08,hash21(seed+25.3));
+ leaf_color=base*lighting*mix(0.78,1.0,smoothstep(0.0,0.85,tip))*mix(0.94,1.04,hash21(seed+25.3));
  float dist=length(CAMERA_POSITION_WORLD-(MODEL_MATRIX*vec4(VERTEX,1)).xyz)-w3d_fog_shift;
  plant_fog=1.0-fog_enabled*clamp((dist-fog_range_start)/max(fog_range_end-fog_range_start,0.001),0.0,1.0);
  plant_alive=visibility;
 }
 void fragment() {
- // Fade coverage, not blade height: shrinking blades left a carpet of artificial stubble.
- if(plant_alive<0.001 || hash21(FRAGCOORD.xy)>plant_alive) discard;
+ // Continuous alpha replaces screen-space noise, which sparkled during pans.
+ if(plant_alive<0.001) discard;
+ ALPHA=plant_alive;
  vec3 color=mix(fog_color,leaf_color,plant_fog);
  if(shroud_enabled) color*=shroud_color*texture(shroud_tex,(ground_xy-shroud_origin)/shroud_extent).r;
- ALBEDO=decode_srgb(max(color,vec3(0)));
+ // Real maps blend transparent draws in their gamma compositor; the standalone lab uses linear output.
+ ALBEDO=output_gamma == 1.0 ? max(color,vec3(0)) : decode_srgb(max(color,vec3(0)));
 }

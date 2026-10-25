@@ -1283,8 +1283,8 @@ func _switch_view(key: String, on: bool) -> void:
 		"grass":
 			if on and _grass_previous_msaa < 0:
 				_grass_previous_msaa = get_viewport().msaa_3d
-				if get_viewport().msaa_3d == Viewport.MSAA_DISABLED:
-					get_viewport().msaa_3d = Viewport.MSAA_4X
+				if get_viewport().msaa_3d < Viewport.MSAA_8X:
+					get_viewport().msaa_3d = Viewport.MSAA_8X
 			elif not on and _grass_previous_msaa >= 0:
 				get_viewport().msaa_3d = _grass_previous_msaa
 				_grass_previous_msaa = -1

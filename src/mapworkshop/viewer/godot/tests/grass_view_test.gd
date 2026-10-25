@@ -17,11 +17,13 @@ func run() -> void:
 	check(viewer._root.get_node_or_null("GroundCover") == null, "off by default")
 	var previous_aa := root.msaa_3d
 	viewer._switch_view("grass", true)
-	check(root.msaa_3d != Viewport.MSAA_DISABLED, "grass edges use MSAA")
+	check(root.msaa_3d == Viewport.MSAA_8X, "grass edges use MSAA 8x")
 	for i in 20: await process_frame
 	var cover = viewer._root.get_node_or_null("GroundCover")
 	check(cover != null and cover.visible, "View Grass builds and shows the map blades")
+	check(cover.terrain_material.get_shader_parameter("grass_surface_enabled"), "Grass enables distant terrain canopy")
 	viewer._switch_view("grass", false)
+	check(not cover.terrain_material.get_shader_parameter("grass_surface_enabled"), "Grass off removes distant canopy")
 	check(root.msaa_3d == previous_aa, "grass off restores previous AA")
 	check(cover != null and not cover.visible and not cover.is_processing(), "off hides grass and stops updates")
 	viewer._switch_view("grass", true)

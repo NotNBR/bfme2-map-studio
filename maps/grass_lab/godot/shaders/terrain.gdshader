@@ -35,6 +35,7 @@ void vertex() {
 	v_sage_xy = vec2(world.x, -world.z);
 	v_ground_xy = v_sage_xy;
 	v_ground_flatness = NORMAL.y;
+	v_grass_depth = -(VIEW_MATRIX * vec4(world, 1.0)).z;
 }
 
 void fragment() {
