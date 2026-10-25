@@ -16,6 +16,8 @@ shared config.toml. Map sources are shared; generated output is isolated.
 """
 import os
 from pathlib import Path
+import tempfile
+import threading
 import tomllib
 
 PROJECT = 'bfme2-map-workshop'
@@ -36,10 +38,12 @@ ROOT = find_root()
 MAPS = ROOT/'maps'
 LOCAL = ROOT/'local'
 CONFIG = LOCAL/'config.toml'
+_CONFIG_LOCK = threading.RLock()
 
 
 def settings():
-    return tomllib.loads(CONFIG.read_text(encoding='utf-8')) if CONFIG.exists() else {}
+    with _CONFIG_LOCK:
+        return tomllib.loads(CONFIG.read_text(encoding='utf-8')) if CONFIG.exists() else {}
 
 
 def setting(key, default=None):
@@ -51,12 +55,27 @@ def save_setting(key, value):
     tables. Other objects (such as paths) are written as text by _toml_value."""
     if key == 'profile' and value not in ('bfme2', 'rotwk'):
         raise ValueError('Profile must be bfme2 or rotwk')
-    values = settings()
-    values[key] = value
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    lines = ['# bfme2-map-workshop settings; `mw config` changes them.']
-    lines += _toml_table(values)
-    CONFIG.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    with _CONFIG_LOCK:
+        values = settings()
+        values[key] = value
+        CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        lines = ['# bfme2-map-workshop settings; `mw config` changes them.']
+        lines += _toml_table(values)
+        # Background asset loading reads this file too. Publish the complete
+        # settings at once so readers never see a truncated, empty config.
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=CONFIG.parent,
+                                         prefix='config-', suffix='.tmp', delete=False) as stream:
+            temporary = Path(stream.name)
+            try:
+                stream.write('\n'.join(lines) + '\n')
+            except BaseException:
+                stream.close()
+                temporary.unlink(missing_ok=True)
+                raise
+        try:
+            temporary.replace(CONFIG)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def _toml_table(values, prefix=''):

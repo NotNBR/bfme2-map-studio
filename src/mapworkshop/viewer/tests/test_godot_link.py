@@ -37,6 +37,24 @@ def event(kind, x, y, **picks):
                 focus=dict(z=50.0, distance=1500.0, angle=0.0), seq=7)
 
 
+class LoadedAssetsTests(unittest.TestCase):
+    def test_properties_can_recover_after_a_failed_background_load(self):
+        assets = object()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'test.map'
+            path.write_bytes(b'')
+            with mock.patch.object(godot_link, 'Map'), \
+                    mock.patch('mapworkshop.assets.library.GameAssets',
+                               side_effect=[RuntimeError('BFME2 not found'), assets]) as load:
+                loaded = godot_link.Loaded(path, FlatSurface())
+                self.assertTrue(loaded._loaded.wait(5))
+                self.assertIsNone(loaded.assets)
+                self.assertIs(loaded.game_assets(), assets)
+                self.assertIs(loaded.game_assets(), assets)
+                self.assertIsNone(loaded._error)
+                self.assertEqual(load.call_count, 2)
+
+
 class CompanionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

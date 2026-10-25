@@ -42,6 +42,29 @@ class SaveSettingTests(unittest.TestCase):
         config.save_setting('test_settings', chosen)
         self.assertEqual(config.settings(), dict(test_settings=chosen, last_map='blend-lab'))
 
+    def test_readers_keep_the_complete_old_settings_until_the_new_file_is_published(self):
+        config.save_setting('game', 'C:/Games/BFME2')
+        replace = Path.replace
+
+        def publish(temporary, target):
+            self.assertEqual(config.settings(), dict(game='C:/Games/BFME2'))
+            self.assertEqual(tomllib.loads(temporary.read_text(encoding='utf-8')),
+                             dict(game='C:/Games/BFME2', last_map='helms-deep-battle'))
+            return replace(temporary, target)
+
+        with mock.patch.object(Path, 'replace', publish):
+            config.save_setting('last_map', 'helms-deep-battle')
+        self.assertEqual(config.settings()['game'], 'C:/Games/BFME2')
+        self.assertEqual(list(self.path.parent.glob('config-*.tmp')), [])
+
+    def test_failed_publish_preserves_the_previous_settings(self):
+        config.save_setting('game', 'C:/Games/BFME2')
+        with mock.patch.object(Path, 'replace', side_effect=PermissionError('file is busy')):
+            with self.assertRaises(PermissionError):
+                config.save_setting('last_map', 'test')
+        self.assertEqual(config.settings(), dict(game='C:/Games/BFME2'))
+        self.assertEqual(list(self.path.parent.glob('config-*.tmp')), [])
+
 
 if __name__ == '__main__':
     unittest.main()

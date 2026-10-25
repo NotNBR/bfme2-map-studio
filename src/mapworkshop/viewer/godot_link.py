@@ -238,6 +238,7 @@ class Loaded:
         self.walkable = None              # the walkable message, once worked out (Companion.overlay)
         self.walking = False              # being worked out
         self._loaded = threading.Event()
+        self._assets_lock = threading.Lock()
         self._error = None
         if assets is None:
             threading.Thread(target=self._load_assets, daemon=True).start()
@@ -246,16 +247,22 @@ class Loaded:
 
     def _load_assets(self):
         from mapworkshop.assets.library import GameAssets
-        try:
-            self.assets = GameAssets()
-        except Exception as error:
-            self._error = error
-        finally:
-            self._loaded.set()
+        with self._assets_lock:
+            if self.assets is not None:
+                return
+            try:
+                self.assets = GameAssets()
+                self._error = None
+            except Exception as error:
+                self._error = error
+            finally:
+                self._loaded.set()
 
     def game_assets(self):
         """The game's assets, once loaded; raises what stopped them loading."""
         self._loaded.wait()
+        if self.assets is None:
+            self._load_assets()  # A transient startup/config failure must not disable Properties for this session.
         if self.assets is None:
             raise RuntimeError(f'the game files did not load: {self._error}')
         return self.assets
