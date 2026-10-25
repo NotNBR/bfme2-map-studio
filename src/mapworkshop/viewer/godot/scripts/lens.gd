@@ -1,7 +1,6 @@
 ## Photo mode's lens: the maths is OpenBFME's pro camera (Pro, the engine's scripts/pro_lens.gd, which the assembly
 ## brings from the pinned engine; its docs/PRO_CAMERA.md has the model), and this keeps what is Photo mode's own: the
-## presets, the frames and the texts. render/photo.py repeats the maths for mw render's views in Python
-## (test_photo checks it against Pro's constants).
+## presets, the frames and the texts. render/photo.py repeats the field of view for mw render's views in Python.
 class_name Lens
 extends RefCounted
 

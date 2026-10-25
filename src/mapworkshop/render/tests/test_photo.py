@@ -6,8 +6,7 @@ import unittest
 import numpy as np
 
 from mapworkshop.render.camera import look_at, parse_view, rolled
-from mapworkshop.render.photo import (active, blur_pixels, focal_from_fov, fov_from_focal, image_size, sensor,
-                                      sharp_range)
+from mapworkshop.render.photo import focal_from_fov, fov_from_focal, sensor
 
 
 class Terrain:
@@ -28,36 +27,6 @@ class LensTests(unittest.TestCase):
         self.assertEqual(sensor(1.0), (24.0, 24.0))
         self.assertEqual(sensor(4/3), (32.0, 24.0))
         self.assertAlmostEqual(sensor(0.8)[1], 24.0)                     # portrait: 24 mm tall
-        # A window shows its frame at the sensor's scale and more around it.
-        self.assertEqual(image_size(16/9, 1.0), (24.0*16/9, 24.0))
-        self.assertEqual(image_size(1.0, 16/9), (36.0, 36.0))
-        self.assertEqual(image_size(16/9), sensor(16/9))
-
-    def test_the_sharp_range_closes_in_on_the_focus_as_the_aperture_opens(self):
-        near, far = sharp_range(500, 50, 2.8)
-        self.assertLess(near, 500)
-        self.assertGreater(far, 500)
-        wide = sharp_range(500, 50, 1.4)
-        self.assertLess(wide[1]-wide[0], far-near)
-        # 50 mm at f/8 on full frame: hyperfocal about 10.9 m, so focused at 11 m all is sharp to infinity...
-        self.assertEqual(sharp_range(110, 50, 8)[1], math.inf)
-        # ...and from half the hyperfocal distance.
-        self.assertAlmostEqual(sharp_range(110, 50, 8)[0], 54, delta=2)
-
-    def test_blur_is_none_at_the_focus_and_grows_away_from_it(self):
-        sharp = blur_pixels(500, 500, 85, 1.4, 1920)
-        near, far = blur_pixels(300, 500, 85, 1.4, 1920), blur_pixels(5000, 500, 85, 1.4, 1920)
-        self.assertAlmostEqual(sharp, 0.0)
-        self.assertGreater(near, 1.0)
-        self.assertGreater(far, 1.0)
-        # Stopping down shrinks it; focusing far away sharpens the whole map, as with a real lens.
-        self.assertLess(blur_pixels(5000, 500, 85, 8, 1920), far/5)
-        self.assertLess(blur_pixels(1500, 1100, 85, 1.4, 1920), 1.0)
-
-    def test_only_an_aperture_or_an_exposure_changes_the_picture(self):
-        self.assertFalse(active(dict(focal=35, aperture=None, ev=0.0)))
-        self.assertTrue(active(dict(aperture=2.8)))
-        self.assertTrue(active(dict(ev=-0.5)))
 
 
 class ViewKeyTests(unittest.TestCase):
@@ -116,10 +85,6 @@ class ProLensTests(unittest.TestCase):
         text = script.read_text(encoding='utf-8')
         value = lambda name: re.search(rf'^const {name} := (.+?)\s*(#|$)', text, re.M)[1]
         self.assertEqual(value('SENSOR'), 'Vector2(%s, %s)' % photo.SENSOR)
-        self.assertEqual(float(value('UNITS_PER_METRE')), photo.UNITS_PER_METRE)
-        self.assertEqual(float(value('MAX_BLUR')), photo.MAX_BLUR)
-        self.assertEqual(value('SHARP'), '1.0 / 1500.0')
-        self.assertEqual(photo.SHARP, 1/1500)
 
 
 if __name__ == '__main__':

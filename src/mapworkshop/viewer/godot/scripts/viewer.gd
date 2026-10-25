@@ -280,7 +280,7 @@ func _open_map() -> void:
 		_orbit.set_goal(o.x, o.y, o.distance, o.heading, o.elevation)
 		_orbit.snap()
 		if _lens_changes(v):
-			_place_view_photo(v)                       # the lens changes the picture (render.photo.active)
+			_place_view_photo(v)                       # the lens changes the picture
 			_set_mode("photo", false)
 	else:
 		_orbit.apply(_camera)
@@ -522,7 +522,7 @@ func _advance(time: float) -> void:
 		_falling.set_time(_clock)
 
 
-## Whether a view's lens changes the picture (render.photo.active): an aperture or an exposure.
+## Whether a view's lens changes the picture: an aperture or an exposure.
 static func _lens_changes(v: Dictionary) -> bool:
 	var lens: Dictionary = v.get("photo", {})
 	return (lens.get("aperture") != null and float(lens.aperture) > 0.0) or absf(float(lens.get("ev", 0.0))) > 1e-6
