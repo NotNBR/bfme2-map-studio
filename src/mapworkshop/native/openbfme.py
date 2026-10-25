@@ -686,6 +686,14 @@ TEST_WINDOW_MODES = ('saved', 'windowed', 'borderless')
 
 def test_settings(values=None):
     """Validated toolbar launch preferences; unknown keys never become command-line arguments."""
+    if isinstance(values, str):
+        # Older Studio versions saved this dictionary's repr as a TOML string.
+        # Read those preferences safely; the next Save writes a proper table.
+        import ast
+        try:
+            values = ast.literal_eval(values)
+        except (ValueError, SyntaxError):
+            values = None
     values = values if isinstance(values, dict) else {}
     result = dict(TEST_DEFAULTS)
     for key, choices in [('resolution', TEST_RESOLUTIONS), ('window_mode', TEST_WINDOW_MODES)]:

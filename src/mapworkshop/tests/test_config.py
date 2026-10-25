@@ -33,6 +33,15 @@ class SaveSettingTests(unittest.TestCase):
         values = tomllib.loads(self.path.read_text(encoding='utf-8'))
         self.assertEqual(values, dict(fps=120, game=str(Path('C:/Games/BFME2'))))
 
+    def test_new_nested_settings_round_trip_as_tables(self):
+        chosen = dict(resolution='2560x1440', grass=False, display=dict(modes=['windowed', 'borderless']))
+        config.save_setting('test_settings', chosen)
+        config.save_setting('last_map', 'blend-lab')
+        self.assertEqual(config.setting('test_settings'), chosen)
+        chosen['grass'] = True
+        config.save_setting('test_settings', chosen)
+        self.assertEqual(config.settings(), dict(test_settings=chosen, last_map='blend-lab'))
+
 
 if __name__ == '__main__':
     unittest.main()

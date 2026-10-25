@@ -66,6 +66,30 @@ class CompanionTests(unittest.TestCase):
             self.send(dict(type='command', name='test_settings', settings={'grass': False, 'resolution': '1920x1080', 'extra': 'bad'}))
         self.assertEqual(save.call_args.args, ('test_settings', dict(openbfme.TEST_DEFAULTS, grass=False, resolution='1920x1080')))
 
+    def test_quick_settings_persist_reopen_and_reach_the_next_launch(self):
+        from mapworkshop import config
+        chosen = dict(resolution='2560x1440', window_mode='windowed', grass=False, ground_detail=False, fog=True)
+        with mock.patch.object(config, 'CONFIG', self.map_path.parent/'config.toml'), \
+                mock.patch.object(godot_link.jobs, 'play') as play:
+            replies = self.send(dict(type='command', name='test_settings', settings=chosen))
+            self.assertEqual(config.setting('test_settings'), chosen)
+            menu = next(reply for reply in replies if reply['type'] == 'menu')
+            self.assertEqual(menu['test_settings'], chosen)
+            reopened = godot_link.Companion((self.map_path.parent/'scene.json', self.data, None, FlatSurface()))
+            self.assertEqual(reopened.menu()['test_settings'], chosen)
+            reopened.handle(dict(type='command', name='test'))
+            self.assertEqual(play.call_args.kwargs['settings'], chosen)
+
+    def test_legacy_quick_settings_are_recovered_and_rewritten(self):
+        from mapworkshop import config
+        chosen = dict(resolution='1920x1080', window_mode='borderless', grass=False, ground_detail=True, fog=True)
+        with mock.patch.object(config, 'CONFIG', self.map_path.parent/'config.toml'):
+            config.save_setting('test_settings', str(chosen))
+            self.assertEqual(self.companion.menu()['test_settings'], chosen)
+            self.send(dict(type='command', name='test_settings', settings=chosen))
+            self.assertEqual(config.setting('test_settings'), chosen)
+        self.assertEqual(openbfme.test_settings('not a dictionary'), openbfme.TEST_DEFAULTS)
+
     def saved(self):
         return json.loads(marklib.marks_path(self.map_path).read_text(encoding='utf-8'))['marks']
 

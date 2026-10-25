@@ -459,6 +459,7 @@ class Companion:
         elif name == 'test_settings':
             from mapworkshop.native.openbfme import test_settings
             save_setting('test_settings', test_settings(message.get('settings')))
+            out.append(dict(type='status', text='Test In-Game settings saved — applies next launch', seconds=4))
             out.append(self.menu())
         elif name == 'test_game':
             if message.get('choice') in jobs.TEST_GAMES:

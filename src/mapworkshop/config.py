@@ -47,12 +47,12 @@ def setting(key, default=None):
 
 
 def save_setting(key, value):
-    """Set one setting in local/config.toml (a bool or number as one, anything
-    else as text), keeping the others as they were, whatever their type."""
+    """Set one setting in local/config.toml, preserving TOML values and nested
+    tables. Other objects (such as paths) are written as text by _toml_value."""
     if key == 'profile' and value not in ('bfme2', 'rotwk'):
         raise ValueError('Profile must be bfme2 or rotwk')
     values = settings()
-    values[key] = value if isinstance(value, (bool, int, float)) else str(value)
+    values[key] = value
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     lines = ['# bfme2-map-workshop settings; `mw config` changes them.']
     lines += _toml_table(values)
