@@ -68,7 +68,7 @@ def run(project, frames=300, every=5, watch=None, uber=True, out=None, progress=
     slots = []
     for spec in openbfme.net_slots(project).split(';'):     # kind:Faction:start:team, as the peer's kind,Faction,start,team
         slots += ['--slot', ','.join(spec.split(':'))]
-    peer = openbfme.BUILD/'openbfme_peer.exe'
+    peer = openbfme.peer()
     if not peer.exists():
         raise RuntimeError(f'{peer} is missing: delete {openbfme.BUILD/"stamp.txt"} so the next run builds it')
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:

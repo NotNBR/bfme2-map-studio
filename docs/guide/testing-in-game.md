@@ -136,8 +136,10 @@ and the number of objects. A failure prints OpenBFME's reason. Either uses the
 current build of the active profile; OpenBFME always plays it with ROTWK 2.01's
 data.
 
-The first run sets up everything in `local/openbfme/`, in about three
-minutes plus the time to check the game files:
+The default source-build path sets up everything in `local/openbfme/`, in about
+three minutes plus the time to check the game files. A configured
+[runtime bundle](engine-runtime.md) supplies the engine and tools directly,
+without fetching the source submodule or a compiler:
 
 - **Engine:** it fetches the `native/openbfme-godot` submodule (left out of
   `mw setup`) at the commit this repository pins
@@ -158,8 +160,8 @@ minutes plus the time to check the game files:
   committed yet.
 - **Extra archives:** the fork adds one thing upstream lacks:
   the `OPENBFME_EXTRA_ARCHIVES` variable, which mounts extra `.big` files.
-  OpenBFME reads maps only from verified archives and ignores loose map files.
-  So each map is packed into `local/openbfme/maps/<name>.big`, and
+  The simulation reads maps from archives; the preview builders also support
+  user-map folders. For game tests each map is packed into `local/openbfme/maps/<name>.big`, and
   `local/openbfme/mapcache.big` carries the Skirmish list (retail's
   `maps\mapcache.ini` plus every packed map).
 - **Performance:** the fork makes big battles
@@ -264,45 +266,44 @@ minutes plus the time to check the game files:
   `--download` fetches them from the service the OpenBFME launcher uses,
   checking each file's MD5.
 
-OpenBFME has eight player slots, so a map lists its first eight starts. Its
+The pinned OpenBFME supports up to sixteen starts; the original game supports eight. Its
 profile, options and logs stay in `local/openbfme/appdata/`. `mw doctor`
 reports how far the setup has got. OpenBFME is an alpha: what it does not do
 yet is listed in its README.
 
 ### The pin and a clean submodule
 
-The submodule pins one commit, recorded in this repository. By default it is
-a commit of OpenBFME's official `main`
-([Open-BFME/openbfme-godot](https://github.com/Open-BFME/openbfme-godot)). A
-feature `main` lacks comes in by pinning a commit that has it, for as long as
-OpenBFME takes to merge it. Once OpenBFME has merged it, the pin goes back to a
-commit of `main`. Every pinned commit is pushed and tagged in the fork
-[NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot) (the
-submodule's remote), its tags are never deleted, and the commit here that moves
-the pin says why. Don't move the pin to the fork's `studio/main`: its features
-reach `mw play --godot` and `mw battle` only when a pin brings them in. An
-engine change goes to OpenBFME as a pull request; the few the studio alone
-needs are commits on the pinned tag, listed below, each with what replaces it.
-This is decision 5 of the [Godot viewer plan](../history/godot-viewer-plan.md#decisions).
+The submodule pins one commit from
+[NotNBR/openbfme-godot](https://github.com/NotNBR/openbfme-godot), recorded in
+this repository. Studio's adapter and runtime packages support that revision
+independently of official releases. No official-port changes or upstream merges
+are required. Generic improvements may be contributed upstream separately.
 
-The pin is `studio-2026-10-25-16p`: the studio engine merged with OpenBFME's
-`main` at `8926679a`, which includes map-gated support for up to sixteen
-players. A sixteen-start map can open through **Test In-Game → OpenBFME**;
-eight-start maps retain the eight-slot setup. The original game's limit is
-still eight. The studio additions kept on top are:
+Develop engine changes in a separate fork checkout. Move the Studio pin only
+after the chosen commit is available in the fork and its integration checks
+pass; use an immutable tag for a release. Changes in another checkout or branch
+do not reach Studio until its recorded pin changes.
 
-| Commits | For | Until |
+Read the actual pin with `git ls-files --stage src/mapworkshop/native/openbfme-godot`;
+the gitlink takes precedence over historical tag names. The selected engine
+includes map-gated sixteen-player support and subsequent grass rendering changes.
+A sixteen-start map can open through **Test In-Game → OpenBFME**; eight-start maps
+retain the eight-slot setup. [Engine runtime](engine-runtime.md) describes the
+current consumer contract and verification when updating the pin. The integration
+features and their consumers are:
+
+| Capability | Consumer | Check when updating the pin |
 |---|---|---|
-| user maps ([#76](https://github.com/Open-BFME/openbfme-godot/pull/76)) | the studio's Godot viewer opens a build from the user maps folder | OpenBFME merges it |
-| siege ([#64](https://github.com/Open-BFME/openbfme-godot/pull/64)) | Helm's Deep's assault, and the battle log's siege phases; walkable walls and big battles are now in the upstream base | OpenBFME merges it |
-| extra archives (`OPENBFME_EXTRA_ARCHIVES`) | `mw play --godot`, `--check` and `mw battle` mount a studio map | games on a user map (part 2 of the user-maps change) |
-| a unit's path (`GameWorld.get_object_path`) | the viewer's Test mode draws the paths units follow | OpenBFME takes it, or the viewer reads paths another way |
-| `--no-shroud` | `mw play --godot` draws the map revealed | OpenBFME takes it as a debug option, or a pin without it and `--fog` as the default |
-| the headless battle log (`openbfme_peer --battle-log`) | `mw battle` | OpenBFME takes it, or the log moves into the studio |
+| user-map preview | the studio's Godot viewer opens a build from the user maps folder | already supported by the inspected official builders; keep this capability when changing the pin |
+| siege behavior | Helm's Deep's assault and the battle log's siege phases | preserve the fork's simulation behavior |
+| extra archives (`OPENBFME_EXTRA_ARCHIVES`) | `mw play --godot`, `--check` and `mw battle` mount a studio map | keep archive mounting until the adapter supports another game-map source |
+| a unit's path (`GameWorld.get_object_path`) | the viewer's Test mode draws the paths units follow | runtime method check and a live path inspection |
+| `--no-shroud` | `mw play --godot` draws the map revealed | verify game launch settings |
+| the headless battle log (`openbfme_peer --battle-log`) | `mw battle` | run a short headless battle |
+| ground cover and natural terrain detail | viewer toggles and game launch settings | retain fork support while Studio offers these options |
 
-Not in the pin, though `studio/main` has them: the weather pull request
-([#59](https://github.com/Open-BFME/openbfme-godot/pull/59)), map cinematics
-in a skirmish, staged armies and the free camera's tilt.
+Features on other fork branches are not part of the runtime contract merely
+because they exist there. Check the pinned source and its packaged capabilities.
 
 To move the pin to a pushed tag:
 

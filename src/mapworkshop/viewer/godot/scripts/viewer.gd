@@ -24,8 +24,6 @@
 ## what is missing, and when headless quits with 0 or 1.
 extends Node3D
 
-const CLASSES := ["RetailFileSystem", "MapTerrainBuilder", "MapObjectBuilder", "PathfindView"]
-const SHADERS := ["terrain", "water_standing", "road", "river"]
 const WARMUP_FRAMES := 24     # frames before the first shot: the objects' first poses and the streamed textures
 const SHOT_FRAMES := 12       # and before each further shot: the new view's textures and the window's new size
 const CLICK_PIXELS := 4.0     # a press and release closer than this is a click, not an orbit (viewer/marking.py)
@@ -112,15 +110,7 @@ func _ready() -> void:
 
 
 func _missing() -> PackedStringArray:
-	var missing := PackedStringArray()
-	for library_class in CLASSES:
-		if not ClassDB.class_exists(library_class):
-			missing.append(library_class)
-	for shader in SHADERS:
-		var path := "res://shaders/%s.gdshader" % shader
-		if not ResourceLoader.exists(path) or load(path) == null:
-			missing.append(path)
-	return missing
+	return EngineRuntime.missing()
 
 
 func _headless() -> bool:
@@ -476,24 +466,7 @@ func _process(delta: float) -> void:
 ## The map's cloud shadows on the terrain (its CloudTexture, the cloud_tex of OpenBFME's terrain shader), or plain
 ## white in their place.
 func _show_clouds(on: bool) -> void:
-	if _root == null:
-		return
-	for node in _root.find_children("*", "MeshInstance3D", true, false):
-		var mesh_node := node as MeshInstance3D
-		var materials := [mesh_node.material_override]
-		if mesh_node.mesh != null:
-			for i in mesh_node.mesh.get_surface_count():
-				materials.append(mesh_node.mesh.surface_get_material(i))
-		for material in materials:
-			var shader_material := material as ShaderMaterial
-			if shader_material == null:
-				continue
-			if not shader_material.has_meta("cloud_tex"):
-				var clouds: Variant = shader_material.get_shader_parameter("cloud_tex")
-				if clouds == null:
-					continue
-				shader_material.set_meta("cloud_tex", clouds)
-			shader_material.set_shader_parameter("cloud_tex", shader_material.get_meta("cloud_tex") if on else null)
+	EngineRuntime.show_clouds(_root, on)
 
 
 ## The objects' animations and the overlays run on to `time` seconds after the map was built.
@@ -1290,21 +1263,11 @@ func _switch_view(key: String, on: bool) -> void:
 			elif not on and _grass_previous_msaa >= 0:
 				get_viewport().msaa_3d = _grass_previous_msaa
 				_grass_previous_msaa = -1
-			if _root != null:
-				var cover := _root.get_node_or_null("GroundCover")
-				if on and cover == null:
-					if _build_terrain(): _apply_views(["water", "roads", "clouds"])
-					if _root != null: _root.visible = _views.get("terrain", true)
-				elif cover != null:
-					cover.set("enabled", on)
+			if not EngineRuntime.show_grass(_root, on):
+				if _build_terrain(): _apply_views(["water", "roads", "clouds"])
+				if _root != null: _root.visible = _views.get("terrain", true)
 		"ground_detail":
-			if _root != null:
-				for mesh in _root.find_children("*", "MeshInstance3D", true, false):
-					if mesh.mesh == null: continue
-					for surface in mesh.mesh.get_surface_count():
-						var material = mesh.mesh.surface_get_material(surface)
-						if material is ShaderMaterial and material.has_meta("natural_ground"):
-							material.set_shader_parameter("natural_ground_enabled", on)
+			EngineRuntime.show_ground_detail(_root, on)
 		"terrain":                                      # the ground, water and roads (mw item's pictures leave them out)
 			if _root != null:
 				_root.visible = on
@@ -1354,10 +1317,7 @@ func _shown(key: String) -> bool:
 
 
 func _show(names: Array, on: bool) -> void:
-	for n in names:
-		var node: Node3D = _root.get_node_or_null(n) if _root != null else null
-		if node != null:
-			node.visible = on
+	EngineRuntime.show_layers(_root, names, on)
 
 
 func _toolbar_action(name: String) -> void:

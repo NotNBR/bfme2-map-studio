@@ -15,6 +15,7 @@ from unittest import mock
 from mapworkshop.formats.big import BigArchive
 from mapworkshop.config import ROOT
 from mapworkshop.native import openbfme
+from mapworkshop.native.tests.test_engine_bundle import fixture as runtime_fixture
 
 
 def md5(data):
@@ -225,16 +226,9 @@ class AssembleTests(unittest.TestCase):
     def test_the_viewer_gets_the_library_and_its_shaders_and_assembles_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp, imports = Path(tmp), []
+            bundle = runtime_fixture(tmp)
             files = {'studio/project.godot': b'studio', 'studio/scripts/viewer.gd': b'extends Node3D',
-                     'studio/.godot/uid_cache.bin': b'', 'src/godot/openbfme.gdextension': b'res://bin/',
-                     'src/godot/shaders/other.gdshader': b'', 'project/' + openbfme.DLL: b'dll',
-                     'src/godot/shaders/terrain.gdshader': b'#include "res://shaders/common.gdshaderinc"',
-                     'src/godot/shaders/common.gdshaderinc': b'#include "res://shaders/decals.gdshaderinc"',
-                     'src/godot/shaders/decals.gdshaderinc': b'', **{f'src/godot/shaders/{name}.gdshader': b''
-                                                                    for name in ('water_standing', 'road', 'river', 'ground_cover')},
-                     **{f'src/godot/{name}': b'' for name in ['scripts/ground_cover.gd',
-                        'assets/natural_ground/profiles.json', 'assets/natural_ground/turf_detail.png',
-                        'assets/natural_ground/turf_detail.png.import']}}
+                     'studio/.godot/uid_cache.bin': b''}
             for name, data in files.items():
                 (tmp/name).parent.mkdir(parents=True, exist_ok=True)
                 (tmp/name).write_bytes(data)
@@ -244,21 +238,18 @@ class AssembleTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, '', '')
 
             with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', VIEWER=tmp/'viewer', STUDIO=tmp/'studio', GRASS_LAB=tmp/'lab',
-                                     LOGS=tmp/'logs', APPDATA=tmp/'appdata', build=lambda progress: ('gui', 'console')), \
+                                     LOGS=tmp/'logs', APPDATA=tmp/'appdata', build=lambda progress: ('gui', 'console'),
+                                     runtime_bundle=lambda *args: bundle), \
                     mock.patch.object(subprocess, 'run', run):
                 (tmp/'logs').mkdir()
-                self.assertEqual(sorted(openbfme.viewer_files()), sorted([
-                    'project.godot', 'scripts/viewer.gd', 'openbfme.gdextension', openbfme.DLL, 'shaders/terrain.gdshader',
-                    'shaders/common.gdshaderinc', 'shaders/decals.gdshaderinc', 'shaders/water_standing.gdshader',
-                    'shaders/road.gdshader', 'shaders/river.gdshader', 'shaders/ground_cover.gdshader',
-                    'scripts/ground_cover.gd', 'assets/natural_ground/profiles.json',
-                    'assets/natural_ground/turf_detail.png', 'assets/natural_ground/turf_detail.png.import']))
+                self.assertEqual(set(openbfme.viewer_files()),
+                                 {'project.godot', 'scripts/viewer.gd', 'studio_runtime.json'} | set(bundle.files('viewer')))
                 openbfme.assemble(progress=lambda *_: None)
                 before = {p: p.stat().st_mtime_ns for p in (tmp/'viewer').rglob('*')}
                 openbfme.assemble(progress=lambda *_: None)                     # the same again: nothing copied or imported
                 self.assertEqual({p: p.stat().st_mtime_ns for p in (tmp/'viewer').rglob('*')}, before)
                 self.assertEqual(len(imports), 1)
-                self.assertEqual((tmp/'viewer'/openbfme.DLL).read_bytes(), b'dll')
+                self.assertEqual((tmp/'viewer'/openbfme.DLL).read_bytes(), b'extension')
 
                 (tmp/'studio'/'shaders').mkdir()
                 (tmp/'studio'/'shaders'/'road.gdshader').write_bytes(b'')       # the studio's own file under OpenBFME's name

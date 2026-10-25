@@ -15,6 +15,7 @@ USAGE = """
   mw                         open the viewer's map picker
   mw setup [--game DIR]      find BFME2 and extract its data (once)
   mw doctor                  check that everything is in place
+  mw engine package|check    package or validate the OpenBFME runtime
   mw maps                    list your map projects
   mw new "Misty Vale"        start a new map project
   mw dev [MAP]               rebuild on every save, with the viewer open
@@ -63,6 +64,9 @@ def parser():
     s.add_argument('--rotwk', help='The expansion folder (with lotrbfme2ep1.exe and INI.big); use --profile rotwk')
     s.add_argument('--force', action='store_true', help='Extract again even if up to date')
     sub.add_parser('doctor', help='Check the setup')
+    s = sub.add_parser('engine', help='Package or validate the pinned OpenBFME runtime')
+    s.add_argument('action', choices=['package', 'check'])
+    s.add_argument('--out', type=Path, help='With package: a new bundle directory (default: local runtime cache)')
     sub.add_parser('maps', help='List the map projects')
     s = sub.add_parser('new', help='Start a new map project')
     s.add_argument('title', help='The map''s title; the project id and folder come from it unless --id')
@@ -753,6 +757,29 @@ PASSTHROUGH = {'view': 'mapworkshop.viewer.godot_viewer', 'marks': 'mapworkshop.
                'item': 'mapworkshop.render.items:main_item', 'items': 'mapworkshop.render.items:main'}
 
 
+def cmd_engine(args):
+    """Create a complete runtime or verify its files and live Godot API."""
+    from mapworkshop.native import openbfme
+    if args.out and args.action != 'package':
+        raise RuntimeError('--out is only used with mw engine package')
+    if args.action == 'package':
+        executables = openbfme.build()
+        bundle = openbfme.runtime_bundle(executables, destination=args.out)
+        say(f'OpenBFME runtime {bundle.revision[:8]}: {bundle.root}')
+        say('Use it with: mw config openbfme_bundle "' + str(bundle.root) + '"')
+        return 0
+    import subprocess
+    _, console = openbfme.assemble()
+    result = subprocess.run([str(console), '--headless', '--path', str(openbfme.VIEWER)],
+                            env=openbfme.environment([]), capture_output=True, text=True,
+                            encoding='utf-8', errors='replace', timeout=120)
+    if result.returncode or 'VIEWER ready' not in result.stdout:
+        raise RuntimeError('Runtime compatibility check failed:\n' + result.stdout + result.stderr)
+    bundle = openbfme.runtime_bundle()
+    say(f'Runtime {bundle.revision[:8]} verified: files, Godot classes and methods; no retail assets required')
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     # Do this before importing config (including through a passthrough module).
@@ -778,7 +805,7 @@ def main(argv=None):
         extra = extra[1:]
     commands = dict(setup=cmd_setup, doctor=cmd_doctor, maps=cmd_maps, new=cmd_new, history=cmd_history,
                     config=cmd_config, diff=cmd_diff, walkable=cmd_walkable, rivers=cmd_rivers, sites=cmd_sites, where=cmd_where, capture=cmd_capture,
-                    battle=cmd_battle,
+                    battle=cmd_battle, engine=cmd_engine,
                     patch=cmd_patch)
     with_extra = dict(build=cmd_build, play=cmd_play, dev=cmd_dev, test=cmd_test)
     try:

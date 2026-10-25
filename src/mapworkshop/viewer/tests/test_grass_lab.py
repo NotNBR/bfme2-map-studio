@@ -1,8 +1,10 @@
 """Grass Lab entry points and its self-contained viewer payload."""
 import unittest
+import tempfile
 from unittest import mock
 from mapworkshop.native import openbfme
 from mapworkshop.viewer import godot_viewer
+from mapworkshop.native.tests.test_engine_bundle import fixture as runtime_fixture
 
 
 class GrassLabTests(unittest.TestCase):
@@ -26,8 +28,10 @@ class GrassLabTests(unittest.TestCase):
                                                     'res://labs/grass/scenes/grass_lab.tscn'])
 
     def test_assembly_contains_lab_and_keeps_regular_terrain_shader(self):
-        files = openbfme.viewer_files()
-        for name in ['scenes/grass_lab.tscn', 'scripts/grass_lab.gd', 'shaders/ground_cover.gdshader',
-                     'shaders/terrain.gdshader', 'shaders/natural_ground.gdshaderinc', 'assets/turf_detail.png']:
-            self.assertTrue(files['labs/grass/' + name].is_file(), name)
-        self.assertEqual(files['shaders/terrain.gdshader'], openbfme.SOURCE/'godot/shaders/terrain.gdshader')
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = runtime_fixture(tmp)
+            files = openbfme.viewer_files(bundle)
+            for name in ['scenes/grass_lab.tscn', 'scripts/grass_lab.gd', 'shaders/ground_cover.gdshader',
+                         'shaders/terrain.gdshader', 'shaders/natural_ground.gdshaderinc', 'assets/turf_detail.png']:
+                self.assertTrue(files['labs/grass/' + name].is_file(), name)
+            self.assertEqual(files['shaders/terrain.gdshader'], bundle.file('viewer', 'shaders/terrain.gdshader'))

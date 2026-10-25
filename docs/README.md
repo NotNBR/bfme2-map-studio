@@ -15,6 +15,7 @@ instructions.
 | Find an object, texture, road, sound or effect by what it is; look at it; turn it the right way | [Finding assets](guide/finding-assets.md) |
 | Design a map, from composition to detail | [Designing maps](guide/designing-maps.md) |
 | Render views of a map without the game | [Rendering](guide/rendering.md) |
+| Engine bundles, source builds and the Studio/OpenBFME boundary | [Engine runtime](guide/engine-runtime.md) |
 | Inspect terrain relief, slopes and scenery; compare maps | [Map graphics](guide/map-graphics.md) |
 | Play a map, read its pathfinding grid, take screenshots in the game, faster loading | [Testing in the game](guide/testing-in-game.md) |
 | Hand-edit a single `.map` file, with WorldBuilder | [Hand-editing](guide/hand-editing.md) |

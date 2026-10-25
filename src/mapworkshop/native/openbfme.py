@@ -14,8 +14,8 @@ OPENBFME_EXTRA_ARCHIVES (.big files mounted over the retail archives),
 game.gd's --no-shroud (the live game drawn without its shroud and fog, a view
 setting: the logic keeps its shroud, as mw play reveals the map in BFME2) and
 openbfme_peer's battle log (native/battle.py).
-OpenBFME reads maps only from verified archives and ignores loose map files,
-so each installed map goes into a .big of its own, and the skirmish list's
+The simulation reads maps from archives; preview builders also read user maps.
+Each map installed for a game goes into a .big, and the skirmish list's
 maps\\mapcache.ini (retail's, with the maps' entries added) into another.
 
 Nothing is written into the submodule; everything else stays in local/openbfme/:
@@ -31,8 +31,9 @@ Nothing is written into the submodule; everything else stays in local/openbfme/:
                 files)
     viewer/     the studio's viewer (assemble()): its Godot project, STUDIO
                 (src/mapworkshop/viewer/godot/), with OpenBFME's library and
-                the shaders that library loads (viewer_files()), and what Godot
-                writes there
+                resources from a validated runtime bundle, and what Godot writes
+    runtimes/   immutable bundles of the built engine, resources, Godot, peer
+                and asset metadata (engine_adapter creates; engine_bundle checks)
     assets/     rotwk/ and bfme2/: every archive OpenBFME's policies list
                 (engine/data/retail-archives), hard links to your installs'
                 files where their MD5 matches; OpenBFME refuses mod, patch
@@ -47,9 +48,9 @@ Nothing is written into the submodule; everything else stays in local/openbfme/:
     logs/       build, import and check logs, check-<map>.json;
                 import-<project or viewer>.pending while an import is due
 
-OpenBFME has eight player slots; a map lists its first eight starts. Windows
-only: the toolchain is llvm-mingw's Windows-hosted build. CMake and Ninja
-must be on PATH or in the studio's virtual environment.
+The pinned engine supports up to sixteen starts. Windows only: source builds
+use llvm-mingw, CMake and Ninja. Set openbfme_bundle to a packaged runtime to
+use its binaries and metadata without fetching or building engine source.
 """
 import filecmp
 import hashlib
@@ -66,6 +67,7 @@ import zipfile
 from pathlib import Path
 
 from mapworkshop.config import LOCAL, ROOT, base_game_dir, setting
+from mapworkshop.native import engine_adapter, engine_bundle
 
 SOURCE = Path(__file__).resolve().parent/'openbfme-godot'
 HOME = LOCAL/'openbfme'
@@ -82,9 +84,9 @@ LLVM_MINGW_SHA256 = '317492c456aa27ee607a5919f1d2d38dcdc1112516a24d0bf4b00d078f5
 GODOT = 'Godot_v4.7.2-stable_win64'
 GODOT_URL = f'https://github.com/godotengine/godot/releases/download/4.7.2-stable/{GODOT}.exe.zip'
 GODOT_SHA256 = '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953'          # GitHub's digest
-DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'      # in PROJECT and VIEWER: openbfme.gdextension's res://bin/...
+DLL = engine_adapter.DLL
 GENERATED = ('.godot', 'bin')                                 # the folders Godot and the build write in PROJECT and VIEWER
-SHADERS = ('terrain', 'water_standing', 'road', 'river', 'ground_cover')      # what OpenBFME's library loads by path: res://shaders/<name>.gdshader
+BUNDLE_MARKER = '.studio-runtime.json'
 LFS_OFF = ('-c', 'filter.lfs.process=', '-c', 'filter.lfs.clean=cat', '-c', 'filter.lfs.smudge=cat', '-c', 'filter.lfs.required=false')
 FILES = 'https://workshop-files.bfmeladder.com'      # aio_install.gd's FILES: <owner>/<md5>
 INSTALL = {'rotwk': 'ROTWK_INSTALL', 'bfme2': 'BFME2_INSTALL'}
@@ -113,6 +115,8 @@ def _git(*args, cwd=ROOT):
 
 def recorded():
     """The commit the studio records for the submodule (its entry in the index), or None."""
+    if not (ROOT/'.git').exists():
+        return None                    # a source ZIP can consume a prebuilt runtime without Git
     entry = _git('ls-files', '--stage', '--', SOURCE.relative_to(ROOT).as_posix())
     return entry.split()[1] if entry.startswith('160000 ') else None
 
@@ -211,6 +215,14 @@ def _program(name):
 def is_built():
     """Whether the GDExtension in PROJECT is built for the submodule's commit (and its uncommitted engine changes) and
     the toolchain: build() then compiles nothing."""
+    if setting('openbfme_bundle') not in (None, '', 'source'):
+        try:
+            bundle = configured_bundle()
+            return (PROJECT/DLL).is_file() and engine_bundle.digest(PROJECT/DLL) == bundle.data['groups']['game'][DLL]['sha256']
+        except RuntimeError:
+            return False
+    if (PROJECT/BUNDLE_MARKER).exists():
+        return False                 # switching back from a bundle must restore the source-built binaries
     stamp = BUILD/'stamp.txt'
     return stamp.exists() and stamp.read_text(encoding='utf-8') == _stamp() and (PROJECT/DLL).exists()
 
@@ -286,16 +298,23 @@ def build(progress=print):
     """Bring PROJECT up to date with the submodule's godot/ (mirror()), build the GDExtension into its bin/ and the
     headless openbfme_peer (mw battle), and import it, unless already done for this commit (and its uncommitted engine
     changes) and toolchain. Returns Godot's (window, console) executables."""
+    if bundle := configured_bundle():
+        LOGS.mkdir(parents=True, exist_ok=True)
+        gui, console = bundle.file('tools', 'godot.exe'), bundle.file('tools', 'godot.console.exe')
+        files = bundle.files('game') | {BUNDLE_MARKER: bundle.root/engine_bundle.MANIFEST}
+        _import(PROJECT, console, mirror(PROJECT, files), 'the Godot project', progress)
+        return gui, console
     source(progress)
     llvm, gui, console = toolchain(progress)
     BUILD.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(parents=True, exist_ok=True)
     files = {name.removeprefix('godot/'): SOURCE/name for name in _git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'godot', cwd=SOURCE).split('\0')
              if name}
+    built = is_built()
     changed = mirror(PROJECT, files)
     stamp = BUILD/'stamp.txt'
-    built = is_built()
     if not built:
+        stamp.unlink(missing_ok=True)
         _compile(llvm, progress)
     _import(PROJECT, console, changed or not built, 'the Godot project', progress)
     if not built:
@@ -303,23 +322,52 @@ def build(progress=print):
     return gui, console
 
 
-def viewer_files():
-    """{path in VIEWER: the file it copies}: the studio's Godot project (STUDIO), and of OpenBFME its library (the
-    .gdextension and the built DLL) and the SHADERS it loads by path, with the files they include."""
+def configured_bundle():
+    """An explicitly configured prebuilt runtime, validated against this checkout's pin."""
+    value = setting('openbfme_bundle')
+    if value in (None, '', 'source'):
+        return None
+    path = Path(value).expanduser()
+    return engine_bundle.load(path if path.is_absolute() else ROOT/path, expected_revision=recorded())
+
+
+def runtime_bundle(executables=None, destination=None):
+    """Package the built pin once, or consume a configured bundle without a compiler.
+
+The content-addressed cache stays in local/openbfme/runtimes/. A destination
+exports a new directory. Source resource paths are confined to engine_adapter.
+"""
+    if bundle := configured_bundle():
+        if destination is None:
+            return bundle
+        return engine_bundle.create(HOME/'runtimes', {g: bundle.files(g) for g in bundle.data['groups']},
+                                    revision=bundle.revision, source_stamp=bundle.data['engine']['source_stamp'],
+                                    methods=bundle.data['methods'], destination=destination)
+    if not is_built():
+        raise RuntimeError('Build the engine before packaging it: mw engine package')
+    if executables is None:
+        executables = (TOOLS/GODOT/f'{GODOT}.exe', TOOLS/GODOT/f'{GODOT}_console.exe')
+    files = _git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'godot', cwd=SOURCE).split('\0')
+    return engine_adapter.package(SOURCE, PROJECT, peer(), executables, files, HOME/'runtimes',
+                                  revision=_git('rev-parse', 'HEAD', cwd=SOURCE), source_stamp=_stamp(),
+                                  destination=destination)
+
+
+def peer():
+    """The headless game executable belonging to the selected runtime."""
+    if bundle := configured_bundle():
+        return bundle.file('tools', 'openbfme_peer.exe')
+    return BUILD/'openbfme_peer.exe'
+
+
+def viewer_files(bundle=None):
+    """Compose Studio's project with a validated runtime's viewer projection."""
     files = {p.relative_to(STUDIO).as_posix(): p for p in sorted(STUDIO.rglob('*'))
              if p.is_file() and not set(GENERATED) & set(p.relative_to(STUDIO).parts)}
     files.update({f'labs/grass/{p.relative_to(GRASS_LAB).as_posix()}': p for p in sorted(GRASS_LAB.rglob('*'))
                   if p.is_file() and not set(GENERATED) & set(p.relative_to(GRASS_LAB).parts)})
-    library = {'openbfme.gdextension': SOURCE/'godot'/'openbfme.gdextension', DLL: PROJECT/DLL}
-    shaders = [f'shaders/{name}.gdshader' for name in SHADERS]
-    while shaders:
-        name = shaders.pop()
-        if name not in library:
-            library[name] = SOURCE/'godot'/name
-            shaders += re.findall(r'#include\s+"res://([^"]+)"', library[name].read_text(encoding='utf-8'))
-    for name in ['scripts/ground_cover.gd', 'assets/natural_ground/profiles.json',
-                 'assets/natural_ground/turf_detail.png', 'assets/natural_ground/turf_detail.png.import']:
-        library[name] = SOURCE/'godot'/name
+    bundle = bundle or runtime_bundle()
+    library = bundle.files('viewer') | {'studio_runtime.json': bundle.root/engine_bundle.MANIFEST}
     if clash := sorted(files.keys() & library.keys()):
         raise RuntimeError(f'The studio\'s Godot project has files of OpenBFME\'s: {", ".join(clash)}')
     return files | library
@@ -329,7 +377,8 @@ def assemble(progress=print):
     """The studio's viewer in VIEWER: OpenBFME built (build()), viewer_files() brought up to date there (mirror()) and
     imported when they changed. Returns Godot's (window, console) executables."""
     gui, console = build(progress)
-    _import(VIEWER, console, mirror(VIEWER, viewer_files()), 'the studio\'s viewer', progress)
+    bundle = runtime_bundle((gui, console))
+    _import(VIEWER, console, mirror(VIEWER, viewer_files(bundle)), 'the studio\'s viewer', progress)
     return gui, console
 
 
@@ -367,8 +416,11 @@ def required():
     """{game: [(path, md5, size)]}: every archive of OpenBFME's English policies,
     and RotWK's cursors (pinned in the launcher's download list)."""
     files = {}
+    bundle = configured_bundle()
     for game, name in POLICY.items():
-        policy = json.loads((SOURCE/f'engine/data/retail-archives/{name}-english-archives.json').read_text(encoding='utf-8'))
+        path = (bundle.file('metadata', f'{name}-english-archives.json') if bundle
+                else SOURCE/f'engine/data/retail-archives/{name}-english-archives.json')
+        policy = json.loads(path.read_text(encoding='utf-8'))
         files[game] = [(a['path'], a['md5'], a['size']) for a in policy['archives']]
     _, pinned = pins()['rotwk']
     files['rotwk'] += [f for f in pinned if f[0].lower().startswith('data/cursors/')]
@@ -377,7 +429,10 @@ def required():
 
 def pins(text=None):
     """{game: (owner, [(path, md5, size)])} from the launcher's aio_pins.gd."""
-    text = text if text is not None else (SOURCE/'launcher/scripts/core/aio_pins.gd').read_text(encoding='utf-8')
+    if text is None:
+        bundle = configured_bundle()
+        path = bundle.file('metadata', 'aio_pins.gd') if bundle else SOURCE/'launcher/scripts/core/aio_pins.gd'
+        text = path.read_text(encoding='utf-8')
     found = {}
     for block in text.split('{"key": "')[1:]:
         key = block.split('"', 1)[0]
@@ -722,6 +777,13 @@ def check(project, progress=print, download=False, seconds=5, timeout=600):
 
 def status():
     """(ready, text) for `mw doctor`."""
+    try:
+        bundle = configured_bundle()
+    except RuntimeError as error:
+        return False, str(error)
+    if bundle:
+        ready = (ASSETS/'rotwk'/'_patch201maps.big').exists()
+        return ready, f'runtime {bundle.revision[:8]} at {bundle.root}' + ('' if ready else '; game files not gathered yet')
     if not (SOURCE/'engine').exists():
         return False, 'not set up: the first `mw play --godot` fetches and builds it'
     if not (PROJECT/DLL).exists():
