@@ -70,6 +70,27 @@ class CompanionTests(unittest.TestCase):
         self.send(event('move', 450, 400), event('move', 500, 400), event('release', 500, 400))
         self.assertEqual(self.saved(), [dict(id=1, kind='circle', points=[[400.0, 400.0]], radius=100.0)])
 
+    def test_test_mode_runs_the_map_packed_as_the_viewer_started(self):
+        tmp = self.map_path.parent
+        (tmp/'map mp test').mkdir()
+        shown = tmp/'map mp test'/'map mp test.map'
+        shown.write_bytes(b'the build')
+        self.data.update(map='map mp test', user_map=True, user_map_folder=str(tmp))
+        with mock.patch.object(godot_link.openbfme, 'pack_for_test', return_value=['a.big']) as pack:
+            self.assertEqual(self.companion.pack_for_test(), ['a.big'])
+        pack.assert_called_once_with(shown, 'map mp test', 'Test')
+        replies = self.send(dict(type='command', name='test_mode', camera=EDIT))
+        self.assertEqual(replies[0]['type'], 'test_mode')
+        self.assertEqual(replies[0]['map'], 'map mp test')
+        self.assertEqual([s['player'] for s in replies[0]['slots']], ['Player_1', 'Player_2'])
+        self.assertIsNone(self.companion.restart)
+        shown.write_bytes(b'a new build')                    # since the viewer started: it starts again
+        self.companion.prepare = mock.MagicMock()             # a companion that can prepare the map again
+        replies = self.send(dict(type='command', name='test_mode', camera=EDIT, views=dict(grid=True)))
+        self.assertEqual([r['type'] for r in replies], ['toast', 'quit'])
+        self.assertEqual(self.companion.restart['views'], dict(grid=True))
+        self.assertIn('target=400,300', self.companion.restart['view'])
+
     def test_a_press_without_a_tool_or_a_mark_is_left_to_the_camera(self):
         self.assertEqual(self.send(event('press', 400, 400))[0], dict(type='press_result', handled=False, seq=7))
 

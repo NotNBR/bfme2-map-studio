@@ -1,0 +1,12 @@
+id = "path-lab"
+title = "Path Lab"
+native_name = "map mp path lab"
+players = 2
+description = "Test map: four lanes, each blocked by a different obstacle, to watch the paths units take in the viewer's Test mode."
+weather = "clear"   # clear, haze, rain, snow, dusk (mapworkshop.mapkit.weather)
+
+[play]
+slots = [
+    {faction = "Men", team = 1},        # you: every unit on the map
+    {faction = "Mordor", team = 2, ai = "easy"},
+]

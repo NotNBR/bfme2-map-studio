@@ -63,6 +63,7 @@ To the viewer:
     toast {kind, title, detail, seconds}, window {minimized}
 """
 
+import hashlib
 import json
 import os
 import socket
@@ -76,13 +77,14 @@ from mapworkshop import project
 from mapworkshop.config import save_setting, setting
 from mapworkshop.formats.map import Map
 from mapworkshop.mapkit.weather import preview_choices, preview_labels
+from mapworkshop.native import openbfme
 from mapworkshop.render import godot
 from mapworkshop.render.godot import OWN
 from mapworkshop.viewer import jobs
 from mapworkshop.viewer import marks as marklib
 from mapworkshop.viewer.jobs import MarksSummary
 from mapworkshop.viewer.marking import MarkEditor, summary_lines
-from mapworkshop.viewer.views import THUMBNAIL, Views, edit_spec, photo_spec, render_command
+from mapworkshop.viewer.views import THUMBNAIL, Views, edit_spec, photo_spec, render_command, render_words
 
 POLL = 0.25            # seconds between looks at the socket and the build
 
@@ -326,6 +328,8 @@ class Companion:
         self.opening_properties = False       # its window is being opened (the game's files still loading)
         self.properties_saved = None          # the project its Save wrote, for the serving loop to build
         self.browsed = None                   # the .map file Browse... chose, opened from the serving loop
+        self.packed = None                    # the map packed for Test mode when the viewer started: (name, digest)
+        self.restart = None                   # Test mode asked for on a map changed since: the viewer starts again
         self._show(*prepared)
 
     def _show(self, scene_path, data, owner, surface):
@@ -421,6 +425,8 @@ class Companion:
             out += getattr(self, name)(message)
         elif name == 'properties':
             out += self.open_properties()
+        elif name == 'test_mode':
+            out += self.test_mode(message)
         elif name == 'browse':
             threading.Thread(target=self._browse, args=(self.map_path.parent.parent,), daemon=True).start()
         elif name == 'open_folder':
@@ -533,6 +539,46 @@ class Companion:
             label for key, label in (('limits', "the game's tree limits"), ('units', 'no units'))
             if self.preview[key] != OWN[key]])
         return [dict(type='reload', scene=str(self.scene_path), new_map=False, what=what), self.menu()]
+
+    # Test mode: the map run as a game (the viewer's test_mode.gd) ---------------------------------------------
+    def shown_map(self):
+        """The file of the map the viewer shows when it is a user map (a project's build, a copy); None for a stock
+        map, which the game finds in its own archives."""
+        if not self.data.get('user_map'):
+            return None
+        name = self.data['map']
+        return Path(self.data['user_map_folder'])/name/f'{name}.map'
+
+    def _shown_identity(self):
+        path = self.shown_map()
+        return self.data.get('map'), (hashlib.sha256(path.read_bytes()).hexdigest() if path else None)
+
+    def pack_for_test(self):
+        """The archives the viewer starts with: the map it shows, packed for Test mode (openbfme.pack_for_test)."""
+        path = self.shown_map()
+        self.packed = self._shown_identity()
+        return openbfme.pack_for_test(path, self.data['map'], self.data['title']) if path else []
+
+    def test_mode(self, message):
+        """Test mode: the map to run and its line-up (openbfme.world_slots), when it is the map packed as the viewer
+        started; otherwise (a new build, another map or preview) the viewer is asked to close, and starts again on
+        the map as it is, at its camera, in Test mode (relaunch)."""
+        if self._shown_identity() == self.packed:
+            return [dict(type='test_mode', map=self.data['map'], slots=openbfme.world_slots(self.owner))]
+        if self.prepare is None:
+            return [dict(type='status', text='Test mode runs the map this viewer started with only', seconds=5)]
+        _, spec = self.spec(message['camera'])
+        self.restart = dict(view=render_words(spec), views=message.get('views'))
+        return [dict(type='toast', kind='busy', title='Starting the viewer again for Test mode',
+                     detail='the game runs on the map as it is now', seconds=10), dict(type='quit')]
+
+    def relaunch(self):
+        """The scene for the viewer started again for Test mode (godot_viewer.run): the map shown, at the camera it
+        had, its View switches, Test mode on."""
+        restart, self.restart = self.restart, None
+        self._show(*self.prepare(str(self.map_path), self.preview, view=restart['view'], views=restart['views'],
+                                 extra=dict(test_start=True)))
+        return self.scene_path
 
     # The saved views, which viewer.views keeps ----------------------------------------------------------------
     def views_message(self):

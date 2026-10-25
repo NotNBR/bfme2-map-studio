@@ -35,6 +35,43 @@ class BigTests(unittest.TestCase):
             self.assertFalse((Path(tmp)/'a.big.part').exists())
 
 
+class TestModeTests(unittest.TestCase):
+    def test_the_map_is_packed_with_its_cache_in_a_folder_of_its_own(self):
+        from mapworkshop.mapkit.blank import create, starts
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            folder = tmp/'maps'/'my copy'
+            folder.mkdir(parents=True)
+            m = create(64, 64, 10, title='Mine', player_count=2)
+            starts(m, [(100, 100), (500, 500)])
+            (folder/'my copy.map').write_bytes(m.encode())
+            (folder/'map.ini').write_bytes(b'Weather\nEnd\n')
+            (folder/'notes.txt').write_bytes(b'not packed')
+            retail = openbfme.write_big(tmp/'_patch201maps.big', [('maps/mapcache.ini', b'; retail\r\n')])
+            (tmp/'test'/'old').mkdir(parents=True)
+            with mock.patch.multiple(openbfme, TEST=tmp/'test', ASSETS=tmp/'assets'):
+                (tmp/'assets'/'rotwk').mkdir(parents=True)
+                retail.rename(tmp/'assets'/'rotwk'/'_patch201maps.big')
+                archive, cache = openbfme.pack_for_test(folder/'my copy.map', 'map mp mine', 'Mine')
+            self.assertEqual(set(BigArchive(archive).entries), {'maps/map mp mine/map mp mine.map',
+                                                               'maps/map mp mine/map.ini'})
+            text = BigArchive(cache).read_bytes('maps/mapcache.ini').decode('cp1252')
+            self.assertTrue(text.startswith('; retail'))
+            self.assertIn('MAP_20MP_20MINE_5CMAP_20MP_20MINE_2EMAP'.lower(), text.lower())
+            self.assertFalse((tmp/'test'/'old').exists())                  # no viewer holds it any more
+            self.assertEqual(archive.parent, cache.parent)
+
+    def test_the_line_up_plays_with_every_slot_human(self):
+        seats = [dict(faction='Elves', team=1), dict(faction=None, team=-1), dict(faction='Wild', team=0)]
+        with mock.patch('mapworkshop.native.runtime.lineup', return_value=seats):
+            slots = openbfme.world_slots(object())
+        self.assertEqual(slots, [
+            dict(player='Player_1', faction='FactionElves', human=True, team=1, start_index=0),
+            dict(player='Player_2', faction='FactionMordor', human=True, team=1, start_index=1),
+            dict(player='Player_3', faction='FactionWild', human=True, team=0, start_index=2)])
+        self.assertEqual([s['faction'] for s in openbfme.world_slots(None)], ['FactionMen', 'FactionMordor'])
+
+
 class CacheTests(unittest.TestCase):
     def test_entries_replace_their_key_and_keep_the_rest(self):
         retail = ('; FILE\r\nMapCache maps_5Ca\r\n  numPlayers = 2\r\nEND\r\n\r\n'
