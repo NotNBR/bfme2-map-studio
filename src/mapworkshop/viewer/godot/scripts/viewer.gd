@@ -8,7 +8,7 @@
 ## companion's MarkEditor answers with the marks to draw, the panel and the status. A new build reloads in place.
 ##
 ## Photo mode (V, or the camera bar) swaps the Edit camera for the free one (FlyCamera) with its lens: the exposure
-## and the depth of field over the frame (PhotoEffect), the framing aids, screenshots cropped to the frame. A scene
+## and the depth of field over the frame (ProLensEffect, OpenBFME's pro camera), the framing aids, screenshots cropped to the frame. A scene
 ## view with an aperture or an exposure starts in it, so a screenshot shows what mw render's picture of the view does.
 ##
 ## The scene's views ({key: on}) start the View switches other than they start by default (a screenshot of an overlay).
@@ -41,6 +41,7 @@ const VIEWS := [
 	["flow", "River flow arrows (8)", false, "overlays", "Analysis"],
 	["fog", "Fog, rain and snow (6)", true, "atmosphere", "Effects"],
 	["clouds", "Cloud shadows", true, "atmosphere", "Effects"]]
+const ProLensEffect := preload("res://scripts/pro_lens_effect.gd")   # the pinned engine's (engine_adapter.RESOURCES)
 const COPY_VIEWS := ["units", "limits"]       # the switches the map's copy carries (render.godot.preview_map)
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
@@ -67,12 +68,12 @@ var _mode := "edit"           # "edit": the orbit camera; "photo": the free came
 var _test: TestMode           # the game in Test mode
 var _right_at := Vector2.INF  # where a right press was, in Test mode: a click there is an order
 var _fly: FlyCamera
-var _photo: PhotoEffect
+var _photo: ProLensEffect
 var _captured := false        # Photo mode has the mouse: moving it looks around
 var _sliding := false         # a right drag in Photo mode
 var _thirds := false
 var _frame_choice := "free"   # the frame's aspect (Lens.FRAMES)
-var _focus_request := 0       # the PhotoEffect distance request being waited for (focus on the centre)
+var _focus_request := 0       # the lens effect's distance request being waited for (focus on the centre)
 var _shots := []              # the scene's shots still to take
 var _shot_wait := 0           # frames until the current shot is saved
 var _shot_failed := false
@@ -180,7 +181,7 @@ func _build_stage() -> void:
 	add_child(_world_env)
 	_camera = Camera3D.new()
 	add_child(_camera)
-	_photo = PhotoEffect.new()
+	_photo = ProLensEffect.new()
 	_photo.enabled = false
 	var layer := CanvasLayer.new()
 	for view in VIEWS:
@@ -601,11 +602,11 @@ func _process_photo(delta: float) -> void:
 	_photo.aperture = _fly.aperture
 	_photo.focus = _fly.focus
 	_photo.ev = _fly.ev
-	_photo.sensor_width = _fly.sensor_width(aspect)
-	PhotoEffect.keep_last(_camera, _photo)
+	_photo.image_mm = _fly.sensor_width(aspect)
+	ProLensEffect.attach(_camera, _photo)
 	if _focus_request > 0 and _photo.answered >= _focus_request:
+		var d := _photo.distance_of(_focus_request)
 		_focus_request = 0
-		var d := _photo.distance
 		if is_nan(d) or d <= 0.0 or d >= FlyCamera.FAR * 0.99:
 			_status("Nothing at the centre of the view to focus on", 3)
 		else:

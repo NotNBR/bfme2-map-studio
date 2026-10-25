@@ -1,16 +1,14 @@
-## Photo mode's lens, as render/photo.py works it out (its docstring has the reasoning): a full-frame camera, 36 x 24
-## mm; a frame of aspect 3:2 or wider is 36 mm wide on it, a narrower one 24 mm tall, and a focal length frames it
-## with a horizontal field of view of 2 atan(w / 2f). Depth of field is the thin lens, with UNITS_PER_METRE map units
-## to the metre. The presets and the frames are kept here and nowhere else
-## (render/photo.py keeps the lens maths for mw render's views).
+## Photo mode's lens: the maths is OpenBFME's pro camera (Pro, the engine's scripts/pro_lens.gd, which the assembly
+## brings from the pinned engine; its docs/PRO_CAMERA.md has the model), and this keeps what is Photo mode's own: the
+## presets, the frames and the texts. render/photo.py repeats the maths for mw render's views in Python
+## (test_photo checks it against Pro's constants).
 class_name Lens
 extends RefCounted
 
-const SENSOR := Vector2(36.0, 24.0)       # mm, full frame
-const UNITS_PER_METRE := 10.0
+const Pro := preload("res://scripts/pro_lens.gd")
+const SENSOR := Pro.SENSOR                # mm, full frame
+const UNITS_PER_METRE := Pro.UNITS_PER_METRE
 const FOCAL_RANGE := Vector2(10.0, 600.0)
-const MAX_BLUR := 0.06                    # the largest blur circle's diameter, as a share of the image width
-const SHARP := 1.0 / 1500.0               # the blur counted as sharp, as a share of the frame's diagonal
 const FOCAL_STEP := 1.12                  # focal length factor per wheel notch
 const FOCUS_STEP := 1.15                  # focus distance factor per wheel notch
 
@@ -23,37 +21,28 @@ const FOCUS_DISTANCES := [50, 100, 200, 500, 1000, 2000, 5000]
 const EXPOSURES := [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0]
 
 
-## The largest frame of `aspect` on the sensor, in mm.
 static func sensor(aspect: float) -> Vector2:
-	return Vector2(SENSOR.x, SENSOR.x / aspect) if aspect >= SENSOR.x / SENSOR.y else Vector2(SENSOR.y * aspect, SENSOR.y)
+	return Pro.sensor(aspect)
 
 
-## An image of `aspect` holding a centred frame of aspect `frame` (0: the image is the frame), in mm on the sensor's
-## scale.
 static func image_size(aspect: float, frame: float) -> Vector2:
-	if frame <= 0.0:
-		return sensor(aspect)
-	var f := sensor(frame)
-	return Vector2(f.x, f.x / aspect) if aspect <= frame else Vector2(f.y * aspect, f.y)
+	return Pro.image_size(aspect, frame)
 
 
 static func fov_from_focal(focal: float, width: float = SENSOR.x) -> float:
-	return 2.0 * rad_to_deg(atan(width / 2.0 / focal))
+	return Pro.fov_from_focal(focal, width)
 
 
 static func focal_from_fov(fov: float, width: float = SENSOR.x) -> float:
-	return width / 2.0 / tan(deg_to_rad(fov) / 2.0)
+	return Pro.focal_from_fov(fov, width)
 
 
-## (near, far) map units between which the blur stays under SHARP of a frame of `aspect`'s diagonal; far is INF at and
-## beyond the hyperfocal distance.
 static func sharp_range(focus: float, focal: float, aperture: float, aspect: float) -> Vector2:
-	var c := sensor(aspect).length() * SHARP
-	var s := maxf(focus / UNITS_PER_METRE * 1000.0, focal * 1.001)
-	var hyperfocal := focal * focal / (aperture * c) + focal
-	var near := s * (hyperfocal - focal) / (hyperfocal + s - 2.0 * focal)
-	var far := s * (hyperfocal - focal) / (hyperfocal - s) if s < hyperfocal else INF
-	return Vector2(near, far) / 1000.0 * UNITS_PER_METRE
+	return Pro.sharp_range(focus, focal, aperture, aspect)
+
+
+static func frame_rect(size: Vector2i, ratio: float) -> Rect2i:
+	return Pro.frame_rect(size, ratio)
 
 
 static func frame_ratio(frame: String) -> float:
@@ -61,17 +50,6 @@ static func frame_ratio(frame: String) -> float:
 		if f[0] == frame:
 			return f[2]
 	return 0.0
-
-
-## The frame of aspect `ratio` centred in a window `size` (the whole window for 0), in pixels.
-static func frame_rect(size: Vector2i, ratio: float) -> Rect2i:
-	if ratio <= 0.0:
-		return Rect2i(Vector2i.ZERO, size)
-	if float(size.x) / size.y > ratio:
-		var fw := roundi(size.y * ratio)
-		return Rect2i((size.x - fw) / 2, 0, fw, size.y)
-	var fh := roundi(size.x / ratio)
-	return Rect2i(0, (size.y - fh) / 2, size.x, fh)
 
 
 static func aperture_text(aperture: float) -> String:

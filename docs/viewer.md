@@ -150,7 +150,10 @@ The **camera bar** along the bottom holds, from the left:
   sun and the view switches `mw render` has (objects, fog, grid, border,
   walkable, flow). Hidden water is the one setting it cannot carry. Saved
   views keep the camera only.
-- In Photo mode, the lens ([render/photo.py](../src/mapworkshop/render/photo.py)):
+- In Photo mode, the lens, OpenBFME's pro camera (the engine's
+  `godot/scripts/pro_lens.gd` and `pro_lens_effect.gd`, brought from the pinned
+  engine by [engine_adapter.py](../src/mapworkshop/native/engine_adapter.py); the
+  studio keeps no copy, so a fix there reaches the viewer with the next engine pin):
   **focal length** (mm on a full-frame 36 x 24 mm sensor; 39 mm is Edit's 50
   degrees), **aperture** (f/ - is everything sharp; an f-number blurs what is
   nearer or further than the focus), **focus** distance along the view, and

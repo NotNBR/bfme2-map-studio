@@ -24,19 +24,12 @@ aperture-priority auto exposure; `ev` is the exposure compensation.
 Exposure multiplies the linear colour by 2^ev, so it brightens or darkens; it
 cannot bring back highlights that were white.
 
-The viewer draws both effects over the finished frame
-(viewer/godot/shaders/photo.glsl): each pixel's blur circle is worked out from
-its depth. Two small passes find how far blur reaches around each pixel: the
-largest blur in each TILE x TILE tile, then the largest of the tiles it can
-reach (MAX_BLUR, 6% of the width, is the most). The blur is Dennis
-Gustafsson's single pass ("Bokeh depth of field in a single pass", 2018):
-over a disc as large as that reach, every sample
-whose own circle reaches the pixel joins a running average with equal weight,
-and one that does not adds the average so far. So a blurred foreground spreads
-over a sharp background, its outline soft, while a sample behind the pixel
-counts with at most twice the pixel's own circle, so a sharp foreground keeps
-its edge. The disc's sample pattern turns per pixel, which trades the repeated
-copies a fixed pattern gives in large blur for fine grain.
+This is OpenBFME's pro camera model (the engine's godot/scripts/pro_lens.gd;
+its docs/PRO_CAMERA.md has the method). The viewer draws both effects with the
+engine's own effect (pro_lens_effect.gd, which the viewer's assembly brings
+from the pinned engine), so blur and exposure are fixed there, once. This module
+repeats only the lens maths, which mw render needs in Python to work out a
+view's camera; the tests check its constants against pro_lens.gd's.
 """
 
 import math

@@ -1,5 +1,6 @@
 """render.photo and the photo keys of render.camera views, without a GL context."""
 import math
+import re
 import unittest
 
 import numpy as np
@@ -103,6 +104,22 @@ class ViewKeyTests(unittest.TestCase):
     def test_unknown_keys_are_refused(self):
         with self.assertRaises(ValueError):
             parse_view('target=0,0 bokeh=5'.split())
+
+
+class ProLensTests(unittest.TestCase):
+    def test_the_constants_are_the_pinned_engines(self):
+        from mapworkshop.native.openbfme import SOURCE
+        from mapworkshop.render import photo
+        script = SOURCE/'godot'/'scripts'/'pro_lens.gd'
+        if not script.is_file():
+            self.skipTest('needs the OpenBFME submodule checked out')
+        text = script.read_text(encoding='utf-8')
+        value = lambda name: re.search(rf'^const {name} := (.+?)\s*(#|$)', text, re.M)[1]
+        self.assertEqual(value('SENSOR'), 'Vector2(%s, %s)' % photo.SENSOR)
+        self.assertEqual(float(value('UNITS_PER_METRE')), photo.UNITS_PER_METRE)
+        self.assertEqual(float(value('MAX_BLUR')), photo.MAX_BLUR)
+        self.assertEqual(value('SHARP'), '1.0 / 1500.0')
+        self.assertEqual(photo.SHARP, 1/1500)
 
 
 if __name__ == '__main__':

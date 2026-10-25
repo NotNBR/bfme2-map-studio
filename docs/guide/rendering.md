@@ -80,7 +80,8 @@ cell.
 | `ev=` | 0 | Exposure in stops: brighter above 0, darker below |
 
 The last four are photo effects the game does not have
-([render/photo.py](../../src/mapworkshop/render/photo.py) has the lens); the viewer's Photo
+(OpenBFME's pro camera draws them; [render/photo.py](../../src/mapworkshop/render/photo.py)
+has its lens maths for working out the view); the viewer's Photo
 mode writes them, and **Copy view** gives a `mw render` command with them
 ([saved views](../viewer.md#photo-mode-and-the-camera-bar)). Depth of field
 counts 10 map units to the metre, so a real lens's blur: focused across the

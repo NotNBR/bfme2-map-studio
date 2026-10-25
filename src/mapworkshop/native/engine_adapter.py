@@ -11,7 +11,8 @@ from mapworkshop.native import engine_bundle
 
 DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'
 SHADERS = ('terrain', 'water_standing', 'road', 'river', 'ground_cover')
-RESOURCES = ('scripts/ground_cover.gd', 'assets/natural_ground/profiles.json',
+RESOURCES = ('scripts/ground_cover.gd', 'scripts/pro_lens.gd', 'scripts/pro_lens_effect.gd',   # Photo mode's lens
+             'assets/natural_ground/profiles.json',
              'assets/natural_ground/turf_detail.png', 'assets/natural_ground/turf_detail.png.import')
 
 
