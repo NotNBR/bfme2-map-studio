@@ -275,7 +275,7 @@ def _import(project, console, changed, label, progress=print):
         log = LOGS/f'import-{project.name}.log'
         log.write_text(result.stdout + result.stderr, encoding='utf-8')
         raise RuntimeError(f'Godot could not import {label}; see {log}')
-    due.unlink()
+    due.unlink(missing_ok=True)
 
 
 def build(progress=print):
