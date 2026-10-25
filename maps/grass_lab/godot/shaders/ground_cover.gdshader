@@ -94,14 +94,22 @@ void vertex() {
  float tip=UV.y;
  litter_uv=vec2(0.0,tip);
  leaf_detail=leaf*litter;
- // Most stems are short and fairly upright; minority shapes curl, droop or rise in tufts.
+ // Height has its own distribution, independent of curl and blade colour.
+ // Local growth patches favour taller tufts, while each stem keeps its own height.
  float species=hash21(seed+vec2(72.1,16.8));
- float curled=step(0.62,species)*(1.0-step(0.86,species));
- float tall=step(0.94,species);
+ float stature=hash21(seed+vec2(213.7,54.2));
+ float tuft=smoothstep(0.38,0.70,noise(ground_xy*0.12+vec2(83.1,17.6)));
+ float tall=step(mix(0.98,0.72,tuft),stature);
+ float low=1.0-step(0.36,stature);
+ float curled=step(0.62,species)*(1.0-step(0.86,species))*(1.0-tall);
  float droop=step(0.86,species)*(1.0-tall);
  float verge=grass_verge(ground_xy,guide.a);
- float height=mix(0.55,1.45,r2)*(1.0+curled*0.45+droop*0.65+tall*1.65);
- height*=mix(0.28,1.0,verge)*blade_height_scale;
+ float height=mix(0.95,2.10,r2);
+ height=mix(height,mix(0.30,0.85,r2),low);
+ height=mix(height,mix(2.60,4.60,r2),tall);
+ float growth=mix(0.72,1.18,noise(ground_xy*0.045+vec2(32.8,91.4)));
+ float root_variation=mix(0.88,1.12,hash21(group_seed+61.3));
+ height*=growth*root_variation*mix(0.28,1.0,verge)*blade_height_scale;
  float width=mix(0.10,0.23,hash21(seed+8.6))*(1.0+curled*0.35);
  if(field_fade_enabled) width*=mix(1.65,1.0,smoothstep(3.0,9.0,grass_pixels(depth)));
  float angle=hash21(seed+3.4)*6.283185;
