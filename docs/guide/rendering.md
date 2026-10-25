@@ -34,6 +34,29 @@ settings).
 To render single objects or a collage of them, see `mw item` and `mw items` in
 [finding assets](finding-assets.md#looking-mw-item-and-mw-items).
 
+## Local art packs
+
+Set a top-level `asset_packs` list in `local/config.toml` to use replacement
+W3D models and their textures in Studio, `mw render`, and OpenBFME game
+launches. Paths are absolute or relative to the Studio checkout; later packs
+override earlier ones. Restart Studio after changing the list.
+
+```toml
+asset_packs = ["local/asset-packs/bfme2-hd-1.1"]
+```
+
+Each folder contains loose `.w3d`, `.dds`, `.tga`, `.png` or `.jpg` files.
+Names match the original model or texture regardless of subfolder and case;
+keep only one texture per name. These packs affect rendered art; UI textures
+and gameplay rules remain the map's and game's own. Terrain albedo and normal
+replacements require a terrain-capable engine runtime; the original pinned
+runtime supports model art only. Such a runtime retains map tile coordinates
+and blend masks, with replacement images at 1x, 2x or 4x their source size.
+Normal-map packs change surface lighting, without replacing colour textures.
+An empty
+list disables the packs. Download art separately from its authors and keep
+it under `local/`; it is not part of the Studio repository.
+
 ## Cameras
 
 `--view NAME KEY=VALUE...` specs are plain preview cameras. World units: X

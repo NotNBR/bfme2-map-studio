@@ -236,6 +236,7 @@ def scene(name, view=None, *, probes=(), shots=(), size=SIZE, check=False, port=
     if preview != OWN:
         shown, user_map = preview_map(map_path, native, **preview), True
     data = dict(map=shown, user_map=user_map, title=owner.title if owner else native, map_path=str(map_path),
+                asset_packs=openbfme.asset_packs(),
                 preview=preview,
                 user_map_folder=str(openbfme.user_maps()) if user_map else '', size=list(size),
                 surface=dict(file='surface.f32', columns=surface.heights.shape[1], rows=surface.heights.shape[0],

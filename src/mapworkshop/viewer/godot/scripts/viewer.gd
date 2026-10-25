@@ -242,6 +242,12 @@ func _open_map() -> void:
 	if not mount.ok:
 		_fail("mounting the game's files failed: " + "; ".join(mount.errors))
 		return
+	var packs: Dictionary = _fs.set_asset_packs(PackedStringArray(_scene.get("asset_packs", [])))
+	if not packs.ok:
+		_fail("loading asset packs failed: " + "; ".join(packs.errors))
+		return
+	if not packs.packs.is_empty():
+		print("VIEWER asset packs: %s (%d models, %d textures)" % [", ".join(packs.packs), packs.models, packs.textures])
 	if _scene.user_map and not _same_folder(String(mount.get("user_map_folder", "")), String(_scene.user_map_folder)):
 		_fail("OpenBFME's user maps folder is %s, the studio installed the map in %s" % [
 			mount.get("user_map_folder", ""), _scene.user_map_folder])

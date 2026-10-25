@@ -650,6 +650,21 @@ def world_slots(project):
 
 
 # Running it ---------------------------------------------------------------------------
+def asset_packs():
+    """Local cosmetic art folders, shared by the Studio viewer and game launches."""
+    folders = setting('asset_packs', [])
+    if not isinstance(folders, list) or any(not isinstance(folder, str) for folder in folders):
+        raise ValueError('asset_packs must be a list of folder paths in local/config.toml')
+    paths = []
+    for folder in folders:
+        path = Path(folder).expanduser()
+        path = path if path.is_absolute() else ROOT/path
+        if not path.is_dir():
+            raise ValueError(f'Asset pack folder does not exist: {path}')
+        paths.append(str(path.resolve()))
+    return paths
+
+
 def environment(archives):
     env = dict(os.environ, APPDATA=str(APPDATA), OPENBFME_EXTRA_ARCHIVES=';'.join(str(a) for a in archives))
     env.update({variable: str(ASSETS/game) for game, variable in INSTALL.items()})
@@ -738,6 +753,7 @@ def play(project, progress=print, download=False, fog=False, record=False, setti
     main menu, with the maps packed before. Returns the process."""
     gui, _, env, key = prepare(project, progress, download)
     args = [str(gui), '--path', str(PROJECT), '--', '--no-intro', '--no-update-check', '--free-camera']
+    args += [f'--asset-pack={folder}' for folder in asset_packs()]
     if settings is not None:
         values = test_settings(settings)
         apply_test_display(values)
@@ -761,7 +777,8 @@ def check(project, progress=print, download=False, seconds=5, timeout=600):
     progress(f'Starting a headless OpenBFME skirmish on {project.title}...')
     started = time.time()
     result = subprocess.run([str(console), '--headless', '--path', str(PROJECT), '--', '--auto', f'--map={key}',
-                             f'--advance={seconds}', '--no-intro', '--no-update-check'], env=env, cwd=HOME,
+                             f'--advance={seconds}', '--no-intro', '--no-update-check',
+                             *[f'--asset-pack={folder}' for folder in asset_packs()]], env=env, cwd=HOME,
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
     log = LOGS/f'check-{project.id}.log'
     log.parent.mkdir(parents=True, exist_ok=True)
