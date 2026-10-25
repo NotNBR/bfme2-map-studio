@@ -190,6 +190,8 @@ func _build_stage() -> void:
 		_frame.toolbar.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
 		_frame.toolbar.test_game_chosen.connect(
 			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
+		_frame.toolbar.test_settings_chosen.connect(
+			func(settings: Dictionary) -> void: _send({"type": "command", "name": "test_settings", "settings": settings}))
 		_frame.toolbar.view_switched.connect(_switch_view)
 		_frame.toolbar.preview_chosen.connect(_preview)
 		_frame.toolbar.action.connect(_toolbar_action)

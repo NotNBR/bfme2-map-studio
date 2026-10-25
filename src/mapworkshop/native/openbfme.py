@@ -627,7 +627,46 @@ def net_slots(project):
                     f'{s["start"]}:{s["team"]}' for s in seats)
 
 
-def play(project, progress=print, download=False, fog=False, record=False):
+TEST_DEFAULTS = dict(resolution='saved', window_mode='saved', grass=True, ground_detail=True, fog=False)
+TEST_RESOLUTIONS = ('saved', '1280x720', '1920x1080', '2560x1440', '3840x2160')
+TEST_WINDOW_MODES = ('saved', 'windowed', 'borderless')
+
+
+def test_settings(values=None):
+    """Validated toolbar launch preferences; unknown keys never become command-line arguments."""
+    values = values if isinstance(values, dict) else {}
+    result = dict(TEST_DEFAULTS)
+    for key, choices in [('resolution', TEST_RESOLUTIONS), ('window_mode', TEST_WINDOW_MODES)]:
+        if values.get(key) in choices:
+            result[key] = values[key]
+    for key in ('grass', 'ground_detail', 'fog'):
+        if type(values.get(key)) is bool:
+            result[key] = values[key]
+    return result
+
+
+def apply_test_display(values):
+    """Update only chosen display fields in the isolated Godot game's saved settings."""
+    import configparser
+    chosen = {key: values[key] for key in ('resolution', 'window_mode') if values[key] != 'saved'}
+    if not chosen:
+        return
+    path = APPDATA/'Godot'/'app_userdata'/'OpenBFME'/'openbfme-display.cfg'
+    config = configparser.ConfigParser(interpolation=None)
+    if path.exists():
+        config.read(path, encoding='utf-8')
+    if not config.has_section('display'):
+        config.add_section('display')
+    for key, value in chosen.items():
+        config.set('display', key, '"' + value + '"')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.cfg.tmp')
+    with temporary.open('w', encoding='utf-8') as output:
+        config.write(output, space_around_delimiters=False)
+    temporary.replace(path)
+
+
+def play(project, progress=print, download=False, fog=False, record=False, settings=None):
     """Start OpenBFME straight in a skirmish on the project's map, as mw play
     starts the game: its line-up (net_slots()). OpenBFME's LAN host
     (--net-host) seats the slots without the lobby screens and, every slot
@@ -639,6 +678,12 @@ def play(project, progress=print, download=False, fog=False, record=False):
     main menu, with the maps packed before. Returns the process."""
     gui, _, env, key = prepare(project, progress, download)
     args = [str(gui), '--path', str(PROJECT), '--', '--no-intro', '--no-update-check', '--free-camera']
+    if settings is not None:
+        values = test_settings(settings)
+        apply_test_display(values)
+        fog = values['fog']
+        args += ['--ground-cover=' + ('on' if values['grass'] else 'off'),
+                 '--natural-ground=' + ('on' if values['ground_detail'] else 'off')]
     if project is not None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:   # a free port for the host
             s.bind(('127.0.0.1', 0))

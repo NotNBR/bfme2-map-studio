@@ -60,6 +60,12 @@ class CompanionTests(unittest.TestCase):
             out += self.companion.handle(message)
         return out
 
+    def test_quick_settings_are_validated_and_saved(self):
+        with mock.patch.object(godot_link, 'save_setting') as save, \
+                mock.patch.object(self.companion, 'menu', return_value={'type': 'menu'}):
+            self.send(dict(type='command', name='test_settings', settings={'grass': False, 'resolution': '1920x1080', 'extra': 'bad'}))
+        self.assertEqual(save.call_args.args, ('test_settings', dict(openbfme.TEST_DEFAULTS, grass=False, resolution='1920x1080')))
+
     def saved(self):
         return json.loads(marklib.marks_path(self.map_path).read_text(encoding='utf-8'))['marks']
 

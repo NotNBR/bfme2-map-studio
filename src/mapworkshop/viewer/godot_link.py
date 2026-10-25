@@ -441,7 +441,12 @@ class Companion:
             self.build.start(self.owner)
         elif name == 'test':
             choice = setting('test_game', jobs.TEST_GAMES[0])
-            jobs.play(self.owner, self.jobs, choice if choice in jobs.TEST_GAMES else jobs.TEST_GAMES[0], self._played)
+            jobs.play(self.owner, self.jobs, choice if choice in jobs.TEST_GAMES else jobs.TEST_GAMES[0], self._played,
+                      settings=setting('test_settings', {}))
+        elif name == 'test_settings':
+            from mapworkshop.native.openbfme import test_settings
+            save_setting('test_settings', test_settings(message.get('settings')))
+            out.append(self.menu())
         elif name == 'test_game':
             if message.get('choice') in jobs.TEST_GAMES:
                 save_setting('test_game', message['choice'])
@@ -717,9 +722,11 @@ class Companion:
         entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current)
         preview = dict(preview_choices(), current=self.preview,
                        label=' · '.join(preview_labels(self.preview['weather'], self.preview['sun'])))
+        from mapworkshop.native.openbfme import test_settings
         return dict(type='menu', title=self.data['title'], project=self.owner is not None,
                     projects=[entry(*e) for e in own], stock=[entry(*e) for e in stock],
                     test_games=list(jobs.TEST_GAMES), test_game=setting('test_game', jobs.TEST_GAMES[0]),
+                    test_settings=test_settings(setting('test_settings', {})),
                     preview=preview)
 
     def state(self):

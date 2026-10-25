@@ -300,3 +300,35 @@ class DifferencesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class QuickSettingsTests(unittest.TestCase):
+    def test_only_supported_settings_are_accepted(self):
+        values = openbfme.test_settings(dict(resolution='--headless', window_mode='bad', grass='false', fog=True, extra='x'))
+        self.assertEqual(values, dict(openbfme.TEST_DEFAULTS, fog=True))
+
+    def test_display_choices_preserve_other_game_settings(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(openbfme, 'APPDATA', Path(tmp)):
+            path = Path(tmp)/'Godot/app_userdata/OpenBFME/openbfme-display.cfg'
+            path.parent.mkdir(parents=True)
+            path.write_text('[display]\nresolution="2560x1440"\nvsync="on"\nrender_scale=0.75\n', encoding='utf-8')
+            openbfme.apply_test_display(openbfme.test_settings(dict(resolution='1920x1080', window_mode='windowed')))
+            text = path.read_text(encoding='utf-8')
+            self.assertIn('resolution="1920x1080"', text)
+            self.assertIn('render_scale=0.75', text)
+            self.assertIn('vsync="on"', text)
+            before = path.read_bytes()
+            openbfme.apply_test_display(openbfme.test_settings())
+            self.assertEqual(before, path.read_bytes())
+
+    def test_launch_forwards_grass_ground_and_fog_choices(self):
+        with mock.patch.object(openbfme, 'prepare', return_value=('godot', 'console', {}, 'maps/test.map')), \
+                mock.patch.object(openbfme, 'net_slots', return_value='human::-1:-1;easy::-1:-1'), \
+                mock.patch.object(openbfme, 'apply_test_display') as display, \
+                mock.patch.object(openbfme.subprocess, 'Popen') as spawn:
+            openbfme.play(object(), settings=dict(grass=False, ground_detail=True, fog=True, resolution='1920x1080'))
+        args = spawn.call_args.args[0]
+        self.assertIn('--ground-cover=off', args)
+        self.assertIn('--natural-ground=on', args)
+        self.assertNotIn('--no-shroud', args)
+        self.assertEqual(display.call_args.args[0]['resolution'], '1920x1080')

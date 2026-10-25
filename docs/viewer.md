@@ -264,10 +264,16 @@ reads the map shown again.
   when the skirmish is playable and when the game has closed. When the game is
   not BFME2 1.06, or for one of the game's own maps, it starts the normal game
   at its menu. The dropdown beside the button picks what it starts: the
-  selected game, or **OpenBFME (Godot)**, which opens at its menu with the
-  project's map in the Skirmish list, as `mw play --godot` does
+  selected game, or **OpenBFME (Godot)**, which starts a skirmish on the
+  project's map, as `mw play --godot` does
   ([OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)). The choice
-  is kept as `test_game` in `local/config.toml`. The viewer minimises once the
+  is kept as `test_game` in `local/config.toml`. The adjacent **⚙** opens a compact
+  panel for OpenBFME test rounds: resolution, window mode, grass, ground detail,
+  and fog of war. **Save** remembers the choices as `test_settings`; they apply
+  on the next launch. Saved game setting preserves the existing display choice;
+  explicit display choices update only those fields in the isolated game's
+  configuration. Borderless fullscreen uses the monitor's resolution. Original
+  game launches keep their existing settings. The viewer minimises once the
   game is up and comes back when a skirmish or OpenBFME it started closes; a
   start that fails leaves it open, with the error in the status line.
 - **Preview** shows the map another way without changing it. Its button shows

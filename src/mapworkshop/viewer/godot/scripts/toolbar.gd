@@ -12,6 +12,7 @@ signal map_chosen(path: String)
 signal command(name: String)
 ## Test In-Game's choice changed.
 signal test_game_chosen(choice: String)
+signal test_settings_chosen(settings: Dictionary)
 ## A View entry switched.
 signal view_switched(key: String, on: bool)
 ## A Preview entry chosen: "weather" or "sun" and its value.
@@ -26,6 +27,9 @@ var _map: MenuButton
 var _maps := []               # the Map menu's .map paths, by item id
 var _build_chip: Label
 var _test_game: OptionButton
+var _test_settings := {}
+var _test_dialog: ConfirmationDialog
+var _test_controls := {}
 var _view: MenuButton
 var _views := []              # [key, title] of the View menu's entries, by item id
 var _preview: MenuButton
@@ -62,6 +66,7 @@ func _ready() -> void:
 		_test_game.set_item_metadata(_test_game.item_count - 1, key)
 	_test_game.item_selected.connect(func(index: int) -> void: test_game_chosen.emit(_test_game.get_item_metadata(index)))
 	row.add_child(_test_game)
+	_add(row, "⚙", "Quick settings for Test In-Game", _show_test_settings)
 	row.add_child(VSeparator.new())
 	_preview = MenuButton.new()
 	_preview.text = "Preview"
@@ -107,6 +112,59 @@ func _add(row: HBoxContainer, text: String, tip: String, pressed: Callable) -> B
 	return b
 
 
+func _show_test_settings() -> void:
+	if _test_dialog != null:
+		_test_dialog.queue_free()
+	_test_controls.clear()
+	_test_dialog = ConfirmationDialog.new()
+	_test_dialog.title = "Test In-Game settings"
+	_test_dialog.ok_button_text = "Save"
+	add_child(_test_dialog)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation",10)
+	_test_dialog.add_child(box)
+	var note := Label.new()
+	note.text = "For OpenBFME (Godot) test rounds"
+	box.add_child(note)
+	for spec in [["resolution","Resolution",["saved","1280x720","1920x1080","2560x1440","3840x2160"]],
+	             ["window_mode","Window mode",["saved","windowed","borderless"]]]:
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = spec[1]
+		label.custom_minimum_size.x = 130
+		row.add_child(label)
+		var choice := OptionButton.new()
+		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for value in spec[2]:
+			choice.add_item({"saved":"Saved game setting","windowed":"Windowed","borderless":"Borderless fullscreen"}.get(value,value))
+			choice.set_item_metadata(choice.item_count-1,value)
+			if value == _test_settings.get(spec[0],"saved"): choice.select(choice.item_count-1)
+		row.add_child(choice)
+		box.add_child(row)
+		_test_controls[spec[0]] = choice
+	for spec in [["grass","Grass",true],["ground_detail","Ground detail",true],["fog","Fog of war",false]]:
+		var check := CheckBox.new()
+		check.text = spec[1]
+		check.button_pressed = _test_settings.get(spec[0],spec[2])
+		box.add_child(check)
+		_test_controls[spec[0]] = check
+	var hint := Label.new()
+	hint.text = "Applies next launch. Fullscreen uses your monitor's resolution."
+	hint.add_theme_font_size_override("font_size",12)
+	box.add_child(hint)
+	_test_dialog.confirmed.connect(_save_test_settings)
+	_test_dialog.popup_centered(Vector2i(440,320))
+
+
+func _save_test_settings() -> void:
+	var settings := {}
+	for key in _test_controls:
+		var control = _test_controls[key]
+		settings[key] = control.get_item_metadata(control.selected) if control is OptionButton else control.button_pressed
+	_test_settings = settings
+	test_settings_chosen.emit(settings)
+
+
 func _process(_delta: float) -> void:
 	var cap := "" if _fps_limit in ["vsync", "unlimited"] else " / %s" % _fps_limit
 	_fps.text = "%d fps%s" % [Engine.get_frames_per_second(), cap]
@@ -124,6 +182,7 @@ func set_fps_limit(limit: String) -> void:
 
 ## The companion's menu message: the Map menu's entries and Test In-Game's choice.
 func set_menu(menu: Dictionary) -> void:
+	_test_settings = menu.get("test_settings",{})
 	_map.text = "%s  ▾" % menu.title
 	var popup := _map.get_popup()
 	popup.clear()

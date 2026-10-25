@@ -22,8 +22,9 @@ class PlayTests(unittest.TestCase):
         process = mock.Mock()
         with mock.patch('mapworkshop.native.openbfme.play', return_value=process) as play, \
                 mock.patch.object(jobs.threading, 'Thread', Inline), mock.patch('mapworkshop.native.play') as native:
-            jobs.play(owner, status, 'openbfme')
+            jobs.play(owner, status, 'openbfme', settings={'grass': True, 'resolution': '1920x1080'})
         self.assertIs(play.call_args.args[0], owner)
+        self.assertEqual(play.call_args.kwargs['settings'], {'grass': True, 'resolution': '1920x1080'})
         native.assert_not_called()
         process.wait.assert_called_once()
         self.assertEqual(status.current(), 'OpenBFME has closed')
