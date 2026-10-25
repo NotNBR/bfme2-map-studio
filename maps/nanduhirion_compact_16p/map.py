@@ -32,6 +32,7 @@ from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.variety import spot_random
 
 from .cleanup import repair
+from .scenery import marked_cave_trees
 
 
 # Viewer marks: pin 1 (3732.8, 1513.2) selects the outpost at
@@ -342,5 +343,6 @@ def build(b):
     b.report['inset_outposts'] = inset_outposts(m, b.assets)
     b.report['outpost_trees'] = outpost_trees(m, b.report['inset_outposts'], b.assets)
     b.report['cleanup'] = repair(m, b.assets)
+    b.report['marked_cave_trees'] = marked_cave_trees(m, b.assets)
     with Image.open(source / 'minimap.tga') as minimap:
         b.save(m, ini=(source / 'map.ini').read_text(encoding='ascii'), minimap=minimap)
