@@ -123,6 +123,7 @@ def choose_map():
                 status.set('Choose an existing .map file.')
 
     ttk.Button(buttons, text='Browse for map...', command=browse).pack(side='left')
+    ttk.Button(buttons, text='Grass Lab', command=lambda: finish('@grass-lab') if not building else None).pack(side='left', padx=8)
     open_button = ttk.Button(buttons, text='Open', command=open_selected, state='disabled')
     open_button.pack(side='right')
     cancel_button = ttk.Button(buttons, text='Cancel', command=finish)

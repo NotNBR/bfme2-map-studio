@@ -32,6 +32,10 @@ rebuild without the external share package.
 The `build.py` projects are older: their `main()` reads output folders from
 globals the pipeline sets. Start new maps with `map.py` and `build(b)`.
 
+## Visual labs
+
+[Grass Lab](grass_lab/README.md) opens from the viewer toolbar or `mw view --grass-lab`: density, texture transitions, height and wind comparisons in a standalone Godot scene.
+
 ## Scenes
 
 | Project | Id | |

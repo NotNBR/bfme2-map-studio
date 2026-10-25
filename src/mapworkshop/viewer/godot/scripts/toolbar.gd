@@ -74,6 +74,8 @@ func _ready() -> void:
 	_view.get_popup().hide_on_checkable_item_selection = false
 	_view.get_popup().id_pressed.connect(_on_view)
 	row.add_child(_view)
+	_add(row, "Grass Lab", "Compare grass density, transitions, blade height and wind in a separate window",
+		func() -> void: action.emit("grass_lab"))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)

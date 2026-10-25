@@ -73,6 +73,7 @@ TOOLS, BUILD, PROJECT, VIEWER, ASSETS, MAPS, APPDATA, LOGS = (HOME/n for n in ('
                                                                                 'maps', 'appdata', 'logs'))
 MAPCACHE = HOME/'mapcache.big'
 TEST = HOME/'test'
+GRASS_LAB = ROOT/'maps'/'grass_lab'/'godot'                         # optional visual lab, bundled with the viewer
 STUDIO = Path(__file__).resolve().parents[1]/'viewer'/'godot'         # the studio's Godot project, assembled into VIEWER
 
 LLVM_MINGW = 'llvm-mingw-20261006-ucrt-x86_64'
@@ -83,7 +84,7 @@ GODOT_URL = f'https://github.com/godotengine/godot/releases/download/4.7.2-stabl
 GODOT_SHA256 = '731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953'          # GitHub's digest
 DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'      # in PROJECT and VIEWER: openbfme.gdextension's res://bin/...
 GENERATED = ('.godot', 'bin')                                 # the folders Godot and the build write in PROJECT and VIEWER
-SHADERS = ('terrain', 'water_standing', 'road', 'river')      # what OpenBFME's library loads by path: res://shaders/<name>.gdshader
+SHADERS = ('terrain', 'water_standing', 'road', 'river', 'ground_cover')      # what OpenBFME's library loads by path: res://shaders/<name>.gdshader
 LFS_OFF = ('-c', 'filter.lfs.process=', '-c', 'filter.lfs.clean=cat', '-c', 'filter.lfs.smudge=cat', '-c', 'filter.lfs.required=false')
 FILES = 'https://workshop-files.bfmeladder.com'      # aio_install.gd's FILES: <owner>/<md5>
 INSTALL = {'rotwk': 'ROTWK_INSTALL', 'bfme2': 'BFME2_INSTALL'}
@@ -219,6 +220,9 @@ def _stamp():
     reaches PROJECT through mirror())."""
     head = _git('rev-parse', 'HEAD', cwd=SOURCE)
     local = _git('diff', 'HEAD', '--', 'engine', cwd=SOURCE)   # an engine edit not committed yet rebuilds too
+    for name in _git('ls-files', '--others', '--exclude-standard', '-z', '--', 'engine', cwd=SOURCE).split('\0'):
+        if name:
+            local += name + hashlib.sha256((SOURCE/name).read_bytes()).hexdigest()
     return hashlib.sha256(f'{head}\n{LLVM_MINGW}\n{GODOT}\n'.encode() + local.encode('utf-8')).hexdigest()
 
 
@@ -286,7 +290,7 @@ def build(progress=print):
     llvm, gui, console = toolchain(progress)
     BUILD.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(parents=True, exist_ok=True)
-    files = {name.removeprefix('godot/'): SOURCE/name for name in _git('ls-files', '-z', '--', 'godot', cwd=SOURCE).split('\0')
+    files = {name.removeprefix('godot/'): SOURCE/name for name in _git('ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'godot', cwd=SOURCE).split('\0')
              if name}
     changed = mirror(PROJECT, files)
     stamp = BUILD/'stamp.txt'
@@ -304,6 +308,8 @@ def viewer_files():
     .gdextension and the built DLL) and the SHADERS it loads by path, with the files they include."""
     files = {p.relative_to(STUDIO).as_posix(): p for p in sorted(STUDIO.rglob('*'))
              if p.is_file() and not set(GENERATED) & set(p.relative_to(STUDIO).parts)}
+    files.update({f'labs/grass/{p.relative_to(GRASS_LAB).as_posix()}': p for p in sorted(GRASS_LAB.rglob('*'))
+                  if p.is_file() and not set(GENERATED) & set(p.relative_to(GRASS_LAB).parts)})
     library = {'openbfme.gdextension': SOURCE/'godot'/'openbfme.gdextension', DLL: PROJECT/DLL}
     shaders = [f'shaders/{name}.gdshader' for name in SHADERS]
     while shaders:
@@ -311,6 +317,9 @@ def viewer_files():
         if name not in library:
             library[name] = SOURCE/'godot'/name
             shaders += re.findall(r'#include\s+"res://([^"]+)"', library[name].read_text(encoding='utf-8'))
+    for name in ['scripts/ground_cover.gd', 'assets/natural_ground/profiles.json',
+                 'assets/natural_ground/turf_detail.png', 'assets/natural_ground/turf_detail.png.import']:
+        library[name] = SOURCE/'godot'/name
     if clash := sorted(files.keys() & library.keys()):
         raise RuntimeError(f'The studio\'s Godot project has files of OpenBFME\'s: {", ".join(clash)}')
     return files | library

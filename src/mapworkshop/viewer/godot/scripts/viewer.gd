@@ -34,11 +34,13 @@ const VIEWS := [["objects", "Objects (1)", true], ["water", "Water (2)", true], 
 	["fog", "Fog, rain and snow (6)", true], ["clouds", "Cloud shadows", true], ["animate", "Animate", true],
 	["grid", "Grid (G)", false], ["border", "Map border (B)", false], ["starts", "Starting positions (3)", false],
 	["walkable", "Walkable (7)", false], ["flow", "River flow arrows (8)", false], ["marks", "Marks (M)", true],
+	["grass", "Grass", false], ["ground_detail", "Ground detail", false],
 	["units", "Units", true], ["limits", "The game's tree and shrub limits", false]]
 const COPY_VIEWS := ["units", "limits"]       # the switches the map's copy carries (render.godot.preview_map)
 const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate": Input.CURSOR_DRAG,
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
+var _grass_previous_msaa := -1
 var _scene := {}
 var _scene_path := ""
 var _surface: Surface
@@ -341,7 +343,8 @@ func _build_falling() -> void:
 func _build_terrain() -> bool:
 	if _terrain == null:
 		_terrain = ClassDB.instantiate("MapTerrainBuilder")
-	var options := {"user_map": _scene.user_map, "fog": _views.get("fog", true), "markers": false}
+	var options := {"user_map": _scene.user_map, "fog": _views.get("fog", true), "markers": false,
+		"ground_cover": _views.get("grass", false), "natural_ground": _views.get("ground_detail", false)}
 	var built: Node3D = _terrain.build_map(_fs, _scene.map, options)
 	if built == null:
 		_fail("the terrain did not build: %s" % [_terrain.get_report().errors])
@@ -1277,6 +1280,29 @@ func _switch_view(key: String, on: bool) -> void:
 			_show(["StandingWater", "Rivers"], on)
 		"roads":
 			_show(["Roads"], on)
+		"grass":
+			if on and _grass_previous_msaa < 0:
+				_grass_previous_msaa = get_viewport().msaa_3d
+				if get_viewport().msaa_3d == Viewport.MSAA_DISABLED:
+					get_viewport().msaa_3d = Viewport.MSAA_4X
+			elif not on and _grass_previous_msaa >= 0:
+				get_viewport().msaa_3d = _grass_previous_msaa
+				_grass_previous_msaa = -1
+			if _root != null:
+				var cover := _root.get_node_or_null("GroundCover")
+				if on and cover == null:
+					if _build_terrain(): _apply_views(["water", "roads", "clouds"])
+					if _root != null: _root.visible = _views.get("terrain", true)
+				elif cover != null:
+					cover.set("enabled", on)
+		"ground_detail":
+			if _root != null:
+				for mesh in _root.find_children("*", "MeshInstance3D", true, false):
+					if mesh.mesh == null: continue
+					for surface in mesh.mesh.get_surface_count():
+						var material = mesh.mesh.surface_get_material(surface)
+						if material is ShaderMaterial and material.has_meta("natural_ground"):
+							material.set_shader_parameter("natural_ground_enabled", on)
 		"terrain":                                      # the ground, water and roads (mw item's pictures leave them out)
 			if _root != null:
 				_root.visible = on
@@ -1333,6 +1359,10 @@ func _show(names: Array, on: bool) -> void:
 
 
 func _toolbar_action(name: String) -> void:
+	if name == "grass_lab":
+		var pid := OS.create_process(OS.get_executable_path(), ["--path", ProjectSettings.globalize_path("res://"), "res://labs/grass/scenes/grass_lab.tscn"])
+		if pid < 0: push_error("Could not open Grass Lab")
+		return
 	if name != "screenshot":
 		_set_mode("edit")
 	match name:

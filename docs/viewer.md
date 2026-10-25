@@ -51,6 +51,29 @@ saves the view, unseen on a hidden desktop, and closes. A view with an
 `aperture` or an `ev` opens in Photo mode with that lens, so its screenshot
 has `mw render`'s depth of field and exposure.
 
+## Grass and ground detail
+
+In **View**, enable **Grass** to add the camera-local blade field to the map
+being edited. Switch it off to hide the blades immediately. **Ground detail**
+independently toggles the enhanced turf texture. Both start off; the choices
+survive map reloads and weather previews in the open viewer. These are visual
+preview options and do not alter the saved map. Grass uses a dense near field and a sparse outer field fading out at 880
+world units (previously 245), with per-blade fading. Its colour follows the
+terrain, with irregular root clusters, independently varied stem heights and restrained dry variation.
+Grass enables MSAA 4x when antialiasing was off, and restores the previous
+setting when switched off. Coverage fading keeps distant stems from shrinking
+into stubble. It avoids roads,
+water and steep slopes; interactive trampling and building-footprint clearance are not
+implemented.
+
+## Grass Lab
+
+Click **Grass Lab** in the toolbar or startup map picker, or run
+`mw view --grass-lab`. It opens the [nine-plot grass test scene](../maps/grass_lab/README.md)
+in a separate window with density, height and wind sliders. The current map
+stays open. This standalone lab needs no retail assets. Use **View > Grass** on the map
+itself to preview the same blade renderer in context.
+
 ## Moving around
 
 The viewer has two cameras; **V** or the camera bar switches between them,
