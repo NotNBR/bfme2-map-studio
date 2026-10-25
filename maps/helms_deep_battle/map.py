@@ -38,6 +38,8 @@ night of the battle:
   Rohirrim in the keep's courtyard for the last ride, the women and children
   at the back of the keep by the caves' arcade (the film puts the Glittering
   Caves' entrance inside the Hornburg).
+  BFME2 uses Tower Guards in the expansion-only Rohan spearmen's defensive
+  positions; ROTWK keeps the Rohan spearmen.
 - Attackers, owned by Player_2: about 40,100 command points of Uruk-hai,
   pikemen and swordsmen (HOST), facing north on an even grid: the
   gaps GAP between neighbours along a row and ROW_GAP between rows (a battalion
@@ -372,6 +374,8 @@ def defenders(m, assets, ground):
         x, y = x - back*math.cos(a), y - back*math.sin(a)
         out.append((WALLS[group][1], x, y, a, z - terrain(x, y), group))
     for template, count, (cx, cy), facing, per_rank in POSTS:
+        if template == 'RohanSpearmenHorde' and template.lower() not in assets.templates:
+            template = 'GondorTowerShieldGuardHorde'
         f = math.radians(facing)
         fx, fy = math.cos(f), math.sin(f)
         level = ground.height(cx, cy)
