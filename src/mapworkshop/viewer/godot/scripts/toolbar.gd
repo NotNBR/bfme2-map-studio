@@ -1,5 +1,4 @@
-## The toolbar across the top (docs/viewer.md, "The toolbar"): Map (the map projects,
-## the game's maps, Open project folder, Browse...), Properties, Build with its chip, Test In-Game and what it starts,
+## The toolbar across the top (docs/viewer.md, "The toolbar"): Open Map (MapPicker), Properties, Build with its chip, Test In-Game and what it starts,
 ## Preview (the weather and the sun, its button showing the choice), View (the layers and overlays; both menus stay
 ## open while their entries are switched), and at the right Top view, Reset view, Screenshot and the frame rate with
 ## its cap (a menu). The lists come from the companion's menu message.
@@ -23,8 +22,9 @@ signal action(name: String)
 const TEST_GAMES := {"original": "Original game", "openbfme": "OpenBFME (Godot)"}
 const FPS_LIMITS := ["30", "60", "90", "120", "144", "vsync", "unlimited"]    # godot_viewer.FPS_LIMITS; 60 at the start
 
-var _map: MenuButton
-var _maps := []               # the Map menu's .map paths, by item id
+var _map: Button
+var picker: MapPicker
+var _map_controls: Array[BaseButton] = []
 var _build_chip: Label
 var _test_game: OptionButton
 var _test_settings := {}
@@ -44,12 +44,11 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	add_child(row)
-	_map = MenuButton.new()
-	_map.text = "Map"
-	_map.flat = false
-	_map.get_popup().id_pressed.connect(_on_map)
-	_map.get_popup().max_size = Vector2i(520, 700)
-	row.add_child(_map)
+	_map = _add(row, "Open Map", "Choose a custom or original map", func() -> void: picker.open())
+	picker = MapPicker.new()
+	add_child(picker)
+	picker.map_chosen.connect(func(path: String) -> void: map_chosen.emit(path))
+	picker.command.connect(func(name: String) -> void: command.emit(name))
 	_add(row, "Properties", "The map's map-wide settings: a project's to edit (Save builds it), a game map's to read",
 		func() -> void: command.emit("properties"))
 	_add(row, "Build", "Build the project again (it reloads when it is done)", func() -> void: command.emit("build"))
@@ -97,6 +96,14 @@ func _ready() -> void:
 	caps.id_pressed.connect(func(id: int) -> void: set_fps_limit(FPS_LIMITS[id]))
 	row.add_child(_fps)
 	set_fps_limit("60")
+	for control in row.get_children():
+		if control is BaseButton and control not in [_map, _fps]:
+			_map_controls.append(control)
+
+
+func set_map_loaded(loaded: bool) -> void:
+	for control in _map_controls:
+		control.disabled = not loaded
 
 
 func _add(row: HBoxContainer, text: String, tip: String, pressed: Callable) -> Button:
@@ -178,25 +185,11 @@ func set_fps_limit(limit: String) -> void:
 		_fps.get_popup().set_item_checked(_fps.get_popup().get_item_index(i), FPS_LIMITS[i] == limit)
 
 
-## The companion's menu message: the Map menu's entries and Test In-Game's choice.
+## The companion's catalog for Open Map and Test In-Game's choice.
 func set_menu(menu: Dictionary) -> void:
 	_test_settings = menu.get("test_settings",{})
-	_map.text = "%s  ▾" % menu.title
-	var popup := _map.get_popup()
-	popup.clear()
-	_maps.clear()
-	for group in [["Your maps", menu.projects], ["The game's maps", menu.stock]]:
-		if not (group[1] as Array).is_empty():
-			popup.add_separator(group[0])
-		for entry in group[1]:
-			popup.add_radio_check_item(entry.title, _maps.size())
-			popup.set_item_checked(popup.item_count - 1, entry.current)
-			_maps.append(entry.map)
-	popup.add_separator()
-	popup.add_item("Open project folder", -2)
-	popup.set_item_disabled(popup.item_count - 1, not menu.project)
-	popup.add_item("Export placement plan", -4)
-	popup.add_item("Browse...", -3)
+	_map.tooltip_text = "Choose a map (current: %s)" % menu.title
+	picker.set_catalog(menu)
 	for index in _test_game.item_count:
 		if _test_game.get_item_metadata(index) == menu.test_game:
 			_test_game.select(index)
@@ -225,17 +218,6 @@ func _on_preview(id: int) -> void:
 		if popup.is_item_radio_checkable(i) and _previews[other][0] == _previews[id][0]:
 			popup.set_item_checked(i, other == id)
 	preview_chosen.emit(_previews[id][0], _previews[id][1])
-
-
-func _on_map(id: int) -> void:
-	if id == -2:
-		command.emit("open_folder")
-	elif id == -3:
-		command.emit("browse")
-	elif id == -4:
-		command.emit("placement")
-	elif id >= 0 and id < _maps.size():
-		map_chosen.emit(_maps[id])
 
 
 ## The View menu: [key, title, on] entries.

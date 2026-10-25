@@ -136,3 +136,10 @@ var chrome := true:
 		chrome = on
 		if _root != null:
 			_root.visible = on
+
+
+## No map yet: retain the toolbar, without marking or camera controls.
+func set_map_loaded(loaded: bool) -> void:
+	marks.visible = loaded
+	bar.visible = loaded
+	toolbar.set_map_loaded(loaded)

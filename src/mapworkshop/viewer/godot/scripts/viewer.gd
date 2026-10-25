@@ -105,8 +105,19 @@ func _ready() -> void:
 	# the picture's size in every mode, so the camera has the aspect Python resolved the view for
 	get_window().size = Vector2i(int(_scene.size[0]), int(_scene.size[1]))
 	get_window().title = "%s - Godot viewer" % _scene.title
+	get_window().gui_embed_subwindows = true
 	_build_stage()
-	_open_map()
+	_drive = (_scene.get("drive", []) as Array).duplicate()
+	_driving = not _drive.is_empty()
+	_drive_wait = 10
+	if _scene.get("empty", false):
+		if _frame != null:
+			_frame.set_map_loaded(false)
+			_frame.toolbar.picker.open.call_deferred()
+		print("VIEWER empty studio ready")
+		_send({"type": "ready", "ms": 0})
+	else:
+		_open_map()
 
 
 func _missing() -> PackedStringArray:
@@ -122,6 +133,7 @@ func _fail(message: String) -> void:
 	print("VIEWER failed: ", message)
 	if _frame != null:
 		_frame.toast("failed", "The map could not be shown", message, 30)
+		_frame.toolbar.picker.failed(message)
 	if _headless() or not (_scene.get("shots", []) as Array).is_empty() or _scene.get("check", false):
 		get_tree().quit(1)
 
@@ -132,6 +144,10 @@ func _read_scene() -> bool:
 	if not (scene is Dictionary):
 		_fail("cannot read the scene %s" % _scene_path)
 		return false
+	if scene.get("empty", false):
+		_scene = scene
+		_surface = null
+		return true
 	var surface := Surface.load_from(_scene_path.get_base_dir().path_join(scene.surface.file), scene.surface)
 	if surface == null:
 		_fail("cannot read the surface heights")
@@ -177,6 +193,7 @@ func _build_stage() -> void:
 		_frame.marks.tool_chosen.connect(func(tool) -> void: _send({"type": "tool", "tool": tool}))
 		_frame.marks.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
 		_frame.toolbar.map_chosen.connect(func(path: String) -> void: _send({"type": "command", "name": "open_map", "map": path}))
+		_frame.toolbar.picker.about_to_popup.connect(func() -> void: _capture(false))
 		_frame.toolbar.command.connect(func(name: String) -> void: _send({"type": "command", "name": name}))
 		_frame.toolbar.test_game_chosen.connect(
 			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
@@ -232,9 +249,9 @@ func _open_map() -> void:
 	_shots = (_scene.get("shots", []) as Array).duplicate()
 	if not _shots.is_empty():
 		_photo.taps = 256                              # as mw render's
-	_drive = (_scene.get("drive", []) as Array).duplicate()
-	_driving = not _drive.is_empty()
-	_drive_wait = 10
+	if _frame != null:
+		_frame.set_map_loaded(true)
+		_frame.toolbar.picker.loaded()
 	if _scene.has("view"):
 		# exactly where Python resolved the view, until a move hands it to the Edit camera, which orbits the view's
 		# target from the view's eye (Python worked the orbit out)
@@ -372,6 +389,11 @@ func _reload(path: String, new_map: bool, what: String = "") -> void:
 		_scene_path = previous
 		_send({"type": "reload_failed", "error": "the scene could not be read"})
 		return
+	if _orbit == null:
+		_open_map()
+		if _orbit != null and _frame != null:
+			_frame.toast("done", "Loaded %s" % _scene.title, "", 3)
+		return
 	_orbit.surface = _surface
 	_orbit.playable = Vector2(_scene.playable[0], _scene.playable[1])
 	_fly.surface = _surface
@@ -387,6 +409,7 @@ func _reload(path: String, new_map: bool, what: String = "") -> void:
 		return
 	if _frame != null:
 		var loaded: String = what if not what.is_empty() else _scene.title
+		_frame.toolbar.picker.loaded()
 		_frame.toast("done", "Loaded %s" % loaded, "in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0), 3)
 	print("VIEWER reloaded %s in %d ms" % [_scene.map, Time.get_ticks_msec() - started])
 	_send({"type": "reloaded", "ms": Time.get_ticks_msec() - started})
@@ -785,7 +808,7 @@ func _focus_centre() -> void:
 ## does, "lens" picks a lens field's preset as the camera bar does, "screenshot" saves the window as it is, controls
 ## and all; "wait" holds the next step back for its seconds. Done, the viewer closes.
 func _play_drive() -> void:
-	if not _driving or _orbit == null:
+	if not _driving:
 		return
 	_drive_wait -= 1
 	if _drive_wait > 0 or Time.get_ticks_msec() < _drive_until:
@@ -892,6 +915,8 @@ func _serve_link() -> void:
 			"reload":
 				_reload(String(message.get("scene", _scene_path)), bool(message.get("new_map", false)),
 					String(message.get("what", "")))
+			"map_open_failed":
+				_frame.toolbar.picker.failed(message.error)
 			"menu":
 				_frame.toolbar.set_menu(message)
 				for key in COPY_VIEWS:                # the copy shown, also after a preview that failed
@@ -968,6 +993,8 @@ static func _list(v: Vector3) -> Array:
 
 
 func _axis(a: Key, b: Key = KEY_NONE) -> float:
+	if _frame != null and _frame.toolbar.picker.visible:
+		return 0.0
 	return 1.0 if Input.is_key_pressed(a) or (b != KEY_NONE and Input.is_key_pressed(b)) else 0.0
 
 

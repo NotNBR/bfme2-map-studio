@@ -56,7 +56,7 @@ game. Commands and their child processes keep that profile for their lifetime.
 ROTWK uses `local/profiles/rotwk/` for extracted data, caches, builds, build
 history, marks and renders. BFME2 keeps its existing `local/` paths. Map source
 projects are shared, so build a project in the selected profile before viewing
-or playing it. Both profiles' stock maps appear in the viewer's Map menu; the
+or playing it. Both profiles' stock maps appear in the viewer's Open Map modal; the
 viewer opens them under the RotWK profile, from RotWK's archives.
 
 `mw play` and **Test In-Game** start a ROTWK skirmish directly on the build,
@@ -74,11 +74,10 @@ Model rendering and local walkability estimates work in either profile.
 ## Open a map
 
 Double-click **`Map Workshop.cmd`** or pick **Map Workshop** from the Start menu.
-The viewer opens on your last map; the **Map** menu lists the map projects and
-the game's own maps. Press F1 for the controls, or read [the viewer](../viewer.md).
-
-The maps in `maps/` need one build each before they appear: `mw build greywater`,
-or **Build** in the viewer.
+Studio opens blank with the **Open Map** modal showing Custom and Original
+map columns. Choose a map to open it; an unbuilt custom map is built first.
+The toolbar's **Open Map** button returns to this modal at any time.
+Press F1 for the controls, or read [the viewer](../viewer.md).
 
 ## The `mw` command
 

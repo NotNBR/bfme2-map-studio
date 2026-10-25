@@ -10,11 +10,14 @@ mw view MAP --view "target=X,Y distance=D ..." [--screenshot PICTURE.png] [--pro
 ```
 
 `mw` alone, `mw view` without a map, and double-clicking `Map Workshop.cmd`
-open a map picker without loading a map. Select a project and click
-**Open**, or use **Browse for map...** for any `.map` file (including downloaded
-or separately generated maps). An unbuilt project asks for confirmation before
-building; Cancel leaves it unbuilt, and a failed build keeps the picker open.
-The last project is preselected; Cancel or closing the picker exits cleanly.
+open a blank Studio with the **Open Map** modal already visible. Its two
+columns list **Custom maps** on the left and **Original maps** on the right; search filters both.
+Select a map, then click **Open Map** at the bottom. For an unbuilt custom map,
+the button reads **Build and Open**. **Browse .map…** opens a downloaded or
+separately generated map. Selecting an entry alone never opens or builds it; a failed build
+keeps the modal open with its error. Close the modal to leave Studio blank,
+then use **Open Map** in the toolbar to return. Map controls become available
+once a map is loaded.
 Commands with an explicit `MAP` open it directly.
 The command window shows opening and build progress. Godot's detailed output is
 saved to `local/openbfme/logs/viewer-*.log`; if the viewer exits with an error,
@@ -228,9 +231,9 @@ reads the map shown again.
 
 ## The toolbar
 
-- **Map**: your map projects first, then the game's own maps (they open under
+- **Open Map** opens the modal with Custom and Original map columns (original maps open under
   the RotWK profile only). **Open project folder** opens the current project's
-  source folder; **Browse...** picks a `.map` file and opens it (one that is
+  source folder; **Browse .map…** picks a `.map` file and opens it (one that is
   neither a project's build nor a stock map as a copy in the user maps
   folder). **Export placement plan** saves and opens a plan of the current
   map, with starts, buildings, lairs and capture-flag footprint closeups

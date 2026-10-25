@@ -10,7 +10,7 @@ per line, and does in Python what the analysis and the studio's files need:
   (marks.describe, worked out in the background as jobs.MarksSummary does);
 - live reload: a new build of the map (mw build, mw dev) goes into OpenBFME's
   user maps folder, and the viewer builds the map again in place;
-- the toolbar's jobs (viewer.jobs): another map from the Map menu
+- the toolbar's jobs (viewer.jobs): another map from the Open Map modal
   (Browse... for a project's build or a stock map), Build, Test In-Game, the
   project folder; Properties opens its window (viewer.properties), whose Save
   builds the project;
@@ -335,7 +335,15 @@ class Companion:
 
     def _show(self, scene_path, data, owner, surface):
         """Hold `data`'s map: its marks, surface, summary and build watch (a new map drops the old selection)."""
+        # Read before replacing the current session: a corrupt selection must leave it usable.
+        loaded = None if data.get('empty') else Loaded(Path(data['map_path']), surface,
+                                                       self.loaded.assets if self.loaded else None)
         self.scene_path, self.data, self.owner, self.surface = scene_path, data, owner, surface
+        if data.get('empty'):
+            self.map_path = self.marks = self.editor = self.views = None
+            self.preview = data['preview']
+            self.panel, self.shown, self.stamp, self.reload_started = [], None, None, None
+            return
         self.map_path = Path(data['map_path'])
         self.preview = data['preview']
         self.marks = marklib.Marks(self.map_path)
@@ -344,7 +352,7 @@ class Companion:
         self.editor.marks = self.marks
         self.summary = MarksSummary()
         self.views = Views(self.map_path)
-        self.loaded = Loaded(self.map_path, surface, self.loaded.assets if self.loaded else None)
+        self.loaded = loaded
         # another map's panel is cleared (None differs from any lines); the first map's starts empty
         self.panel, self.shown = (None if hasattr(self, 'panel') else []), None
         self.stamp = self._build_stamp()
@@ -366,6 +374,8 @@ class Companion:
     def _handle(self, message):
         kind = message.get('type')
         out, cursor = [], None
+        if self.map_path is None and kind in ('press', 'move', 'release', 'click', 'hover', 'tool'):
+            return []
         if kind in ('press', 'move', 'release', 'click', 'hover'):
             self.world.event, self.picks.found = message, _ids(message.get('picks') or {})
             if kind == 'press':
@@ -404,6 +414,8 @@ class Companion:
 
     def _command(self, name, message):
         out = []
+        if self.map_path is None and name not in ('open_map', 'browse', 'test_settings', 'test_game'):
+            return [dict(type='status', text='Open a map first', seconds=3)]
         if name == 'undo':
             self.editor.undo()
         elif name == 'escape':
@@ -431,7 +443,8 @@ class Companion:
         elif name == 'test_mode':
             out += self.test_mode(message)
         elif name == 'browse':
-            threading.Thread(target=self._browse, args=(self.map_path.parent.parent,), daemon=True).start()
+            threading.Thread(target=self._browse, args=(self.map_path.parent.parent if self.map_path else Path.cwd(),),
+                             daemon=True).start()
         elif name == 'open_folder':
             if self.owner is None:
                 out.append(dict(type='status', text='a game map has no project folder', seconds=4))
@@ -553,9 +566,17 @@ class Companion:
         """Another map: readied (prepare), then the viewer reads its scene."""
         if self.prepare is None:
             return [dict(type='status', text='this viewer shows one map only', seconds=4)]
-        self._show(*self.prepare(name, self.preview))
+        try:
+            owner = project.for_map_file(Path(name))
+            if owner is not None and not owner.map_file.is_file():
+                self.progress(f'Building {owner.title} before opening it...')
+                if project.run(owner, on_line=self.progress) != 0:
+                    raise RuntimeError(f'{owner.title} could not be built; see the build output')
+            self._show(*self.prepare(name, self.preview))
+        except Exception as error:
+            return [dict(type='map_open_failed', error=str(error))]
         if self.owner is not None:
-            project.remember(self.owner)          # `mw` alone opens it next time
+            project.remember(self.owner)          # default for map-oriented CLI commands
         self.progress(f'Opening {self.data["title"]} in the Godot viewer...')
         return [dict(type='reload', scene=str(self.scene_path), new_map=True), self.menu(), self.views_message()]
 
@@ -618,6 +639,8 @@ class Companion:
     # The saved views, which viewer.views keeps ----------------------------------------------------------------
     def views_message(self):
         """The Views list, read again (another viewer may have saved one meanwhile)."""
+        if self.views is None:
+            return dict(type='views', items=[], free=1)
         self.views.load()
         items = [dict(name=v['name'], slot=v['slot'], mode=v['mode'],
                       thumbnail=str(path) if (path := self.views.thumbnail_path(v['name'])).is_file() else '')
@@ -712,24 +735,26 @@ class Companion:
         return [dict(type='clipboard', text=text, what='the view as a mw render command' + hidden)]
 
     def menu(self):
-        """The toolbar's lists: the map projects with a build, then the game's maps (Map), and the Test In-Game
-        choice."""
+        """The modal's custom projects (including unbuilt ones) and original maps, plus toolbar settings."""
         from mapworkshop import game, project
-        current = self.map_path.resolve()
-        own = sorted(((str(p.map_file), p.title) for p in project.projects() if p.map_file.exists()),
+        current = self.map_path.resolve() if self.map_path else None
+        own = sorted(((str(p.map_file), p.title) for p in project.projects()),
                      key=lambda e: e[1].lower())
         stock = sorted(((str(m), map_title(m)) for m in game.stock_maps()), key=lambda e: e[1].lower())
-        entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current)
+        entry = lambda path, title: dict(map=path, title=title, current=Path(path).resolve() == current,
+                                        ready=Path(path).is_file())
         preview = dict(preview_choices(), current=self.preview,
                        label=' · '.join(preview_labels(self.preview['weather'], self.preview['sun'])))
         from mapworkshop.native.openbfme import test_settings
-        return dict(type='menu', title=self.data['title'], project=self.owner is not None,
+        return dict(type='menu', title=self.data['title'], project=self.owner is not None, loaded=self.map_path is not None,
                     projects=[entry(*e) for e in own], stock=[entry(*e) for e in stock],
                     test_games=list(jobs.TEST_GAMES), test_game=setting('test_game', jobs.TEST_GAMES[0]),
                     test_settings=test_settings(setting('test_settings', {})),
                     preview=preview)
 
     def state(self):
+        if self.map_path is None:
+            return dict(type='marks', marks=[], visible=False, tool=None, hint=None)
         return marks_state(self.marks, self.surface, self.editor)
 
     def changed_state(self, cursor=None):
@@ -802,6 +827,8 @@ class Companion:
 
     def panel_message(self):
         """The marks panel's lines when they changed since last sent, else None."""
+        if self.map_path is None:
+            return None
         lines = summary_lines(self.marks.items, self._described()) if self.marks.items else []
         if lines == self.panel:
             return None
@@ -810,6 +837,8 @@ class Companion:
 
     # Live reload -----------------------------------------------------------------------------------------------------
     def _build_stamp(self):
+        if self.map_path is None:
+            return None
         files = [self.map_path, self.map_path.with_name('map.ini')]
         return tuple((f.stat().st_mtime_ns, f.stat().st_size) if f.exists() else None for f in files)
 

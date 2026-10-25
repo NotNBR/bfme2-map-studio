@@ -1,122 +1,118 @@
-"""Unnamed viewer launches pick a map; cancellation never starts the engine."""
-import sys
+"""Empty Studio startup and opening maps from its in-window picker."""
+import json
+import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from mapworkshop.viewer import godot_viewer, startup
+from mapworkshop import game
+from mapworkshop.viewer import godot_link, godot_viewer
 
 
 class StartupTests(unittest.TestCase):
-    def test_no_argument_opens_picker_and_loads_its_selection(self):
-        with mock.patch.object(startup, 'choose_map', return_value='bramble-hollow') as choose, \
-                mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')), \
-                mock.patch.object(godot_viewer.project, 'for_map_file', return_value=mock.sentinel.owner), \
-                mock.patch.object(godot_viewer.project, 'remember'), \
+    def test_no_argument_starts_empty_without_resolving_a_map(self):
+        with mock.patch.object(godot_viewer.project, 'map_path') as resolve, \
                 mock.patch.object(godot_viewer, 'run', return_value=0) as run:
             self.assertEqual(godot_viewer.main([]), 0)
-            choose.assert_called_once_with()
-            self.assertEqual(run.call_args.args[0], 'bramble-hollow')
-
-    def test_closing_picker_exits_cleanly_without_resolving_or_loading_a_map(self):
-        with mock.patch.object(startup, 'choose_map', return_value=None), \
-                mock.patch.object(godot_viewer.project, 'map_path') as resolve, \
-                mock.patch.object(godot_viewer, 'run') as run:
-            self.assertEqual(godot_viewer.main([]), 0)
             resolve.assert_not_called()
-            run.assert_not_called()
-
-    def test_explicit_map_bypasses_picker(self):
-        with mock.patch.object(startup, 'choose_map') as choose, \
-                mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')), \
-                mock.patch.object(godot_viewer.project, 'for_map_file', return_value=mock.sentinel.owner), \
-                mock.patch.object(godot_viewer.project, 'remember'), \
-                mock.patch.object(godot_viewer, 'run', return_value=0):
-            self.assertEqual(godot_viewer.main(['bramble-hollow']), 0)
-            choose.assert_not_called()
-
-    def test_automated_screenshot_keeps_last_map_resolution_without_picker(self):
-        with mock.patch.object(startup, 'choose_map') as choose, \
-                mock.patch.object(godot_viewer, 'run', return_value=(0, [])) as run:
-            self.assertEqual(godot_viewer.main(['--screenshot', 'x.png']), 0)
-            choose.assert_not_called()
             self.assertIsNone(run.call_args.args[0])
 
+    def test_explicit_map_opens_directly(self):
+        with mock.patch.object(godot_viewer.project, 'map_path', return_value=Path('x.map')), \
+                mock.patch.object(godot_viewer.project, 'for_map_file', return_value=None), \
+                mock.patch.object(godot_viewer, 'run', return_value=0) as run:
+            self.assertEqual(godot_viewer.main(['bramble-hollow']), 0)
+            self.assertEqual(run.call_args.args[0], 'bramble-hollow')
 
-class PickerBuildTests(unittest.TestCase):
-    def test_unbuilt_project_confirms_then_builds_before_opening(self):
-        class Widget:
-            def __init__(self, *args, **kwargs):
-                self.command = kwargs.get('command')
-                if kwargs.get('text') in ('Open', 'Cancel'):
-                    buttons[kwargs['text']] = self
-            def pack(self, **kwargs): pass
-            def configure(self, **kwargs): pass
-            def heading(self, *args, **kwargs): pass
-            def column(self, *args, **kwargs): pass
-            def insert(self, *args, **kwargs): pass
-            def bind(self, *args, **kwargs): pass
-            def selection(self): return ('draft',)
-            def selection_set(self, *args): pass
-            def see(self, *args): pass
-            def focus_set(self): pass
-            def yview(self, *args): pass
-            def set(self, *args): pass
+    def test_screenshot_keeps_existing_default_map_resolution(self):
+        with mock.patch.object(godot_viewer, 'run', return_value=(0, [])) as run:
+            self.assertEqual(godot_viewer.main(['--screenshot', 'x.png']), 0)
+            self.assertIsNone(run.call_args.args[0])
 
-        class Window:
-            def __init__(self): self.destroyed = False
-            def title(self, *args): pass
-            def geometry(self, *args): pass
-            def minsize(self, *args): pass
-            def bind(self, *args): pass
-            def protocol(self, *args): pass
-            def after(self, delay, callback): callback()
-            def destroy(self): self.destroyed = True
-            def mainloop(self):
-                buttons['Open'].command()
-                if not self.destroyed:
-                    buttons['Cancel'].command()
+    def test_empty_session_can_poll_and_recover_from_failed_selection(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(godot_viewer.openbfme, 'HOME', Path(tmp)), \
+                mock.patch.object(godot_viewer, 'scene') as scene:
+            prepared = godot_viewer.prepare(None, port=1234)
+            scene.assert_not_called()
+            self.assertTrue(json.loads(prepared[0].read_text())['empty'])
+            self.assertIsNone(prepared[3])
+            companion = godot_link.Companion(prepared, mock.Mock(side_effect=ValueError('Broken map')))
+            self.assertIsNone(companion.watch())
+            self.assertIsNone(companion.panel_message())
+            self.assertEqual(companion.pack_for_test(), [])
+            self.assertFalse(companion.state()['visible'])
+            self.assertEqual(companion.views_message()['items'], [])
+            self.assertEqual(companion.handle(dict(type='command', name='build'))[0]['text'], 'Open a map first')
+            with mock.patch.object(godot_link.project, 'for_map_file', return_value=None):
+                reply = companion.open_map('missing.map')
+            self.assertEqual(reply, [dict(type='map_open_failed', error='Broken map')])
+            self.assertIsNone(companion.map_path)
 
-        class ImmediateThread:
-            def __init__(self, target, daemon): self.target = target
-            def start(self): self.target()
+    def test_catalog_includes_unbuilt_projects_and_builds_before_preparing(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(godot_viewer.openbfme, 'HOME', Path(tmp)):
+            owner = SimpleNamespace(map_file=Path(tmp)/'draft.map', title='Draft')
+            companion = godot_link.Companion(godot_viewer.prepare(None), mock.Mock())
+            with mock.patch.object(godot_link.project, 'projects', return_value=[owner]), \
+                    mock.patch.object(game, 'stock_maps', return_value=[Path(tmp)/'original.map']):
+                menu = companion.menu()
+            self.assertFalse(menu['loaded'])
+            self.assertFalse(menu['projects'][0]['ready'])
+            self.assertEqual(len(menu['stock']), 1)
+            order = []
+            def build(*args, **kwargs):
+                order.append('build')
+                return 0
+            def prepare(*args):
+                order.append('prepare')
+                return ('scene.json', dict(title='Draft'), owner, None)
+            companion.prepare = prepare
+            with mock.patch.object(godot_link.project, 'for_map_file', return_value=owner), \
+                    mock.patch.object(godot_link.project, 'run', side_effect=build), \
+                    mock.patch.object(companion, '_show') as show, \
+                    mock.patch.object(companion, 'menu', return_value=menu):
+                self.assertEqual(companion.open_map(str(owner.map_file))[0]['type'], 'reload')
+                show.assert_called_once()
+            self.assertEqual(order, ['build', 'prepare'])
+            with mock.patch.object(godot_link.project, 'for_map_file', return_value=owner), \
+                    mock.patch.object(godot_link.project, 'run', return_value=1):
+                self.assertEqual(companion.open_map(str(owner.map_file))[0]['type'], 'map_open_failed')
 
-        class Variable:
-            def __init__(self, value): self.value = value
-            def set(self, value): self.value = value
 
-        for built, confirmed, build_code, expected in (
-                (False, False, 0, None),
-                (False, True, 0, 'draft'),
-                (False, True, 1, None),
-                (True, False, 0, 'draft')):
-            with self.subTest(built=built, confirmed=confirmed, build_code=build_code), tempfile.TemporaryDirectory() as tmp:
-                buttons = {}
-                map_file = Path(tmp)/'draft.map'
-                if built:
-                    map_file.write_bytes(b'map')
-                owner = SimpleNamespace(id='draft', title='Draft', map_file=map_file)
-                ask = mock.Mock(return_value=confirmed)
-                error = mock.Mock()
-                def build(project, on_line):
-                    self.assertIs(project, owner)
-                    on_line('Building Draft')
-                    if build_code == 0:
-                        map_file.write_bytes(b'map')
-                    return build_code
-                run = mock.Mock(side_effect=build)
-                ttk = SimpleNamespace(Frame=Widget, Label=Widget, Treeview=Widget, Scrollbar=Widget, Button=Widget)
-                tkinter = SimpleNamespace(Tk=Window, StringVar=Variable, ttk=ttk,
-                                          filedialog=SimpleNamespace(askopenfilename=mock.Mock()),
-                                          messagebox=SimpleNamespace(askokcancel=ask, showerror=error))
-                with mock.patch.dict(sys.modules, {'tkinter': tkinter, 'tkinter.ttk': ttk}), \
-                        mock.patch.object(startup.project, 'projects', return_value=[owner]), \
-                        mock.patch.object(startup.project, 'run', run), \
-                        mock.patch.object(startup, 'setting', return_value=None), \
-                        mock.patch('threading.Thread', ImmediateThread):
-                    self.assertEqual(startup.choose_map(), expected)
-                self.assertEqual(ask.call_count, 0 if built else 1)
-                self.assertEqual(run.call_count, 1 if confirmed and not built else 0)
-                self.assertEqual(error.call_count, 1 if confirmed and not built and build_code else 0)
+@unittest.skipUnless(godot_viewer.openbfme.is_built() and godot_viewer.openbfme.status()[0],
+                     'needs the pinned Godot runtime and retail assets')
+class PickerIntegrationTests(unittest.TestCase):
+    def test_blank_studio_modal_and_first_map_load(self):
+        from mapworkshop import project
+        if not project.find('blend-lab').map_file.is_file():
+            self.skipTest('needs Blend Lab built')
+        engine = godot_viewer.openbfme
+        _, console = engine.assemble(progress=lambda line: None)
+        link = godot_link.Link()
+        self.addCleanup(link.close)
+        prepared = godot_viewer.prepare(None, port=link.port)
+        companion = godot_link.Companion(prepared,
+            lambda name, preview: godot_viewer.prepare(name, preview=preview, port=link.port), progress=lambda line: None)
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp)/'picker.log'
+            with log.open('w', encoding='utf-8') as output:
+                process = subprocess.Popen([str(console), '--headless', '--path', str(engine.VIEWER),
+                    '--script', 'res://tests/map_picker_test.gd', '--', f'--scene={prepared[0]}'],
+                    env=engine.environment([]), stdout=output, stderr=subprocess.STDOUT)
+                worker = threading.Thread(target=companion.serve, args=(link, process), daemon=True)
+                worker.start()
+                try:
+                    code = process.wait(timeout=90)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+                    worker.join(timeout=5)
+            text = log.read_text(encoding='utf-8')
+            self.assertEqual(code, 0, text)
+            self.assertIn('PICKER RESULT: PASS (0 failed)', text)
+            self.assertNotIn('SCRIPT ERROR', text)

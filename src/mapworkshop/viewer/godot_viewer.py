@@ -11,6 +11,7 @@ resolved as mw render resolves it (render.godot.resolve), --probe prints where
 map points land, --screenshot saves the view unseen and closes.
 """
 
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -25,6 +26,15 @@ from mapworkshop.viewer import marks as marklib
 def prepare(name, view=None, **options):
     """A map ready for the viewer, its marks in the scene (render.godot.scene's options); what scene() returns. The
     companion prepares the map again for a new build, another map or another preview."""
+    if name is None and not (options.get('shots') or options.get('check')):
+        folder = openbfme.HOME/'scenes'/f'empty-{time.time_ns()}'
+        folder.mkdir(parents=True, exist_ok=True)
+        data = dict(empty=True, title='BFME2 Map Studio', size=options.get('size', SIZE),
+                    port=options.get('port'), drive=options.get('drive') or [], fps=options.get('fps', '60'),
+                    preview=dict(godot_link.OWN, **(options.get('preview') or {})))
+        path = folder/'scene.json'
+        path.write_text(json.dumps(data), encoding='utf-8')
+        return path, data, None, None
     prepared = scene(name, view, marks=lambda path, surface: godot_link.marks_state(marklib.Marks(path), surface),
                      **options)
     if prepared[2] is not None:
@@ -40,7 +50,8 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     View switches to start with ({'grid': True, ...}); `preview` the weather and sun ({weather, sun}, OWN's keys);
     `fps` the frame rate cap ('60', 'vsync', 'unlimited', ...)."""
     started = time.perf_counter()
-    openbfme.assets(progress)
+    if name is not None or screenshot or check:
+        openbfme.assets(progress)
     remove_copies()                     # any a viewer stopped before it could
     gui, console = openbfme.assemble(progress)
     interactive = not (screenshot or check)
@@ -62,9 +73,11 @@ def run(name, view=None, probes=(), screenshot=None, size=SIZE, check=False, pro
     # Keep Godot's detailed warnings out of the command window, but retain them for troubleshooting.
     openbfme.LOGS.mkdir(parents=True, exist_ok=True)
     log = openbfme.LOGS/f'viewer-{time.time_ns()}.log'
-    companion = godot_link.Companion(
-        prepared, lambda other, preview=None, **more: prepare(other, size=size, port=port, preview=preview, **more),
-        progress)
+    def prepare_map(other, preview=None, **more):
+        openbfme.assets(progress)
+        return prepare(other, size=size, port=port, preview=preview, **more)
+
+    companion = godot_link.Companion(prepared, prepare_map, progress)
     try:
         with log.open('wb') as output:
             while True:
@@ -120,16 +133,11 @@ def main(argv=None):
     name = args.map or args.map_option
     preview = dict(weather=args.weather, sun=args.sun)
     try:
-        if not name and not (args.screenshot or probes):
-            from mapworkshop.viewer.startup import choose_map
-            name = choose_map()
-            if name is None:
-                return 0
         if not (args.screenshot or probes):
-            owner = project.for_map_file(project.map_path(name))
+            owner = project.for_map_file(project.map_path(name)) if name else None
             if owner is not None:
-                project.remember(owner)                  # Preselect it in the startup picker next time.
-            else:
+                project.remember(owner)                  # default for map-oriented CLI commands
+            elif name:
                 from mapworkshop.config import save_setting
                 if Path(name).is_file():
                     save_setting('viewer_map_file', str(Path(name).resolve()))
