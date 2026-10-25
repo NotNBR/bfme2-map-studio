@@ -8,6 +8,11 @@ docstring at the top of its `map.py`.
 
 ## Maps
 
+Nanduhirion Compact is also available as a self-contained imported project:
+[Nanduhirion Compact (16 players)](nanduhirion_compact_16p/map.py),
+`nanduhirion-compact-16p`, 9,000 x 6,000 map units. Its bundled map and minimap
+rebuild without the external share package.
+
 | Map | Id | Players | Build | |
 |---|---|---|---|---|
 | [Glacial Crossroads](glacial_crossroads/README.md) | `glacial-crossroads` | 16-site landscape | `map.py`, `design.py`, `terrain.py`, `features.py`, `scenery.py` | eroded alpine ranges, snowy passes, spruce groves and Dwarven ruins around a central ice field split by two deep ruptures |

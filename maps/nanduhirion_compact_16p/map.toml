@@ -1,0 +1,5 @@
+id = "nanduhirion-compact-16p"
+title = "Nanduhirion Compact (16 players)"
+native_name = "nanduhirion compact 16p"
+players = 16
+description = "Compact 16-player map. Choose teams and AI difficulty in the lobby."
