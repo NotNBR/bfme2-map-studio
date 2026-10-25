@@ -83,7 +83,7 @@ FPS_LIMITS = ('30', '60', '90', '120', '144', 'vsync', 'unlimited')    # the too
 def parse_args(argv=None):
     import argparse
     parser = argparse.ArgumentParser(prog='mw view', description='Open a map in the viewer (docs/viewer.md).')
-    parser.add_argument('map', nargs='?', help='Map project, stock map or .map file of either (default: the last one)')
+    parser.add_argument('map', nargs='?', help='Map project, stock map or .map file (default: open the map picker)')
     parser.add_argument('--map', dest='map_option', help=argparse.SUPPRESS)
     parser.add_argument('--size', default='1600x1000', help='The window size, WIDTHxHEIGHT (1600x1000)')
     parser.add_argument('--weather', default='map', help="Preview's weather: 'map' (the map's own) or clear, haze, "
@@ -110,10 +110,19 @@ def main(argv=None):
     name = args.map or args.map_option
     preview = dict(weather=args.weather, sun=args.sun)
     try:
+        if not name and not (args.screenshot or probes):
+            from mapworkshop.viewer.startup import choose_map
+            name = choose_map()
+            if name is None:
+                return 0
         if not (args.screenshot or probes):
             owner = project.for_map_file(project.map_path(name))
             if owner is not None:
-                project.remember(owner)                  # `mw` alone opens it next time
+                project.remember(owner)                  # Preselect it in the startup picker next time.
+            else:
+                from mapworkshop.config import save_setting
+                if Path(name).is_file():
+                    save_setting('viewer_map_file', str(Path(name).resolve()))
             return run(name, args.view, size=size, preview=preview, fps=args.fps)
         code, lines = run(name, args.view, probes, args.screenshot, size, check=not args.screenshot, preview=preview)
     except (LookupError, RuntimeError, ValueError) as error:

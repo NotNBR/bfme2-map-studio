@@ -1,7 +1,8 @@
 """mw: build, view and play Battle for Middle-earth II maps made from code.
 
 Maps are named by their project id or any unique start of it ("grey" for
-greywater-marches); commands without a map use the one you worked on last.
+greywater-marches); the viewer opens a map picker when no map is specified.
+Other commands without a map use the one you worked on last.
 """
 import argparse
 import os
@@ -11,7 +12,7 @@ import time
 
 USAGE = """
   mw --profile bfme2|rotwk COMMAND   use a game profile for this command
-  mw                         open the viewer on your last map
+  mw                         open the viewer's map picker
   mw setup [--game DIR]      find BFME2 and extract its data (once)
   mw doctor                  check that everything is in place
   mw maps                    list your map projects

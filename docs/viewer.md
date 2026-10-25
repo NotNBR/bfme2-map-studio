@@ -9,8 +9,13 @@ mw view [MAP] [--weather map|clear|haze|rain|snow|dusk] [--sun own|ember|copper|
 mw view MAP --view "target=X,Y distance=D ..." [--screenshot PICTURE.png] [--probe X,Y[,Z] ...]
 ```
 
-`mw` alone opens the map you worked on last, and so does double-clicking
-`Map Workshop.cmd`. `MAP` is a project id or any unique start of it
+`mw` alone, `mw view` without a map, and double-clicking `Map Workshop.cmd`
+open a map picker without loading a map. Select a built project and click
+**Open**, or use **Browse for map...** for any `.map` file (including downloaded
+or separately generated maps). The last project is preselected; Cancel or
+closing the picker exits cleanly. Unbuilt projects show the command needed
+to build them. Commands with an explicit `MAP` open it directly.
+`MAP` is a project id or any unique start of it
 (`grey`), a stock map ("fords of isen") or a `.map` file of either. The
 viewer is a Godot project of the studio's own on
 [OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)'s library, a port
