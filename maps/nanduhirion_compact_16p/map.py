@@ -9,6 +9,7 @@ and density. All four inner outposts sit in locally
 carved recesses, using the two-thirds inset approved at viewer pin 2.
 All four sit another 25 units toward the cliff, with slight stony crests
 following freehand mark 1, adapted to each outpost's local orientation.
+A clear daylight sky dome encloses the landscape beyond the map edges.
 Opposite pairs retain matching inset distances. Static terrain and footprint checks
 found all starts walkable and connected to the centre; a full match remains
 unverified. Requires OpenBFME's sixteen-player support for play.
@@ -30,6 +31,7 @@ from mapworkshop.mapkit.lines import polyline_distance
 from mapworkshop.mapkit.pathing import footprint_cells, template_data, terrain_grid
 from mapworkshop.mapkit.relief import distance_to
 from mapworkshop.mapkit.variety import spot_random
+from mapworkshop.mapkit.weather import add_sky
 
 from .cleanup import repair
 from .scenery import marked_cave_trees
@@ -346,5 +348,12 @@ def build(b):
     b.report['cleanup'] = repair(m, b.assets)
     b.report['marked_cave_trees'] = marked_cave_trees(m, b.assets)
     b.report['texture_transitions'] = repair_transitions(m)
+    terrain = m.heightmap()
+    border = terrain['border']
+    width, height = terrain['width'] - 2*border, terrain['height'] - 2*border
+    ground = terrain['elevations'] * .0390625
+    # Sink the dome's horizon below the distant ridges.
+    b.report['sky'] = add_sky(m, 'clear', width*10, height*10, border*10,
+                            drop=float(ground[border+height//2, border+width//2] - ground.min()) + 500)
     with Image.open(source / 'minimap.tga') as minimap:
         b.save(m, ini=(source / 'map.ini').read_text(encoding='ascii'), minimap=minimap)
