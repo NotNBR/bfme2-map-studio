@@ -1,0 +1,9 @@
+{
+  "id": "wall_dance",
+  "title": "Dance on the Deeping Wall",
+  "description": "Helm's Deep only: Aragorn and Gandalf the White dance on the wall over the culvert, Michael Jackson style (the moonwalk, the lean, Thriller). Animate pauses it.",
+  "controller": "res://scripts/wall_dance.gd",
+  "controls": [
+    {"id": "speed", "label": "Tempo (1 = 117 beats a minute)", "type": "number", "min": 0.5, "max": 1.5, "step": 0.05, "default": 1}
+  ]
+}

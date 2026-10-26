@@ -92,6 +92,15 @@ start disabled. Their settings and enabled state survive map reloads and only af
 mode or gameplay. It needs a runtime with the custom rig API; older runtimes
 report that the feature is unavailable.
 
+**Dance on the Deeping Wall** (Helm's Deep, `helms-deep-battle`) has Aragorn,
+who stands over the culvert, and Gandalf the White, added beside him, dance a
+48-beat routine in Michael Jackson's style at 117 beats a minute, unarmed with
+their swords sheathed ([wall_dance.gd](../src/mapworkshop/viewer/godot/scripts/wall_dance.gd)
+computes every bone with two-bone IK and hands it to the custom rig API). Its
+field sets the tempo; switching it off removes Gandalf and gives Aragorn back
+his idle. `mw film helms-deep-battle wall_dance` films it
+([films](guide/rendering.md#films)).
+
 Feature manifests live in `src/mapworkshop/viewer/godot/scripts/experiments/`.
 Each JSON file names a controller (or an existing renderer `view` switch) and describes its controls (`slider`, `number`,
 `bool`, or `choice`), defaults and limits. The dialog discovers these files; adding
