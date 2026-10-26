@@ -99,6 +99,17 @@ implement `enable(objects, settings)`, `sample(time)`, `clear()` and an `error`
 string. The viewer binds them on map load, clears them before replacement and
 suspends them during Test mode. Settings last for the current viewer session.
 
+## BFME2 HD pack
+
+In **Experiments**, **BFME2 HD pack** toggles the configured BFME2 HD models and
+textures. Press **Apply** to rebuild the preview while keeping the camera and
+other enabled experiments. The separate terrain HD pack remains enabled. The
+switch starts on when installed and retains its choice during the viewer session.
+It is unavailable if no matching pack is configured. Add the pack folder to
+`asset_packs` in `local/config.toml`; its folder name must be `bfme2-hd` or start
+with `bfme2-hd-` (for example `bfme2-hd-1.1`). This controls the viewer preview;
+separately launched games still use their configured packs.
+
 ## Grass
 
 In **Experiments**, enable **Grass** and press **Apply** to add the camera-local blade field to the map

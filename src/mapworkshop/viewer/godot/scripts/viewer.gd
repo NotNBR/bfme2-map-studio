@@ -59,6 +59,8 @@ var _world_env: WorldEnvironment
 var _sun: DirectionalLight3D
 var _shadow_lighting: Dictionary = {}
 var _experiments = preload("res://scripts/experiments.gd").new()
+var _active_asset_packs := PackedStringArray()
+var _pack_reload_pending := false
 var _orbit: OrbitCamera
 var _overlay: MarkOverlay
 var _frame: Frame             # the toolbar, the marks rail and panel, the camera bar: with the companion only
@@ -195,6 +197,7 @@ func _build_stage() -> void:
 	for key in COPY_VIEWS:                        # and those of the copy it opens
 		_views[key] = bool(_scene.get("preview", {}).get(key, _views[key]))
 	_experiments.view_requested.connect(_switch_view)
+	_experiments.packs_changed.connect(_queue_pack_reload)
 	for spec in _experiments.definitions:
 		if spec.has("view"):
 			_experiments.states[spec.id].enabled = _views.get(spec.view, false)
@@ -248,6 +251,31 @@ func _build_stage() -> void:
 			_fail("cannot reach the companion on port %d: %s" % [int(_scene.port), error_string(code)])
 
 
+func _queue_pack_reload() -> void:
+	if _pack_reload_pending: return
+	_pack_reload_pending = true
+	call_deferred("_reload_asset_packs")
+
+func _reload_asset_packs() -> void:
+	_pack_reload_pending = false
+	var selected := _experiments.selected_packs()
+	if selected == _active_asset_packs or _fs == null: return
+	if _test != null: _leave_test()
+	var result: Dictionary = _fs.set_asset_packs(selected)
+	if not result.ok:
+		for spec in _experiments.definitions:
+			if spec.has("pack_prefix"):
+				_experiments.states[spec.id].enabled = false
+				for path in _experiments.matching_packs(spec):
+					if path in _active_asset_packs: _experiments.states[spec.id].enabled = true
+		_status("Could not load HD pack: " + "; ".join(result.errors), 8)
+		return
+	_active_asset_packs = selected
+	# Recreate the builders so cached model and texture data cannot survive the switch.
+	_objects = null
+	_terrain = null
+	_reload(_scene_path, false, "asset pack preview")
+
 func _open_map() -> void:
 	var started := Time.get_ticks_msec()
 	_fs = ClassDB.instantiate("RetailFileSystem")
@@ -255,7 +283,9 @@ func _open_map() -> void:
 	if not mount.ok:
 		_fail("mounting the game's files failed: " + "; ".join(mount.errors))
 		return
-	var packs: Dictionary = _fs.set_asset_packs(PackedStringArray(_scene.get("asset_packs", [])))
+	_experiments.pack_paths = PackedStringArray(_scene.get("asset_packs", []))
+	_active_asset_packs = _experiments.selected_packs()
+	var packs: Dictionary = _fs.set_asset_packs(_active_asset_packs)
 	if not packs.ok:
 		_fail("loading asset packs failed: " + "; ".join(packs.errors))
 		return

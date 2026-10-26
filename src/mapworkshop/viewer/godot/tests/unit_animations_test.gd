@@ -58,6 +58,35 @@ func run() -> void:
 	viewer._experiments.configure("pike_stomp", true)
 	viewer._reload(viewer._scene_path, false)
 	check(viewer._experiments.states.pike_stomp.enabled and viewer._experiments.controllers.pike_stomp.rigs.size() == 15, "reload reattaches once")
+	var hd_spec: Dictionary
+	for spec in viewer._experiments.definitions:
+		if spec.id == "bfme2_hd": hd_spec = spec
+	var hd_paths: PackedStringArray = viewer._experiments.matching_packs(hd_spec)
+	if not hd_paths.is_empty():
+		var original_packs: PackedStringArray = viewer._active_asset_packs.duplicate()
+		var previous_builder = viewer._objects
+		var camera_position: Vector3 = viewer._camera.global_position
+		viewer._experiments.configure("bfme2_hd", false)
+		await process_frame
+		await process_frame
+		check(viewer._objects != previous_builder, "HD toggle rebuilds cached objects")
+		check(viewer._camera.global_position.is_equal_approx(camera_position), "HD toggle preserves camera")
+		for path in original_packs:
+			check((path in viewer._active_asset_packs) == (not path in hd_paths), "HD toggle preserves other packs")
+		check(viewer._experiments.controllers.pike_stomp.unit_count == 15, "HD reload restores enabled animation")
+		viewer._experiments.configure("bfme2_hd", true)
+		await process_frame
+		await process_frame
+		check(viewer._active_asset_packs == original_packs, "HD reenable restores pack order")
+	var registry = load("res://scripts/experiments.gd").new()
+	root.add_child(registry)
+	registry.pack_paths = PackedStringArray(["C:/packs/bfme2-hd-1.1", "C:/packs/terrain-hd", "C:/packs/bfme2-hd-other"])
+	registry.configure("bfme2_hd", false)
+	check(registry.selected_packs() == PackedStringArray(["C:/packs/terrain-hd"]), "only matching HD pack folders disabled")
+	registry.pack_paths = PackedStringArray()
+	registry.open()
+	check(registry._fields.bfme2_hd.enabled.disabled and not registry._fields.bfme2_hd.enabled.button_pressed, "missing HD pack switch disabled")
+	registry.free()
 	viewer.free()
 	print("UNIT ANIMATION RESULT ", failures)
 	quit(0 if failures == 0 else 1)

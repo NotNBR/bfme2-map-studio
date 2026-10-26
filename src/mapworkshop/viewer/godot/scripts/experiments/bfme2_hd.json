@@ -1,0 +1,8 @@
+{
+  "id": "bfme2_hd",
+  "title": "BFME2 HD pack",
+  "description": "Use the installed BFME2 HD models and textures. Applying this reloads the preview and keeps the camera position.",
+  "pack_prefix": "bfme2-hd",
+  "default_enabled": true,
+  "controls": []
+}

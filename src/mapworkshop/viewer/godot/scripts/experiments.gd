@@ -2,6 +2,7 @@
 extends Node
 
 signal view_requested(key: String, enabled: bool)
+signal packs_changed()
 
 var definitions: Array[Dictionary] = []
 var states := {}
@@ -10,18 +11,34 @@ var objects: Node3D
 var suspended := false
 var dialog: ConfirmationDialog
 var _fields := {}
+var pack_paths := PackedStringArray()
 
 func _init() -> void:
 	for file in DirAccess.get_files_at("res://scripts/experiments"):
 		if not file.ends_with(".json"): continue
 		var spec = JSON.parse_string(FileAccess.get_file_as_string("res://scripts/experiments/" + file))
 		if not spec is Dictionary or not spec.has_all(["id", "title", "description", "controls"]): continue
-		if not spec.has("controller") and not spec.has("view"): continue
+		if not spec.has("controller") and not spec.has("view") and not spec.has("pack_prefix"): continue
 		if states.has(spec.id): continue
 		definitions.append(spec)
 		var values := {}
 		for field in spec.controls: values[field.id] = field.default
-		states[spec.id] = {"enabled": false, "values": values}
+		states[spec.id] = {"enabled": spec.get("default_enabled", false), "values": values}
+
+func matching_packs(spec: Dictionary) -> PackedStringArray:
+	var matches := PackedStringArray()
+	for path in pack_paths:
+		var name := path.replace("\\", "/").trim_suffix("/").get_file().to_lower()
+		if name == spec.pack_prefix or name.begins_with(spec.pack_prefix + "-"):
+			matches.append(path)
+	return matches
+
+func selected_packs() -> PackedStringArray:
+	var selected := pack_paths.duplicate()
+	for spec in definitions:
+		if spec.has("pack_prefix") and not states[spec.id].enabled:
+			for path in matching_packs(spec): selected.erase(path)
+	return selected
 
 func clear() -> void:
 	for controller in controllers.values(): controller.clear()
@@ -36,6 +53,7 @@ func bind_map(target: Node3D, paused: bool = false) -> void:
 func configure(id: String, enabled: bool, values: Dictionary = {}) -> void:
 	for spec in definitions:
 		if spec.id != id: continue
+		var changed: bool = states[id].enabled != enabled
 		states[id].enabled = enabled
 		for field in spec.controls:
 			var value = values.get(field.id, states[id].values[field.id])
@@ -46,8 +64,10 @@ func configure(id: String, enabled: bool, values: Dictionary = {}) -> void:
 					if not value in field.options: value = field.default
 			states[id].values[field.id] = value
 		_apply(spec)
+		if changed and spec.has("pack_prefix"): packs_changed.emit()
 
 func _apply(spec: Dictionary) -> void:
+	if spec.has("pack_prefix"): return
 	if spec.has("view"):
 		view_requested.emit(spec.view, states[spec.id].enabled)
 		return
@@ -83,9 +103,14 @@ func open() -> void:
 		var enabled := CheckBox.new()
 		enabled.text = spec.title
 		enabled.button_pressed = states[spec.id].enabled
+		var missing_pack: bool = spec.has("pack_prefix") and matching_packs(spec).is_empty()
+		if missing_pack:
+			enabled.button_pressed = false
+			enabled.disabled = true
 		list.add_child(enabled)
 		var description := Label.new()
 		description.text = spec.description
+		if missing_pack: description.text += "\nNo BFME2 HD pack is configured. Add its folder to asset_packs in local/config.toml."
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		list.add_child(description)
 		if controllers.has(spec.id) and not controllers[spec.id].error.is_empty():
