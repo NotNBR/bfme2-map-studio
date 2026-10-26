@@ -28,12 +28,15 @@ def script(name):
     return f'res://films/{name}.gd'
 
 
-def command(console, scene, film, log, fps, out=None, stills=None, at=()):
-    """Godot's command line: the viewer project, the movie writer (or stills) at `fps`, the film on `scene`."""
+def command(console, scene, film, log, fps, out=None, stills=None, at=(), music=None, music_start=0.0):
+    """Godot's command line: the viewer project, the movie writer (or stills) at `fps`, the film on `scene`, with
+    `music` from `music_start` seconds."""
     args = [str(console), '--path', str(openbfme.VIEWER), '--log-file', str(log), '--fixed-fps', str(fps)]
     if out is not None:
         args += ['--write-movie', str(out)]
     args += ['--script', film, '--', f'--scene={scene}', f'--fps={fps}']
+    if music is not None:
+        args += [f'--music={Path(music).resolve().as_posix()}', f'--music-start={music_start:g}']
     if stills is not None:
         args += [f'--stills={Path(stills).resolve().as_posix()}', '--at=' + ','.join(f'{t:g}' for t in at)]
     return args
@@ -46,6 +49,8 @@ def main(argv=None):
     parser.add_argument('--out', type=Path, help='The video, an .avi (default: the renders folder, films/<film>.avi)')
     parser.add_argument('--fps', type=int, default=60, help='Frames a second (60)')
     parser.add_argument('--size', default='1920x1080', help='Picture size (1920x1080)')
+    parser.add_argument('--music', type=Path, help='A soundtrack (MP3, Ogg or WAV), recorded with the picture')
+    parser.add_argument('--music-start', type=float, default=0.0, help='Seconds into the soundtrack the film starts at (0)')
     parser.add_argument('--stills', type=Path, help='Save PNGs into this folder at the --at seconds instead of a video')
     parser.add_argument('--at', default='', help='With --stills: seconds into the film, comma separated')
     parser.add_argument('--timeout', type=float, default=3600, help='Seconds before giving up (3600)')
@@ -56,6 +61,8 @@ def main(argv=None):
     if args.stills is not None and not at:
         parser.error('--stills needs --at')
     out = None if args.stills is not None else (args.out or RENDERS/'films'/f'{args.film}.avi').resolve()
+    if args.music is not None and not args.music.is_file():
+        parser.error(f'no file {args.music}')
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
     openbfme.assets()
@@ -66,7 +73,7 @@ def main(argv=None):
     try:
         scene = godot_viewer.prepare(args.map, size=(width, height))[0]
         print(f'Filming {args.film} on {args.map} at {width}x{height}, {args.fps} fps...', flush=True)
-        code = run_hidden(command(console, scene, film, log, args.fps, out, args.stills, at),
+        code = run_hidden(command(console, scene, film, log, args.fps, out, args.stills, at, args.music, args.music_start),
                           openbfme.environment(openbfme.archives()), openbfme.HOME, args.timeout)
     finally:
         godot_viewer.remove_copies()

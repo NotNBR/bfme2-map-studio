@@ -134,6 +134,8 @@ mw film helms-deep-battle wall_dance --stills local/renders/check --at 4.5,12,23
 | `--out FILE` | the video, an MJPEG `.avi` (default: `films/FILM.avi` in the renders folder) |
 | `--fps N` | frames a second (60) |
 | `--size WxH` | the picture (1920x1080) |
+| `--music FILE` | a soundtrack (MP3, Ogg or WAV) played as the film starts and recorded with it, faded out over the last 1.5 s |
+| `--music-start SECONDS` | where in the soundtrack the film starts (0) |
 | `--stills FOLDER --at T,...` | PNGs at those seconds into the film instead of a video, to check shots quickly |
 
 A film is a script in

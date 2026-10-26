@@ -18,6 +18,11 @@ class FilmTest(unittest.TestCase):
                                 '--write-movie', 'x.avi', '--script', 'res://films/x.gd', '--',
                                 f'--scene={Path("s/scene.json")}', '--fps=60'])
 
+    def test_music(self):
+        args = film.command('godot.exe', 'scene.json', 'res://films/x.gd', 'f.log', 60, out=Path('x.avi'),
+                            music=Path('song.mp3'), music_start=1.25)
+        self.assertEqual(args[-2:], [f'--music={Path("song.mp3").resolve().as_posix()}', '--music-start=1.25'])
+
     def test_stills_command(self):
         args = film.command('godot.exe', 'scene.json', 'res://films/x.gd', 'f.log', 30, stills=Path('out/stills'),
                             at=[1.5, 12.0])

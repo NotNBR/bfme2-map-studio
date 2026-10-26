@@ -4,7 +4,7 @@
 extends "res://scripts/film.gd"
 
 const WallDance := preload("res://scripts/wall_dance.gd")
-const PREROLL := 2.0                      # seconds before the first beat
+const PREROLL := 4 * 60.0 / WallDance.BPM # a bar before the first beat, so music in 4/4 can lead in
 const END_BEAT := 47.5
 
 # [from beat, to beat, eye from, eye to, look from, look to, focal from, focal to, aperture]; eye and look are offsets
