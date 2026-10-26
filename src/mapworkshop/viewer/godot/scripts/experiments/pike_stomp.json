@@ -1,0 +1,11 @@
+{
+  "id": "pike_stomp",
+  "title": "Uruk pike stomp",
+  "description": "Let Isengard pikemen strike the ground together. Preview in Edit and Photo; Animate pauses playback.",
+  "controller": "res://scripts/unit_animations.gd",
+  "controls": [
+    {"id": "phase_spread", "label": "Timing spread (seconds)", "type": "slider", "min": 0, "max": 0.35, "step": 0.01, "default": 0.12},
+    {"id": "knee_dip", "label": "Knee dip", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.4},
+    {"id": "speed", "label": "Playback speed", "type": "number", "min": 0.25, "max": 2, "step": 0.05, "default": 1}
+  ]
+}

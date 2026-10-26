@@ -78,12 +78,31 @@ Ultra High enable them at increasing atlas sizes; Very Low and Low disable
 them. Exports use High shadows. Older runtimes without the shadow renderer
 continue to show unshadowed objects. After changing runtime, restart Studio.
 
-## Grass and ground detail
+## Experiments
 
-In **Layers**, enable **Grass** to add the camera-local blade field to the map
-being edited. Switch it off to hide the blades immediately. **Ground detail**
-independently toggles the enhanced turf texture. Both start off; the choices
-survive map reloads and weather previews in the open viewer. These are visual
+**Layers → Custom animations (preview) → Uruk pike stomp** makes placed Isengard
+pikemen perform the custom pike-plant loop. Both feet stay planted; the 1.4-second
+loop uses small timing offsets (up to 120 ms) across the group. Shadow Lab
+includes a battalion near the southern unit row for trying it. **Animate** pauses
+and resumes the loop; switching it off restores the normal unit animation.
+The dialog provides timing-spread and knee-dip sliders, plus a playback-speed
+field. Settings are hidden until their feature is checked. Changes take effect together on Apply; Cancel discards edits. Features
+start disabled. Their settings and enabled state survive map reloads and only affects Edit/Photo preview, not Test
+mode or gameplay. It needs a runtime with the custom rig API; older runtimes
+report that the feature is unavailable.
+
+Feature manifests live in `src/mapworkshop/viewer/godot/scripts/experiments/`.
+Each JSON file names a controller (or an existing renderer `view` switch) and describes its controls (`slider`, `number`,
+`bool`, or `choice`), defaults and limits. The dialog discovers these files; adding
+a feature does not require another toolbar entry or viewer switch. Controllers
+implement `enable(objects, settings)`, `sample(time)`, `clear()` and an `error`
+string. The viewer binds them on map load, clears them before replacement and
+suspends them during Test mode. Settings last for the current viewer session.
+
+## Grass
+
+In **Experiments**, enable **Grass** and press **Apply** to add the camera-local blade field to the map
+being edited. Grass starts off; its setting survives map reloads and weather previews in the open viewer. These are visual
 preview options and do not alter the saved map. Grass transitions by projected
 blade size: dense nearby blades, sparser wider blades at medium range, then
 matching terrain canopy shading at overview scale. Distant coverage has no
@@ -295,7 +314,7 @@ reads the map shown again.
   project's map, as `mw play --godot` does
   ([OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)). The choice
   is kept as `test_game` in `local/config.toml`. The adjacent **⚙** opens a compact
-  panel for OpenBFME test rounds: resolution, window mode, graphics quality, grass, ground detail,
+  panel for OpenBFME test rounds: resolution, window mode, graphics quality, grass,
   and fog of war. **Save** remembers the choices as `test_settings`; they apply
   on the next launch. Saved game setting preserves the existing display choice;
   explicit display choices update only those fields in the isolated game's
@@ -312,7 +331,7 @@ reads the map shown again.
   its entries, and the key in brackets switches an entry too:
   - **Layers**, the map's own content: **Objects**, **Animate** (the units'
     idle animations, the falling rain or snow and the flow arrows),
-    **Water**, **Roads**, [**Grass** and **Ground detail**](#grass-and-ground-detail),
+    **Water**, **Roads**, [**Grass**](#grass),
     and under **Opens a copy of the map**, **Units** and **The game's tree and
     shrub limits** (only the first 1,200 trees, 2,000 shrubs and 64 kinds of
     tree the game keeps). Those last two open a copy of the map without what

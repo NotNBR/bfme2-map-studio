@@ -32,7 +32,6 @@ const CLICK_PIXELS := 4.0     # a press and release closer than this is a click,
 const VIEWS := [
 	["objects", "Objects (1)", true, "layers", ""], ["animate", "Animate", true, "layers", ""],
 	["water", "Water (2)", true, "layers", ""], ["roads", "Roads", true, "layers", ""],
-	["grass", "Grass", false, "layers", ""], ["ground_detail", "Ground detail", false, "layers", ""],
 	["units", "Units", true, "layers", "Opens a copy of the map"],
 	["limits", "The game's tree and shrub limits", false, "layers", "Opens a copy of the map"],
 	["marks", "Marks (M)", true, "overlays", ""], ["starts", "Starting positions (3)", false, "overlays", ""],
@@ -59,6 +58,7 @@ var _camera: Camera3D
 var _world_env: WorldEnvironment
 var _sun: DirectionalLight3D
 var _shadow_lighting: Dictionary = {}
+var _experiments = preload("res://scripts/experiments.gd").new()
 var _orbit: OrbitCamera
 var _overlay: MarkOverlay
 var _frame: Frame             # the toolbar, the marks rail and panel, the camera bar: with the companion only
@@ -185,6 +185,7 @@ func _build_stage() -> void:
 	add_child(_camera)
 	_photo = ProLensEffect.new()
 	_photo.enabled = false
+	add_child(_experiments)
 	var layer := CanvasLayer.new()
 	for view in VIEWS:
 		_views[view[0]] = view[2]
@@ -193,6 +194,10 @@ func _build_stage() -> void:
 		_views[key] = bool(_scene.views[key])
 	for key in COPY_VIEWS:                        # and those of the copy it opens
 		_views[key] = bool(_scene.get("preview", {}).get(key, _views[key]))
+	_experiments.view_requested.connect(_switch_view)
+	for spec in _experiments.definitions:
+		if spec.has("view"):
+			_experiments.states[spec.id].enabled = _views.get(spec.view, false)
 	_overlays = Overlays.new()
 	add_child(_overlays)
 	_overlay = MarkOverlay.new()
@@ -212,6 +217,7 @@ func _build_stage() -> void:
 			func(choice: String) -> void: _send({"type": "command", "name": "test_game", "choice": choice}))
 		_frame.toolbar.test_settings_chosen.connect(
 			func(settings: Dictionary) -> void: _send({"type": "command", "name": "test_settings", "settings": settings}))
+		_frame.toolbar.experiments_requested.connect(func() -> void: _capture(false); _experiments.open())
 		_frame.toolbar.view_switched.connect(_switch_view)
 		_frame.toolbar.quality_chosen.connect(_choose_quality)
 		_quality = ViewerQuality.read_choice()
@@ -317,6 +323,7 @@ func _open_map() -> void:
 ## errors}, or {} (after saying why) when they did not build. The terrain is built before the old map goes, so a map
 ## that does not build leaves the last good one; its objects then go with it (the object builder holds one map).
 func _build_map() -> Dictionary:
+	_experiments.clear()
 	var started := Time.get_ticks_msec()
 	var user_map: bool = _scene.user_map
 	if not _build_terrain():
@@ -350,6 +357,7 @@ func _build_map() -> Dictionary:
 	_overlays.set_starts(_scene.get("starts", []), _surface)
 	_build_falling()
 	_apply_views()
+	_experiments.bind_map(_objects_node, _test != null)
 	return {"terrain_ms": built_terrain - started, "objects_ms": Time.get_ticks_msec() - built_terrain,
 		"objects": int(object_report.objects.total), "errors": report.errors.size() + object_report.errors.size()}
 
@@ -377,7 +385,7 @@ func _build_terrain() -> bool:
 	if _terrain == null:
 		_terrain = ClassDB.instantiate("MapTerrainBuilder")
 	var options := {"user_map": _scene.user_map, "fog": _views.get("fog", true), "markers": false,
-		"ground_cover": _views.get("grass", false), "natural_ground": _views.get("ground_detail", false)}
+		"ground_cover": _views.get("grass", false)}
 	var built: Node3D = _terrain.build_map(_fs, _scene.map, options)
 	if built == null:
 		_fail("the terrain did not build: %s" % [_terrain.get_report().errors])
@@ -539,6 +547,8 @@ func _advance(time: float) -> void:
 		if _overlays != null:
 			_overlays.advance(step)
 		_clock += step
+	if _test == null:
+		_experiments.sample(_clock)
 	if _falling != null:
 		_falling.set_time(_clock)
 
@@ -717,6 +727,7 @@ func _enter_test(message: Dictionary) -> void:
 		_frame.bar.set_mode(_mode)
 		return
 	_test = test
+	_experiments.clear()
 	_mode = "test"
 	_drag = ""
 	_send({"type": "tool", "tool": null})
@@ -741,6 +752,7 @@ func _leave_test() -> void:
 	_overlay.visible = _views.get("marks", true)
 	_overlays.show_starts(_views.get("starts", false))
 	_frame.set_test_mode(false)
+	_experiments.bind_map(_objects_node)
 	print("VIEWER mode edit")
 
 
@@ -1363,8 +1375,6 @@ func _switch_view(key: String, on: bool) -> void:
 			if not EngineRuntime.show_grass(_root, on):
 				if _build_terrain(): _apply_views(["water", "roads", "clouds"])
 				if _root != null: _root.visible = _views.get("terrain", true)
-		"ground_detail":
-			EngineRuntime.show_ground_detail(_root, on)
 		"terrain":                                      # the ground, water and roads (mw item's pictures leave them out)
 			if _root != null:
 				_root.visible = on

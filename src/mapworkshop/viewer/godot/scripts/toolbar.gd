@@ -15,6 +15,7 @@ signal command(name: String)
 signal test_game_chosen(choice: String)
 signal test_settings_chosen(settings: Dictionary)
 signal quality_chosen(choice: String)
+signal experiments_requested()
 ## A Layers, Overlays or Atmosphere switch.
 signal view_switched(key: String, on: bool)
 ## A Preview entry (Atmosphere) chosen: "weather" or "sun" and its value.
@@ -97,6 +98,7 @@ func _ready() -> void:
 		menu.get_popup().id_pressed.connect(_on_menu.bind(String(spec[0])))
 		row.add_child(menu)
 		_menus[spec[0]] = menu
+	_add(row, "Experiments", "Choose optional preview features and adjust their settings", func() -> void: experiments_requested.emit())
 	_quality = OptionButton.new()
 	_quality.tooltip_text = "Viewer graphics quality: render resolution, anti-aliasing and texture filtering. Applies immediately; map layers stay as chosen."
 	_quality.focus_mode = Control.FOCUS_NONE
@@ -182,7 +184,7 @@ func _show_test_settings() -> void:
 		_test_controls[spec[0]] = choice
 		if spec[0] == "quality":
 			choice.tooltip_text = "OpenBFME's graphics preset: texture quality, particle limits and health bars. Other detail controls are not implemented by the engine yet."
-	for spec in [["grass","Grass",true],["ground_detail","Ground detail",true],["fog","Fog of war",false]]:
+	for spec in [["grass","Grass",true],["fog","Fog of war",false]]:
 		var check := CheckBox.new()
 		check.text = spec[1]
 		check.button_pressed = _test_settings.get(spec[0],spec[2])

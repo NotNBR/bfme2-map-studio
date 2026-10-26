@@ -86,7 +86,7 @@ class CompanionTests(unittest.TestCase):
 
     def test_quick_settings_persist_reopen_and_reach_the_next_launch(self):
         from mapworkshop import config
-        chosen = dict(resolution='2560x1440', window_mode='windowed', quality='High', grass=False, ground_detail=False, fog=True)
+        chosen = dict(resolution='2560x1440', window_mode='windowed', quality='High', grass=False, fog=True)
         with mock.patch.object(config, 'CONFIG', self.map_path.parent/'config.toml'), \
                 mock.patch.object(godot_link.jobs, 'play') as play:
             replies = self.send(dict(type='command', name='test_settings', settings=chosen))
@@ -100,7 +100,7 @@ class CompanionTests(unittest.TestCase):
 
     def test_legacy_quick_settings_are_recovered_and_rewritten(self):
         from mapworkshop import config
-        chosen = dict(resolution='1920x1080', window_mode='borderless', quality='saved', grass=False, ground_detail=True, fog=True)
+        chosen = dict(resolution='1920x1080', window_mode='borderless', quality='saved', grass=False, fog=True)
         with mock.patch.object(config, 'CONFIG', self.map_path.parent/'config.toml'):
             config.save_setting('test_settings', str(chosen))
             self.assertEqual(self.companion.menu()['test_settings'], chosen)

@@ -28,20 +28,8 @@ func run() -> void:
 	check(cover != null and not cover.visible and not cover.is_processing(), "off hides grass and stops updates")
 	viewer._switch_view("grass", true)
 	check(viewer._root.get_node_or_null("GroundCover") == cover and cover.visible, "on reuses existing grass")
-	viewer._switch_view("ground_detail", true)
-	var checked := 0
-	for mesh in viewer._root.find_children("*", "MeshInstance3D", true, false):
-		for i in mesh.mesh.get_surface_count():
-			var mat = mesh.mesh.surface_get_material(i)
-			if mat is ShaderMaterial and mat.has_meta("natural_ground"):
-				check(mat.get_shader_parameter("natural_ground_enabled"), "ground detail enabled")
-				checked += 1
-				break
-		if checked: break
-	check(checked > 0, "map contains enhanced terrain materials")
 	viewer._switch_view("fog", not viewer._views.get("fog", true))
 	check(viewer._root.get_node_or_null("GroundCover") != null, "grass survives terrain rebuild")
-	viewer._switch_view("ground_detail", false)
 	for i in 20: await process_frame
 	await RenderingServer.frame_post_draw
 	for arg in OS.get_cmdline_user_args():

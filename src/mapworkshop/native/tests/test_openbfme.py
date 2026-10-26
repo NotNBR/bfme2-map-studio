@@ -334,16 +334,15 @@ class QuickSettingsTests(unittest.TestCase):
             openbfme.apply_test_quality(openbfme.test_settings(dict(quality='Low')))
             self.assertEqual(path.read_text(), 'StaticGameLOD = Low\n')
 
-    def test_launch_forwards_grass_ground_and_fog_choices(self):
+    def test_launch_forwards_grass_and_fog_choices(self):
         with mock.patch.object(openbfme, 'prepare', return_value=('godot', 'console', {}, 'maps/test.map')), \
                 mock.patch.object(openbfme, 'net_slots', return_value='human::-1:-1;easy::-1:-1'), \
                 mock.patch.object(openbfme, 'apply_test_display') as display, \
                 mock.patch.object(openbfme, 'apply_test_quality') as quality, \
                 mock.patch.object(openbfme.subprocess, 'Popen') as spawn:
-            openbfme.play(object(), settings=dict(grass=False, ground_detail=True, fog=True, resolution='1920x1080', quality='High'))
+            openbfme.play(object(), settings=dict(grass=False, fog=True, resolution='1920x1080', quality='High'))
         args = spawn.call_args.args[0]
         self.assertIn('--ground-cover=off', args)
-        self.assertIn('--natural-ground=on', args)
         self.assertNotIn('--no-shroud', args)
         self.assertEqual(display.call_args.args[0]['resolution'], '1920x1080')
         self.assertEqual(quality.call_args.args[0]['quality'], 'High')

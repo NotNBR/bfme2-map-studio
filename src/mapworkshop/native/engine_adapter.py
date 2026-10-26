@@ -11,9 +11,8 @@ from mapworkshop.native import engine_bundle
 
 DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'
 SHADERS = ('terrain', 'water_standing', 'road', 'river', 'ground_cover')
-RESOURCES = ('scripts/ground_cover.gd', 'scripts/pro_lens.gd', 'scripts/pro_lens_effect.gd',   # Photo mode's lens
-             'assets/natural_ground/profiles.json',
-             'assets/natural_ground/turf_detail.png', 'assets/natural_ground/turf_detail.png.import')
+RESOURCES = ('scripts/ground_cover.gd', 'scripts/pro_lens.gd', 'scripts/pro_lens_effect.gd',
+             'assets/ground_cover/profiles.json')
 
 
 def viewer_resources(godot):
@@ -24,6 +23,8 @@ def viewer_resources(godot):
     # whenever the selected engine supplies it, alongside its shader includes.
     if (godot/'scripts/object_shadows.gd').is_file():
         pending.append('scripts/object_shadows.gd')
+    if (godot/'scripts/animation/w3d_unit_rig.gd').is_file():
+        pending += ['scripts/animation/w3d_unit_rig.gd', 'scripts/animation/uruk_pike_stomp.gd']
     files = {}
     while pending:
         name = engine_bundle.relative(pending.pop())

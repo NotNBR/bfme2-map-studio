@@ -65,15 +65,3 @@ static func show_grass(root: Node3D, on: bool) -> bool:
 		return not on
 	cover.set("enabled", on)
 	return true
-
-
-static func show_ground_detail(root: Node3D, on: bool) -> void:
-	if root == null:
-		return
-	for mesh in root.find_children("*", "MeshInstance3D", true, false):
-		if mesh.mesh == null:
-			continue
-		for surface in mesh.mesh.get_surface_count():
-			var material = mesh.mesh.surface_get_material(surface)
-			if material is ShaderMaterial and material.has_meta("natural_ground"):
-				material.set_shader_parameter("natural_ground_enabled", on)

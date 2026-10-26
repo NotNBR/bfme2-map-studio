@@ -694,7 +694,7 @@ def net_slots(project):
                     f'{s["start"]}:{s["team"]}' for s in seats)
 
 
-TEST_DEFAULTS = dict(resolution='saved', window_mode='saved', quality='saved', grass=True, ground_detail=True, fog=False)
+TEST_DEFAULTS = dict(resolution='saved', window_mode='saved', quality='saved', grass=True, fog=False)
 TEST_RESOLUTIONS = ('saved', '1280x720', '1920x1080', '2560x1440', '3840x2160')
 TEST_WINDOW_MODES = ('saved', 'windowed', 'borderless')
 TEST_QUALITY = ('saved', 'VeryLow', 'Low', 'Medium', 'High', 'UltraHigh')
@@ -715,7 +715,7 @@ def test_settings(values=None):
     for key, choices in [('resolution', TEST_RESOLUTIONS), ('window_mode', TEST_WINDOW_MODES), ('quality', TEST_QUALITY)]:
         if values.get(key) in choices:
             result[key] = values[key]
-    for key in ('grass', 'ground_detail', 'fog'):
+    for key in ('grass', 'fog'):
         if type(values.get(key)) is bool:
             result[key] = values[key]
     return result
@@ -782,8 +782,7 @@ def play(project, progress=print, download=False, fog=False, record=False, setti
         apply_test_display(values)
         apply_test_quality(values)
         fog = values['fog']
-        args += ['--ground-cover=' + ('on' if values['grass'] else 'off'),
-                 '--natural-ground=' + ('on' if values['ground_detail'] else 'off')]
+        args += ['--ground-cover=' + ('on' if values['grass'] else 'off')]
     if project is not None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:   # a free port for the host
             s.bind(('127.0.0.1', 0))

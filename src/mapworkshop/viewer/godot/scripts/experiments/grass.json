@@ -1,0 +1,7 @@
+{
+  "id": "grass",
+  "title": "Grass",
+  "description": "Add camera-local grass blades to the terrain preview.",
+  "view": "grass",
+  "controls": []
+}

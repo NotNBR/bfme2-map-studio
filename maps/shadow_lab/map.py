@@ -6,6 +6,7 @@ No lab-specific controls, custom assets, automatic camera or moving scripts.
 
 South to north:
   y  330: friendly infantry, archers and Aragorn for animation/movement tests.
+  y  450: Uruk pikemen at x 1350 for Layers > Uruk pike stomp.
   y  650: three Gondor barracks at x 450, 900 and 1350, rotated 0/90/180 degrees.
   y 1050: an isolated tower at x 400; two at x 800/900 for overlapping shadows;
           a rock on a gentle mound at x 1400 for sloped reception.
@@ -67,6 +68,7 @@ def build(b):
         add_object(m, template, ox, oy, layer='Foliage and low silhouettes')
     for template, ox in [('GondorFighterHorde', 550), ('GondorArcherHorde', 900), ('GondorAragorn', 1200)]:
         add_object(m, template, ox, 330, layer='Animated units', extra=[PLAYER])
+    add_object(m, 'IsengardPikemanHorde', 1350, 450, layer='Custom animation - Uruk pike stomp', extra=[PLAYER])
 
     writer = Writer(m)
     reveal = writer.operation('action', 'MAP_REVEAL_ALL_PERM', [arg(11, text='Player_1')])

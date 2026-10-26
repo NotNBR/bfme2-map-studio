@@ -273,6 +273,22 @@ def lab():
                      'the Godot viewer needs OpenBFME built for its pin and the game files (mw play --godot sets '
                      'both up)')
 class LibraryTests(unittest.TestCase):
+    def test_custom_unit_animation_toggle_and_reload(self):
+        _, console = openbfme.assemble(progress=lambda line: None)
+        if not (openbfme.VIEWER/'scripts/animation/uruk_pike_stomp.gd').is_file():
+            self.skipTest('runtime does not include custom animations')
+        if not project.find('shadow-lab').map_file.exists():
+            self.skipTest('build Shadow Lab before testing its custom animations')
+        prepared = godot_viewer.prepare('shadow-lab')
+        result = subprocess.run([str(console), '--headless', '--path', str(openbfme.VIEWER),
+                                 '--script', 'res://tests/unit_animations_test.gd', '--', f'--scene={prepared[0]}'],
+                                env=openbfme.environment(openbfme.archives()), capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=120)
+        text = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, text)
+        self.assertIn('UNIT ANIMATION RESULT 0', text)
+        self.assertNotIn('SCRIPT ERROR', text)
+
     def test_quality_selector_applies_persists_and_survives_reload(self):
         _, console = openbfme.assemble(progress=lambda line: None)
         prepared = godot_viewer.prepare(lab())

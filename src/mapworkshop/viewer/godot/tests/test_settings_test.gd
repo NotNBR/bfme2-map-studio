@@ -6,7 +6,7 @@ func _initialize() -> void:
 func run() -> void:
  var toolbar = load("res://scripts/toolbar.gd").new()
  root.add_child(toolbar)
- toolbar._test_settings={"resolution":"2560x1440","window_mode":"windowed","grass":true,"ground_detail":true,"fog":false}
+ toolbar._test_settings={"resolution":"2560x1440","window_mode":"windowed","grass":true,"fog":false}
  toolbar.test_settings_chosen.connect(func(value: Dictionary): saved=value)
  toolbar._show_test_settings()
  await process_frame
