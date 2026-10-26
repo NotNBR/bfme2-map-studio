@@ -98,7 +98,7 @@ func _ready() -> void:
 		menu.get_popup().id_pressed.connect(_on_menu.bind(String(spec[0])))
 		row.add_child(menu)
 		_menus[spec[0]] = menu
-	_add(row, "Experiments", "Choose optional preview features and adjust their settings", func() -> void: experiments_requested.emit())
+	_add(row, "Experimental","Choose optional preview features and adjust their settings", func() -> void: experiments_requested.emit())
 	_quality = OptionButton.new()
 	_quality.tooltip_text = "Viewer graphics quality: render resolution, anti-aliasing and texture filtering. Applies immediately; map layers stay as chosen."
 	_quality.focus_mode = Control.FOCUS_NONE

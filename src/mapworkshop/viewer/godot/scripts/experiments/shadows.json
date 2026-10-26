@@ -1,0 +1,7 @@
+{
+  "id": "shadows",
+  "title": "Shadows",
+  "description": "Let objects cast shadows on the terrain, roads and each other. The Quality preset sets their detail (off below Medium). Needs a runtime with the shadow renderer.",
+  "view": "shadows",
+  "controls": []
+}

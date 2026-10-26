@@ -89,7 +89,7 @@ func open() -> void:
 	if dialog != null: dialog.free()
 	_fields.clear()
 	dialog = ConfirmationDialog.new()
-	dialog.title = "Experiments"
+	dialog.title = "Experimental"
 	dialog.ok_button_text = "Apply"
 	add_child(dialog)
 	var scroll := ScrollContainer.new()

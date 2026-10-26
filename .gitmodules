@@ -4,4 +4,4 @@
 [submodule "src/mapworkshop/native/openbfme-godot"]
 	path = src/mapworkshop/native/openbfme-godot
 	url = https://github.com/NotNBR/openbfme-godot
-	branch = dev/studio-shadows
+	branch = combo/studio

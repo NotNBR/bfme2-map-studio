@@ -73,12 +73,13 @@ detail retain their separate controls.
 The preset also applies in Photo and embedded Test mode. It does not change
 **Play in game** settings or `mw render` exports.
 
-When the selected engine runtime includes object shadows, Medium, High and
-Ultra High enable them at increasing atlas sizes; Very Low and Low disable
-them. Exports use High shadows. Older runtimes without the shadow renderer
-continue to show unshadowed objects. After changing runtime, restart Studio.
+Object shadows are an **Experimental** feature (see Shadows below). While they
+are on, Medium, High and Ultra High draw them at increasing atlas sizes; Very
+Low and Low disable them. Exports use High shadows. Older runtimes without the
+shadow renderer continue to show unshadowed objects. After changing runtime,
+restart Studio.
 
-## Experiments
+## Experimental
 
 **Layers → Custom animations (preview) → Uruk pike stomp** makes placed Isengard
 pikemen perform the custom pike-plant loop. Both feet stay planted; the 1.4-second
@@ -101,7 +102,7 @@ suspends them during Test mode. Settings last for the current viewer session.
 
 ## BFME2 HD pack
 
-In **Experiments**, **BFME2 HD pack** toggles the configured BFME2 HD models and
+In **Experimental**, **BFME2 HD pack** toggles the configured BFME2 HD models and
 textures. Press **Apply** to rebuild the preview while keeping the camera and
 other enabled experiments. The separate terrain HD pack remains enabled. The
 switch starts on when installed and retains its choice during the viewer session.
@@ -112,7 +113,7 @@ separately launched games still use their configured packs.
 
 ## Grass
 
-In **Experiments**, enable **Grass** and press **Apply** to add the camera-local blade field to the map
+In **Experimental**, enable **Grass** and press **Apply** to add the camera-local blade field to the map
 being edited. Grass starts off; its setting survives map reloads and weather previews in the open viewer. These are visual
 preview options and do not alter the saved map. Grass transitions by projected
 blade size: dense nearby blades, sparser wider blades at medium range, then
@@ -132,6 +133,16 @@ Sparse leaves near tree templates, dead stems and small pebbles share the
 Grass toggle. It avoids roads,
 water and steep slopes; interactive trampling and building-footprint clearance are not
 implemented.
+
+## Shadows
+
+In **Experimental**, enable **Shadows** and press **Apply** to let placed objects
+cast directional shadows on the terrain, roads and each other, from the map's
+own sun. Shadows start off in the viewer and stay as chosen across map reloads
+in the open viewer; `mw render` exports keep them on. The **Quality** preset
+sets their detail (Medium and up; Very Low and Low draw none). They are a
+visual preview and do not alter the saved map. A runtime without the shadow
+renderer ignores the switch.
 
 ## Moving around
 

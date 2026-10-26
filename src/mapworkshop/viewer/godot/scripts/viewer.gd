@@ -192,6 +192,7 @@ func _build_stage() -> void:
 	for view in VIEWS:
 		_views[view[0]] = view[2]
 	_views["starts"] = _scene.get("port") != null  # shown while exploring; render outputs stay as requested
+	_views["shadows"] = _scene.get("port") == null # an Experimental switch while exploring; render outputs keep them
 	for key in _scene.get("views", {}):           # the scene's own switches (screenshots of an overlay)
 		_views[key] = bool(_scene.views[key])
 	for key in COPY_VIEWS:                        # and those of the copy it opens
@@ -521,7 +522,7 @@ func _apply_shadows() -> void:
 	const controller := "res://scripts/object_shadows.gd"
 	if not ResourceLoader.exists(controller):
 		return
-	if _sun == null or _shadow_lighting.is_empty():
+	if _sun == null or _shadow_lighting.is_empty() or not _views.get("shadows", false):
 		load(controller).disable()
 		return
 	var choice := _quality if not _quality.is_empty() else ViewerQuality.DEFAULT
@@ -1405,6 +1406,8 @@ func _switch_view(key: String, on: bool) -> void:
 			if not EngineRuntime.show_grass(_root, on):
 				if _build_terrain(): _apply_views(["water", "roads", "clouds"])
 				if _root != null: _root.visible = _views.get("terrain", true)
+		"shadows":
+			_apply_shadows()
 		"terrain":                                      # the ground, water and roads (mw item's pictures leave them out)
 			if _root != null:
 				_root.visible = on

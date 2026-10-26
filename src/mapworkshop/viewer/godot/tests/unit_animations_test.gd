@@ -29,7 +29,8 @@ func run() -> void:
 	check(not form.settings.visible, "unchecking collapses settings immediately")
 	form.enabled.button_pressed = true
 	check(form.settings.visible, "checking reveals settings immediately")
-	check(viewer._experiments._fields.has("grass"), "terrain enhancements discovered in Experiments")
+	check(viewer._experiments._fields.has("grass"), "terrain enhancements discovered in Experimental")
+	check(viewer._experiments._fields.has("shadows"), "shadows discovered in Experimental")
 	form.fields.phase_spread.value = 0.2
 	form.fields.knee_dip.value = 0.25
 	form.fields.speed.value = 0.8
