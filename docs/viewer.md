@@ -73,6 +73,11 @@ detail retain their separate controls.
 The preset also applies in Photo and embedded Test mode. It does not change
 **Play in game** settings or `mw render` exports.
 
+When the selected engine runtime includes object shadows, Medium, High and
+Ultra High enable them at increasing atlas sizes; Very Low and Low disable
+them. Exports use High shadows. Older runtimes without the shadow renderer
+continue to show unshadowed objects. After changing runtime, restart Studio.
+
 ## Grass and ground detail
 
 In **Layers**, enable **Grass** to add the camera-local blade field to the map

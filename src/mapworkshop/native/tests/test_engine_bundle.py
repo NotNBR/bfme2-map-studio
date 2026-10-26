@@ -141,6 +141,13 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'lacks runtime resource'):
             engine_adapter.viewer_resources(self.root/'source/godot')
 
+    def test_shadow_controller_is_packaged_only_when_the_engine_supplies_it(self):
+        godot = self.root/'source/godot'
+        name = 'scripts/object_shadows.gd'
+        self.assertNotIn(name, engine_adapter.viewer_resources(godot))
+        (godot/name).write_text('extends RefCounted\n', encoding='utf-8')
+        self.assertEqual(engine_adapter.viewer_resources(godot)[name], godot/name)
+
     def test_prebuilt_path_needs_no_checkout_compiler_or_download(self):
         with mock.patch.object(openbfme, 'setting', return_value=str(self.bundle.root)), \
                 mock.patch.object(openbfme, 'recorded', return_value='a'*40), \

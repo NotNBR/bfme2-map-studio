@@ -20,6 +20,10 @@ def viewer_resources(godot):
     """Resolve the pinned fork's runtime resources, failing on missing dependencies."""
     godot = Path(godot)
     pending = ['openbfme.gdextension', *RESOURCES, *(f'shaders/{s}.gdshader' for s in SHADERS)]
+    # Older pinned runtimes have no object-shadow renderer. Carry its controller
+    # whenever the selected engine supplies it, alongside its shader includes.
+    if (godot/'scripts/object_shadows.gd').is_file():
+        pending.append('scripts/object_shadows.gd')
     files = {}
     while pending:
         name = engine_bundle.relative(pending.pop())

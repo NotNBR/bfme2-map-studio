@@ -1,0 +1,12 @@
+id = "shadow-lab"
+title = "Shadow Lab"
+native_name = "map mp shadow lab"
+players = 2
+description = "A quiet shadow test ground: rotated barracks, isolated and overlapping towers, foliage, units and a rock on a gentle slope."
+weather = "clear"
+
+[play]
+slots = [
+    {faction = "Men", team = 1},
+    {faction = "Men", team = 1, ai = "easy"},
+]

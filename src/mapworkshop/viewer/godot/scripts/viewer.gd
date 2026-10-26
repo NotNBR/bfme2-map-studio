@@ -58,6 +58,7 @@ var _root: Node3D
 var _camera: Camera3D
 var _world_env: WorldEnvironment
 var _sun: DirectionalLight3D
+var _shadow_lighting: Dictionary = {}
 var _orbit: OrbitCamera
 var _overlay: MarkOverlay
 var _frame: Frame             # the toolbar, the marks rail and panel, the camera bar: with the companion only
@@ -322,6 +323,7 @@ func _build_map() -> Dictionary:
 		return {}
 	var report: Dictionary = _terrain.get_report()
 	if _sun != null:
+		_sun.visible = false
 		_sun.queue_free()
 		_sun = null
 	if _objects_node != null:
@@ -456,10 +458,12 @@ func _probe() -> void:
 
 ## The map's object lighting, as OpenBFME's map viewer applies it: ambient and one sun.
 func _apply_lighting(rep: Dictionary) -> void:
+	_shadow_lighting = rep.get("lighting", {})
 	var env := _world_env.environment
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	if not rep.has("lighting"):
 		env.ambient_light_color = Color(0.6, 0.6, 0.6)
+		_apply_shadows()
 		return
 	var lit: Dictionary = rep.lighting
 	env.ambient_light_color = lit.ambient
@@ -472,6 +476,18 @@ func _apply_lighting(rep: Dictionary) -> void:
 		var up := Vector3.UP if absf(dir.normalized().y) < 0.99 else Vector3.RIGHT
 		_sun.transform = Transform3D(Basis.looking_at(dir.normalized(), up), Vector3.ZERO)
 	add_child(_sun)
+	_apply_shadows()
+
+
+func _apply_shadows() -> void:
+	const controller := "res://scripts/object_shadows.gd"
+	if not ResourceLoader.exists(controller):
+		return
+	if _sun == null or _shadow_lighting.is_empty():
+		load(controller).disable()
+		return
+	var choice := _quality if not _quality.is_empty() else ViewerQuality.DEFAULT
+	load(controller).configure(_sun, _shadow_lighting, ViewerQuality.NAMES.find(choice))
 
 
 func _process(delta: float) -> void:
@@ -1316,6 +1332,7 @@ func _choose_quality(choice: String) -> void:
 		return
 	_quality = choice
 	ViewerQuality.apply(get_viewport(), choice)
+	_apply_shadows()
 	_frame.toolbar.set_quality(choice)
 	if ViewerQuality.save_choice(choice) != OK:
 		_status("Graphics quality applied, but could not be saved", 5)

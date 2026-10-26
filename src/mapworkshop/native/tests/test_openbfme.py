@@ -209,6 +209,7 @@ class BuildTests(unittest.TestCase):
 
             with mock.patch.multiple(openbfme, SOURCE=tmp/'src', PROJECT=tmp/'project', BUILD=tmp/'build', LOGS=tmp/'logs',
                                      APPDATA=tmp/'appdata', source=lambda progress: None,
+                                     setting=lambda key, default=None: default,  # source-build test, independent of the user's bundle
                                      toolchain=lambda progress: (tmp, 'gui', 'console'), _stamp=lambda: 'stamp',
                                      _compile=link, _git=lambda *args, **kwargs: 'godot/project.godot'), \
                     mock.patch.object(subprocess, 'run', run):

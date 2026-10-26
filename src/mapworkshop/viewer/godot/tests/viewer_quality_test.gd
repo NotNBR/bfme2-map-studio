@@ -36,6 +36,8 @@ func run() -> void:
 		check(is_equal_approx(root.scaling_3d_scale, preset[0]) and root.msaa_3d == preset[1]
 			and root.screen_space_aa == preset[2] and root.anisotropic_filtering_level == preset[3], choice + " applies to viewport")
 		check(ViewerQuality.read_choice() == choice, choice + " persists for reopening")
+		if ResourceLoader.exists("res://scripts/object_shadows.gd"):
+			check(viewer._sun.shadow_enabled == (index >= 2), choice + " applies object shadows")
 		check(viewer._root == map_root and viewer._camera.transform == camera_transform and viewer._views == layers,
 			choice + " preserves map, camera and layers")
 	viewer._choose_quality("Medium")
