@@ -3,6 +3,7 @@ resolves them and Preview's copies of a map; and, when OpenBFME is built, the vi
 through OpenBFME's library (a lab's build from the user maps folder, else a stock map) and its camera projects map
 points onto the pixels mw render's does."""
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -272,6 +273,18 @@ def lab():
                      'the Godot viewer needs OpenBFME built for its pin and the game files (mw play --godot sets '
                      'both up)')
 class LibraryTests(unittest.TestCase):
+    def test_quality_selector_applies_persists_and_survives_reload(self):
+        _, console = openbfme.assemble(progress=lambda line: None)
+        prepared = godot_viewer.prepare(lab())
+        result = subprocess.run([str(console), '--headless', '--path', str(openbfme.VIEWER),
+                                 '--script', 'res://tests/viewer_quality_test.gd', '--', f'--scene={prepared[0]}'],
+                                env=openbfme.environment(openbfme.archives()), capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=120)
+        text = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, text)
+        self.assertIn('VIEWER QUALITY RESULT 0', text)
+        self.assertNotIn('SCRIPT ERROR', text)
+
     def test_the_viewer_opens_a_map_and_projects_as_mw_render(self):
         code, lines = godot_viewer.run(lab(), 'target=200,300 distance=900 elevation=35 heading=20',
                                        probes=[(200, 300), (420, 120)], check=True, progress=lambda line: None,

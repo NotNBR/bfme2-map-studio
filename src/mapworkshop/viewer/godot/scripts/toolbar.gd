@@ -14,6 +14,7 @@ signal command(name: String)
 ## Play in game's choice changed.
 signal test_game_chosen(choice: String)
 signal test_settings_chosen(settings: Dictionary)
+signal quality_chosen(choice: String)
 ## A Layers, Overlays or Atmosphere switch.
 signal view_switched(key: String, on: bool)
 ## A Preview entry (Atmosphere) chosen: "weather" or "sun" and its value.
@@ -45,6 +46,7 @@ var _views := []              # [key, title, on, group, section] of the switches
 var _preview := {}            # the companion's Preview choices and the current one
 var _previews := []           # [option, value, title] of Atmosphere's Preview entries
 var _fps: MenuButton
+var _quality: OptionButton
 var _fps_limit := "60"
 var _build := {}              # the build chip's last message
 
@@ -95,6 +97,14 @@ func _ready() -> void:
 		menu.get_popup().id_pressed.connect(_on_menu.bind(String(spec[0])))
 		row.add_child(menu)
 		_menus[spec[0]] = menu
+	_quality = OptionButton.new()
+	_quality.tooltip_text = "Viewer graphics quality: render resolution, anti-aliasing and texture filtering. Applies immediately; map layers stay as chosen."
+	_quality.focus_mode = Control.FOCUS_NONE
+	for quality in ViewerQuality.NAMES:
+		_quality.add_item("Quality: " + quality)
+	_quality.item_selected.connect(func(index: int) -> void: quality_chosen.emit(ViewerQuality.NAMES[index]))
+	row.add_child(_quality)
+	set_quality(ViewerQuality.DEFAULT)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
@@ -114,8 +124,12 @@ func _ready() -> void:
 	row.add_child(_fps)
 	set_fps_limit("60")
 	for control in row.get_children():
-		if control is BaseButton and control not in [_map, _fps]:
+		if control is BaseButton and control not in [_map, _fps, _quality]:
 			_map_controls.append(control)
+
+
+func set_quality(choice: String) -> void:
+	_quality.select(maxi(0, ViewerQuality.NAMES.find(choice)))
 
 
 func set_map_loaded(loaded: bool) -> void:
@@ -149,7 +163,8 @@ func _show_test_settings() -> void:
 	note.text = "For OpenBFME (Godot) test rounds"
 	box.add_child(note)
 	for spec in [["resolution","Resolution",["saved","1280x720","1920x1080","2560x1440","3840x2160"]],
-	             ["window_mode","Window mode",["saved","windowed","borderless"]]]:
+	             ["window_mode","Window mode",["saved","windowed","borderless"]],
+	             ["quality","Graphics quality",["saved","VeryLow","Low","Medium","High","UltraHigh"]]]:
 		var row := HBoxContainer.new()
 		var label := Label.new()
 		label.text = spec[1]
@@ -158,12 +173,15 @@ func _show_test_settings() -> void:
 		var choice := OptionButton.new()
 		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		for value in spec[2]:
-			choice.add_item({"saved":"Saved game setting","windowed":"Windowed","borderless":"Borderless fullscreen"}.get(value,value))
+			choice.add_item({"saved":"Saved game setting","windowed":"Windowed","borderless":"Borderless fullscreen",
+				"VeryLow":"Very Low","UltraHigh":"Ultra High"}.get(value,value))
 			choice.set_item_metadata(choice.item_count-1,value)
 			if value == _test_settings.get(spec[0],"saved"): choice.select(choice.item_count-1)
 		row.add_child(choice)
 		box.add_child(row)
 		_test_controls[spec[0]] = choice
+		if spec[0] == "quality":
+			choice.tooltip_text = "OpenBFME's graphics preset: texture quality, particle limits and health bars. Other detail controls are not implemented by the engine yet."
 	for spec in [["grass","Grass",true],["ground_detail","Ground detail",true],["fog","Fog of war",false]]:
 		var check := CheckBox.new()
 		check.text = spec[1]
@@ -175,7 +193,7 @@ func _show_test_settings() -> void:
 	hint.add_theme_font_size_override("font_size",12)
 	box.add_child(hint)
 	_test_dialog.confirmed.connect(_save_test_settings)
-	_test_dialog.popup_centered(Vector2i(440,320))
+	_test_dialog.popup_centered(Vector2i(440,360))
 
 
 func _save_test_settings() -> void:

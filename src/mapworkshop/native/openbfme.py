@@ -694,9 +694,10 @@ def net_slots(project):
                     f'{s["start"]}:{s["team"]}' for s in seats)
 
 
-TEST_DEFAULTS = dict(resolution='saved', window_mode='saved', grass=True, ground_detail=True, fog=False)
+TEST_DEFAULTS = dict(resolution='saved', window_mode='saved', quality='saved', grass=True, ground_detail=True, fog=False)
 TEST_RESOLUTIONS = ('saved', '1280x720', '1920x1080', '2560x1440', '3840x2160')
 TEST_WINDOW_MODES = ('saved', 'windowed', 'borderless')
+TEST_QUALITY = ('saved', 'VeryLow', 'Low', 'Medium', 'High', 'UltraHigh')
 
 
 def test_settings(values=None):
@@ -711,7 +712,7 @@ def test_settings(values=None):
             values = None
     values = values if isinstance(values, dict) else {}
     result = dict(TEST_DEFAULTS)
-    for key, choices in [('resolution', TEST_RESOLUTIONS), ('window_mode', TEST_WINDOW_MODES)]:
+    for key, choices in [('resolution', TEST_RESOLUTIONS), ('window_mode', TEST_WINDOW_MODES), ('quality', TEST_QUALITY)]:
         if values.get(key) in choices:
             result[key] = values[key]
     for key in ('grass', 'ground_detail', 'fog'):
@@ -741,6 +742,28 @@ def apply_test_display(values):
     temporary.replace(path)
 
 
+def apply_test_quality(values):
+    """Select an engine preset in the isolated game's Options.ini, preserving unrelated settings."""
+    quality = values['quality']
+    if quality == 'saved':
+        return
+    path = APPDATA/'Godot'/'app_userdata'/'OpenBFME'/'Options.ini'
+    data = path.read_bytes() if path.exists() else b''
+    # Match the game's preset selection: discard Custom's nine overrides.
+    replaced = {b'StaticGameLOD', b'ModelLOD', b'AnimationLOD', b'EffectsLOD', b'ShadowLOD',
+                b'TerrainLOD', b'WaterLOD', b'TextureQualityLOD', b'ShaderLOD', b'DecalLOD'}
+    lines = [line for line in data.splitlines(keepends=True) if line.partition(b'=')[0].strip() not in replaced]
+    eol = b'\r\n' if b'\r\n' in data else b'\n'
+    content = b''.join(lines)
+    if content and not content.endswith((b'\r', b'\n')):
+        content += eol
+    content += b'StaticGameLOD = ' + quality.encode('ascii') + eol
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.ini.tmp')
+    temporary.write_bytes(content)
+    temporary.replace(path)
+
+
 def play(project, progress=print, download=False, fog=False, record=False, settings=None):
     """Start OpenBFME straight in a skirmish on the project's map, as mw play
     starts the game: its line-up (net_slots()). OpenBFME's LAN host
@@ -757,6 +780,7 @@ def play(project, progress=print, download=False, fog=False, record=False, setti
     if settings is not None:
         values = test_settings(settings)
         apply_test_display(values)
+        apply_test_quality(values)
         fog = values['fog']
         args += ['--ground-cover=' + ('on' if values['grass'] else 'off'),
                  '--natural-ground=' + ('on' if values['ground_detail'] else 'off')]

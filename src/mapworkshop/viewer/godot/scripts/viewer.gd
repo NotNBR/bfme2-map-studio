@@ -47,6 +47,7 @@ const CURSORS := {"draw": Input.CURSOR_CROSS, "move": Input.CURSOR_MOVE, "rotate
 	"ew": Input.CURSOR_HSIZE, "ns": Input.CURSOR_VSIZE, "nesw": Input.CURSOR_BDIAGSIZE, "nwse": Input.CURSOR_FDIAGSIZE}
 
 var _grass_previous_msaa := -1
+var _quality := ""           # interactive viewport only; exported renders retain their explicit scene settings
 var _scene := {}
 var _scene_path := ""
 var _surface: Surface
@@ -211,6 +212,10 @@ func _build_stage() -> void:
 		_frame.toolbar.test_settings_chosen.connect(
 			func(settings: Dictionary) -> void: _send({"type": "command", "name": "test_settings", "settings": settings}))
 		_frame.toolbar.view_switched.connect(_switch_view)
+		_frame.toolbar.quality_chosen.connect(_choose_quality)
+		_quality = ViewerQuality.read_choice()
+		ViewerQuality.apply(get_viewport(), _quality)
+		_frame.toolbar.set_quality(_quality)
 		_frame.toolbar.preview_chosen.connect(_preview)
 		_frame.toolbar.action.connect(_toolbar_action)
 		_frame.bar.mode_chosen.connect(_set_mode)
@@ -1305,6 +1310,19 @@ func _photo_input(event: InputEvent) -> bool:
 	return false
 
 
+## Interactive graphics change without rebuilding the map or resetting its camera.
+func _choose_quality(choice: String) -> void:
+	if not ViewerQuality.PRESETS.has(choice):
+		return
+	_quality = choice
+	ViewerQuality.apply(get_viewport(), choice)
+	_frame.toolbar.set_quality(choice)
+	if ViewerQuality.save_choice(choice) != OK:
+		_status("Graphics quality applied, but could not be saved", 5)
+	else:
+		_status("Viewer graphics: " + choice, 3)
+
+
 ## A View switch (the menu or its key): the layer shown or hidden, the overlay drawn, the terrain built again (fog).
 func _switch_view(key: String, on: bool) -> void:
 	var was: bool = _views.get(key, false)
@@ -1318,7 +1336,7 @@ func _switch_view(key: String, on: bool) -> void:
 		"roads":
 			_show(["Roads"], on)
 		"grass":
-			if on and _grass_previous_msaa < 0:
+			if on and _quality.is_empty() and _grass_previous_msaa < 0:
 				_grass_previous_msaa = get_viewport().msaa_3d
 				if get_viewport().msaa_3d < Viewport.MSAA_8X:
 					get_viewport().msaa_3d = Viewport.MSAA_8X

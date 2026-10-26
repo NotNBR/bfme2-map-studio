@@ -295,7 +295,7 @@ if __name__ == '__main__':
 
 class QuickSettingsTests(unittest.TestCase):
     def test_only_supported_settings_are_accepted(self):
-        values = openbfme.test_settings(dict(resolution='--headless', window_mode='bad', grass='false', fog=True, extra='x'))
+        values = openbfme.test_settings(dict(resolution='--headless', window_mode='bad', quality='bad', grass='false', fog=True, extra='x'))
         self.assertEqual(values, dict(openbfme.TEST_DEFAULTS, fog=True))
 
     def test_display_choices_preserve_other_game_settings(self):
@@ -312,14 +312,37 @@ class QuickSettingsTests(unittest.TestCase):
             openbfme.apply_test_display(openbfme.test_settings())
             self.assertEqual(before, path.read_bytes())
 
+    def test_quality_preset_replaces_custom_overrides_and_preserves_other_options(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(openbfme, 'APPDATA', Path(tmp)):
+            path = Path(tmp)/'Godot/app_userdata/OpenBFME/Options.ini'
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b'; my settings\r\nStaticGameLOD = Custom\r\nTextureQualityLOD = Low\r\n'
+                             b'EffectsLOD = VeryLow\r\nOpenBFMEAntiAliasing = taa\r\nMusicVolume = 47')
+            openbfme.apply_test_quality(openbfme.test_settings(dict(quality='UltraHigh')))
+            self.assertEqual(path.read_bytes(), b'; my settings\r\nOpenBFMEAntiAliasing = taa\r\n'
+                             b'MusicVolume = 47\r\nStaticGameLOD = UltraHigh\r\n')
+            before = path.read_bytes()
+            openbfme.apply_test_quality(openbfme.test_settings())
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_quality_default_does_not_create_options_but_an_explicit_preset_does(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(openbfme, 'APPDATA', Path(tmp)):
+            path = Path(tmp)/'Godot/app_userdata/OpenBFME/Options.ini'
+            openbfme.apply_test_quality(openbfme.test_settings())
+            self.assertFalse(path.exists())
+            openbfme.apply_test_quality(openbfme.test_settings(dict(quality='Low')))
+            self.assertEqual(path.read_text(), 'StaticGameLOD = Low\n')
+
     def test_launch_forwards_grass_ground_and_fog_choices(self):
         with mock.patch.object(openbfme, 'prepare', return_value=('godot', 'console', {}, 'maps/test.map')), \
                 mock.patch.object(openbfme, 'net_slots', return_value='human::-1:-1;easy::-1:-1'), \
                 mock.patch.object(openbfme, 'apply_test_display') as display, \
+                mock.patch.object(openbfme, 'apply_test_quality') as quality, \
                 mock.patch.object(openbfme.subprocess, 'Popen') as spawn:
-            openbfme.play(object(), settings=dict(grass=False, ground_detail=True, fog=True, resolution='1920x1080'))
+            openbfme.play(object(), settings=dict(grass=False, ground_detail=True, fog=True, resolution='1920x1080', quality='High'))
         args = spawn.call_args.args[0]
         self.assertIn('--ground-cover=off', args)
         self.assertIn('--natural-ground=on', args)
         self.assertNotIn('--no-shroud', args)
         self.assertEqual(display.call_args.args[0]['resolution'], '1920x1080')
+        self.assertEqual(quality.call_args.args[0]['quality'], 'High')

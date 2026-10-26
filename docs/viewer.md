@@ -54,6 +54,25 @@ saves the view, unseen on a hidden desktop, and closes. A view with an
 `aperture` or an `ev` opens in Photo mode with that lens, so its screenshot
 has `mw render`'s depth of field and exposure.
 
+## Viewer graphics quality
+
+Use **Quality** in the top toolbar to change the viewer immediately. The choice
+is saved between Studio sessions, including when opening another map. It changes
+the 3D picture's resolution, edge smoothing and texture filtering; the toolbar
+and other UI stay at native resolution. Map layers, HD packs, grass and ground
+detail retain their separate controls.
+
+| Quality | 3D render scale | Anti-aliasing | Model texture filtering |
+|---|---|---|---|
+| Very Low | 50% | Off | Off |
+| Low | 65% | FXAA | 2x anisotropic |
+| Medium | 80% | MSAA 2x | 4x anisotropic |
+| High (default) | 100% | MSAA 4x | 8x anisotropic |
+| Ultra High | 100% | MSAA 8x | 16x anisotropic |
+
+The preset also applies in Photo and embedded Test mode. It does not change
+**Play in game** settings or `mw render` exports.
+
 ## Grass and ground detail
 
 In **Layers**, enable **Grass** to add the camera-local blade field to the map
@@ -67,7 +86,8 @@ render-distance cutoff and follows the same Grass toggle. Blade tiles cover
 the visible camera frustum, including shallow angles, rather than a fixed
 area around the ground focus. Its colour and
 irregular density stay anchored to the terrain while zooming and panning.
-Grass selects MSAA 8x and restores the previous setting when switched off.
+The viewer's graphics preset controls anti-aliasing, including grass. Exported
+renders with grass select MSAA 8x and restore the previous setting when switched off.
 Sample coverage replaces the noisy pixel fade; slightly wider distant blades
 and reduced distant wind also limit shimmer. Blade distance is twice the
 previous screen-size cutoff. Grass keeps 65% of the ground colour and 35% of
@@ -270,11 +290,14 @@ reads the map shown again.
   project's map, as `mw play --godot` does
   ([OpenBFME](guide/testing-in-game.md#openbfme-mw-play---godot)). The choice
   is kept as `test_game` in `local/config.toml`. The adjacent **⚙** opens a compact
-  panel for OpenBFME test rounds: resolution, window mode, grass, ground detail,
+  panel for OpenBFME test rounds: resolution, window mode, graphics quality, grass, ground detail,
   and fog of war. **Save** remembers the choices as `test_settings`; they apply
   on the next launch. Saved game setting preserves the existing display choice;
   explicit display choices update only those fields in the isolated game's
-  configuration. Borderless fullscreen uses the monitor's resolution. Original
+  configuration. Graphics quality selects the engine's Very Low through Ultra High
+  presets for texture quality, particle limits and health bars; the engine's other
+  detail controls are not implemented yet. It applies to the launched game, while
+  the viewer keeps its own preview controls. Borderless fullscreen uses the monitor's resolution. Original
   game launches keep their existing settings. The viewer minimises once the
   game is up and comes back when a skirmish or OpenBFME it started closes; a
   start that fails leaves it open, with the error in the status line.
