@@ -178,7 +178,8 @@ def parser():
     s.add_argument('--json', action='store_true', help='Print the full comparison as JSON')
     s.add_argument('--limit', type=int, default=12, help='Detail lines per part (12)')
     for name, text in (('view', 'Open the viewer'), ('marks', "Print the viewer's marks"),
-                       ('render', 'Render map images headlessly'), ('graphics', 'Map plans and comparisons'),
+                       ('render', 'Render map images headlessly'), ('film', 'Film a map with the pro camera (a scripted video)'),
+                       ('graphics', 'Map plans and comparisons'),
                        ('placements', 'Placement plans with starts, buildings, caves and flag footprints'),
                        ('workspace', 'Hand-edit workspaces for .map files'),
                        ('find', "Search the game's objects, terrain textures, roads, sounds and effects"),
@@ -750,7 +751,7 @@ def cmd_test(args, extra):
 
 
 PASSTHROUGH = {'view': 'mapworkshop.viewer.godot_viewer', 'marks': 'mapworkshop.viewer.marks',
-               'render': 'mapworkshop.render.cli', 'graphics': 'mapworkshop.mapkit.graphics',
+               'render': 'mapworkshop.render.cli', 'film': 'mapworkshop.viewer.film', 'graphics': 'mapworkshop.mapkit.graphics',
                'placements': 'mapworkshop.render.placements',
                'workspace': 'mapworkshop.mapkit.workspace',
                'find': 'mapworkshop.render.catalog',

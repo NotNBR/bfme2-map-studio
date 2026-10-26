@@ -12,6 +12,7 @@ from mapworkshop.native import engine_bundle
 DLL = 'bin/openbfme.windows.template_debug.x86_64.dll'
 SHADERS = ('terrain', 'water_standing', 'road', 'river', 'ground_cover')
 RESOURCES = ('scripts/ground_cover.gd', 'scripts/pro_lens.gd', 'scripts/pro_lens_effect.gd',
+             'scripts/pro_camera.gd', 'scripts/pro_camera_glide.gd',      # the pro camera, for films (mw film)
              'assets/ground_cover/profiles.json')
 
 

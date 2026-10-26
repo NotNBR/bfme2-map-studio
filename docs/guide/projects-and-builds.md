@@ -177,6 +177,7 @@ map comes out byte for byte the same either way; the build says how many it reus
 |---|---|
 | `mw diff [MAP]` | what the last build changed (above) |
 | `mw render --map MAP --view ...` | a picture from any camera ([rendering](rendering.md)) |
+| `mw film MAP FILM` | a scripted video through the pro camera ([films](rendering.md#films)) |
 | `mw walkable [MAP]` | a local walkability estimate: areas cut off from every start (`--image` writes it as a PNG, `--json` lists them) |
 | `mw rivers [MAP]` | which way each river strip flows, as compass runs (`--json`: every cross-section) |
 | `mw sites [MAP]` | walking distances from the bases to the neutral sites and lairs (below) |

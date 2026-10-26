@@ -115,6 +115,47 @@ Reusable view sets go in a JSON file passed with `--views`:
 | `--walkable` | the local walkability estimate, areas cut off from every start marked |
 | `--flow` | river flow arrows: yellow chevrons pointing downstream along each river strip, its banks in blue, its first cross-section green and its last red, so joins and overlaps between strips show |
 
+## Films
+
+`mw film MAP FILM` records a scripted video of a map in the Godot viewer through
+OpenBFME's pro camera (the engine's `scripts/pro_camera.gd`, its
+docs/PRO_CAMERA.md): a lens with focal length, aperture, focus and exposure,
+moved frame by frame. Godot's movie writer records it at a fixed frame rate, so
+the video runs smoothly however long each frame takes to draw.
+
+```
+mw film helms-deep-battle wall_dance                         # local/renders/films/wall_dance.avi
+mw film helms-deep-battle wall_dance --fps 30 --size 1280x720 --out local/renders/dance.avi
+mw film helms-deep-battle wall_dance --stills local/renders/check --at 4.5,12,23.5
+```
+
+| Option | Does |
+|---|---|
+| `--out FILE` | the video, an MJPEG `.avi` (default: `films/FILM.avi` in the renders folder) |
+| `--fps N` | frames a second (60) |
+| `--size WxH` | the picture (1920x1080) |
+| `--stills FOLDER --at T,...` | PNGs at those seconds into the film instead of a video, to check shots quickly |
+
+A film is a script in
+[viewer/godot/films/](../../src/mapworkshop/viewer/godot/films/) that extends
+[scripts/film.gd](../../src/mapworkshop/viewer/godot/scripts/film.gd). It
+films at Ultra High quality with object shadows. It overrides two functions:
+
+- `prepare()` turns on what the film shows and sets `length` in seconds.
+  `viewer.experiment(id, true, values)` turns on an
+  [Experimental](../viewer.md#experimental) feature and returns its controller;
+  `viewer.set_quality(...)` and `viewer.set_shadows(...)` change the defaults.
+  Lights and other nodes go under `viewer`. Return false to stop.
+- `shot(t)` places the camera `t` seconds in: `cam` is a pro camera
+  (`cam.look_at(eye, target)`, `cam.focal`, `cam.aperture`, `cam.ev`), and
+  `sage(Vector3(x, y, z))` turns map coordinates (or offsets) into the viewer's.
+  The map's clock follows the film's, so idle animations, weather and
+  Experimental features run with it.
+
+[films/wall_dance.gd](../../src/mapworkshop/viewer/godot/films/wall_dance.gd)
+is an example: nine shots that follow two dancing heroes, with follow spots and
+lightning.
+
 ## Where it differs from the game
 
 OpenBFME is a port of the game's engine, not the game; check what matters with

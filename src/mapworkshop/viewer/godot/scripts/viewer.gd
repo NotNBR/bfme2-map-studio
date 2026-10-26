@@ -584,6 +584,53 @@ func _advance(time: float) -> void:
 		_falling.set_time(_clock)
 
 
+# ---- films (scripts/film.gd, mw film): what a script may drive ----------------------------------------------------
+
+## Seconds the objects and overlays have run since the map was built.
+func get_clock() -> float:
+	return _clock
+
+
+## The objects, overlays and Experimental features at `time` (get_clock()'s seconds), the clock held there: a film
+## steps it frame by frame. Only forwards.
+func set_clock(time: float) -> void:
+	_views["animate"] = false
+	_advance(time)
+
+
+## A Quality preset for this run alone (the toolbar's saved choice stays), with the shadows' detail.
+func set_quality(choice: String) -> void:
+	if not ViewerQuality.PRESETS.has(choice):
+		push_error("viewer: no Quality preset %s (%s)" % [choice, ", ".join(ViewerQuality.NAMES)])
+		return
+	_quality = choice
+	ViewerQuality.apply(get_viewport(), choice)
+	_apply_shadows()
+
+
+## Object shadows (Experimental > Shadows) on or off, at the Quality preset's detail.
+func set_shadows(on: bool) -> void:
+	_views["shadows"] = on
+	_apply_shadows()
+
+
+## Whether the sun casts shadows now (the preset and the map's light allowing).
+func shadows_drawn() -> bool:
+	return _sun != null and _sun.shadow_enabled
+
+
+## An Experimental feature on, with `values` for its controls, or off. Its controller, or null for a view switch.
+func experiment(id: String, on: bool, values: Dictionary = {}) -> Node:
+	_experiments.configure(id, on, values)
+	return _experiments.controllers.get(id)
+
+
+## The 3D picture alone: the marks and the frame's controls hidden.
+func clean_picture() -> void:
+	_overlay.visible = false
+	_chrome(false)
+
+
 ## Whether a view's lens changes the picture: an aperture or an exposure.
 static func _lens_changes(v: Dictionary) -> bool:
 	var lens: Dictionary = v.get("photo", {})
@@ -1373,10 +1420,9 @@ func _photo_input(event: InputEvent) -> bool:
 func _choose_quality(choice: String) -> void:
 	if not ViewerQuality.PRESETS.has(choice):
 		return
-	_quality = choice
-	ViewerQuality.apply(get_viewport(), choice)
-	_apply_shadows()
-	_frame.toolbar.set_quality(choice)
+	set_quality(choice)
+	if _frame != null:
+		_frame.toolbar.set_quality(choice)
 	if ViewerQuality.save_choice(choice) != OK:
 		_status("Graphics quality applied, but could not be saved", 5)
 	else:
